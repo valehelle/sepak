@@ -2,6 +2,7 @@ import { act, render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { Session, Slot } from './types'
+import type { WaitlistEntry } from './waitlist'
 
 const SESSION: Session = {
   id: 'session-1',
@@ -28,26 +29,49 @@ const GK: Slot = {
 
 const getSessionWithSlots = vi.fn()
 const getMySlotIds = vi.fn()
-let emit: ((payload: { new: Record<string, unknown> }) => void) | null = null
+const listWaitlist = vi.fn()
+const getMyWaitlistEntry = vi.fn()
+type SlotPayload = { new: Record<string, unknown> }
+type WaitlistPayload = { eventType: string; new: Record<string, unknown>; old: Record<string, unknown> }
+let emitSlot: ((payload: SlotPayload) => void) | null = null
+let emitWaitlist: ((payload: WaitlistPayload) => void) | null = null
 let subscribeCallback: ((status: string) => void) | null = null
 const unsubscribe = vi.fn()
 
 vi.mock('./sessions', () => ({ getSessionWithSlots: (id: string) => getSessionWithSlots(id) }))
 vi.mock('./slots', () => ({ getMySlotIds: (id: string) => getMySlotIds(id) }))
+vi.mock('./waitlist', async () => {
+  const actual = await vi.importActual<typeof import('./waitlist')>('./waitlist')
+  return {
+    ...actual,
+    listWaitlist: (id: string) => listWaitlist(id),
+    getMyWaitlistEntry: (id: string) => getMyWaitlistEntry(id),
+  }
+})
 
+// The real channel builder supports `.on(...).on(...).subscribe(...)` --
+// each `.on` call is captured by the table it filters, so both the slots
+// and waitlist handlers can be driven independently within one test.
 vi.mock('../lib/supabase', () => ({
   supabase: {
-    channel: () => ({
-      on: (_event: string, _filter: unknown, handler: (payload: { new: Record<string, unknown> }) => void) => {
-        emit = handler
-        return {
-          subscribe: (cb?: (status: string) => void) => {
-            subscribeCallback = cb ?? null
-            return { unsubscribe }
-          },
-        }
-      },
-    }),
+    channel: () => {
+      const builder = {
+        on: (
+          _event: string,
+          filter: { table: string },
+          handler: (payload: SlotPayload | WaitlistPayload) => void,
+        ) => {
+          if (filter.table === 'slots') emitSlot = handler as (payload: SlotPayload) => void
+          if (filter.table === 'waitlist') emitWaitlist = handler as (payload: WaitlistPayload) => void
+          return builder
+        },
+        subscribe: (cb?: (status: string) => void) => {
+          subscribeCallback = cb ?? null
+          return { unsubscribe }
+        },
+      }
+      return builder
+    },
     removeChannel: unsubscribe,
   },
 }))
@@ -60,14 +84,22 @@ function Probe({ id }: { id: string | undefined }) {
   if (state.notFound) return <p>not-found</p>
   if (state.error !== null) return <p>error: {state.error}</p>
   return (
-    <ul>
-      {state.slots.map((slot) => (
-        <li key={slot.id}>
-          {`${slot.position}:${slot.playerName ?? 'empty'}`}
-          {state.mySlotIds.has(slot.id) ? ':mine' : ':theirs'}
-        </li>
-      ))}
-    </ul>
+    <>
+      <ul>
+        {state.slots.map((slot) => (
+          <li key={slot.id}>
+            {`${slot.position}:${slot.playerName ?? 'empty'}`}
+            {state.mySlotIds.has(slot.id) ? ':mine' : ':theirs'}
+          </li>
+        ))}
+      </ul>
+      <ol>
+        {state.waitlist.map((entry) => (
+          <li key={entry.id}>{`wait:${entry.id}:${entry.playerName}`}</li>
+        ))}
+      </ol>
+      <p>{`my-wait:${state.myWaitlistEntry === null ? 'none' : state.myWaitlistEntry.id}`}</p>
+    </>
   )
 }
 
@@ -96,8 +128,13 @@ describe('useSessionRealtime', () => {
     getSessionWithSlots.mockReset()
     getMySlotIds.mockReset()
     getMySlotIds.mockResolvedValue(new Set<string>())
+    listWaitlist.mockReset()
+    listWaitlist.mockResolvedValue([])
+    getMyWaitlistEntry.mockReset()
+    getMyWaitlistEntry.mockResolvedValue(null)
     unsubscribe.mockReset()
-    emit = null
+    emitSlot = null
+    emitWaitlist = null
     subscribeCallback = null
   })
 
@@ -126,7 +163,7 @@ describe('useSessionRealtime', () => {
     await waitFor(() => expect(screen.getByText('GK:empty:theirs')).toBeTruthy())
 
     act(() => {
-      emit?.({
+      emitSlot?.({
         new: {
           id: 'slot-gk',
           session_id: 'session-1',
@@ -148,7 +185,7 @@ describe('useSessionRealtime', () => {
     await waitFor(() => expect(screen.getByText('GK:empty:theirs')).toBeTruthy())
 
     act(() => {
-      emit?.({ new: { id: 'slot-gk', team: 'NOPE' } })
+      emitSlot?.({ new: { id: 'slot-gk', team: 'NOPE' } })
     })
 
     expect(screen.getByText('GK:empty:theirs')).toBeTruthy()
@@ -166,6 +203,8 @@ describe('useSessionRealtime', () => {
     render(<Probe id={undefined} />)
     expect(getSessionWithSlots).not.toHaveBeenCalled()
     expect(getMySlotIds).not.toHaveBeenCalled()
+    expect(listWaitlist).not.toHaveBeenCalled()
+    expect(getMyWaitlistEntry).not.toHaveBeenCalled()
   })
 
   it('populates mySlotIds from the initial fetch', async () => {
@@ -234,5 +273,133 @@ describe('useSessionRealtime', () => {
     // The first SUBSCRIBED is the initial connect and must not refetch; only the
     // one after an error does, because state may have moved on while offline.
     await waitFor(() => expect(getSessionWithSlots).toHaveBeenCalledTimes(2))
+  })
+
+  it('loads the waitlist and this device\'s own entry alongside the session', async () => {
+    getSessionWithSlots.mockResolvedValue({ session: SESSION, slots: [GK] })
+    const entry: WaitlistEntry = {
+      id: 'wait-1',
+      sessionId: 'session-1',
+      playerName: 'Faiz',
+      positions: ['GK'],
+      createdAt: '2026-09-10T00:00:00Z',
+    }
+    listWaitlist.mockResolvedValue([entry])
+    getMyWaitlistEntry.mockResolvedValue({ id: 'wait-1', positions: ['GK'], createdAt: entry.createdAt })
+
+    render(<Probe id="session-1" />)
+    await waitFor(() => expect(screen.getByText('wait:wait-1:Faiz')).toBeTruthy())
+    expect(screen.getByText('my-wait:wait-1')).toBeTruthy()
+    expect(listWaitlist).toHaveBeenCalledWith('session-1')
+    expect(getMyWaitlistEntry).toHaveBeenCalledWith('session-1')
+  })
+
+  it('renders an empty waitlist when listWaitlist rejects', async () => {
+    getSessionWithSlots.mockResolvedValue({ session: SESSION, slots: [GK] })
+    listWaitlist.mockRejectedValue(new Error('rpc failed'))
+
+    render(<Probe id="session-1" />)
+    await waitFor(() => expect(screen.getByText('GK:empty:theirs')).toBeTruthy())
+    expect(screen.getByText('my-wait:none')).toBeTruthy()
+  })
+
+  it('applies a realtime waitlist insert without refetching', async () => {
+    getSessionWithSlots.mockResolvedValue({ session: SESSION, slots: [GK] })
+    render(<Probe id="session-1" />)
+    await waitFor(() => expect(screen.getByText('GK:empty:theirs')).toBeTruthy())
+
+    act(() => {
+      emitWaitlist?.({
+        eventType: 'INSERT',
+        old: {},
+        new: {
+          id: 'wait-1',
+          session_id: 'session-1',
+          player_name: 'Faiz',
+          positions: ['GK'],
+          created_at: '2026-09-10T00:00:00Z',
+        },
+      })
+    })
+
+    await waitFor(() => expect(screen.getByText('wait:wait-1:Faiz')).toBeTruthy())
+    expect(listWaitlist).toHaveBeenCalledTimes(1)
+  })
+
+  it('removes a queue entry on a realtime waitlist delete, and clears its own-entry marker', async () => {
+    getSessionWithSlots.mockResolvedValue({ session: SESSION, slots: [GK] })
+    const entry: WaitlistEntry = {
+      id: 'wait-1',
+      sessionId: 'session-1',
+      playerName: 'Faiz',
+      positions: ['GK'],
+      createdAt: '2026-09-10T00:00:00Z',
+    }
+    listWaitlist.mockResolvedValue([entry])
+    getMyWaitlistEntry.mockResolvedValue({ id: 'wait-1', positions: ['GK'], createdAt: entry.createdAt })
+
+    render(<Probe id="session-1" />)
+    await waitFor(() => expect(screen.getByText('my-wait:wait-1')).toBeTruthy())
+
+    // This is the shape of what auto-fill does: it deletes the placed
+    // entry's row in the same transaction as the slot update, so the page
+    // must see the queue shrink over the same realtime channel that
+    // delivers the slot filling — without a reload.
+    act(() => {
+      emitWaitlist?.({ eventType: 'DELETE', old: { id: 'wait-1' }, new: {} })
+    })
+
+    await waitFor(() => expect(screen.queryByText('wait:wait-1:Faiz')).toBeNull())
+    expect(screen.getByText('my-wait:none')).toBeTruthy()
+  })
+
+  it('re-asks my_slot_ids when its own waitlist entry is auto-filled away, so the placed slot is recognised as its own', async () => {
+    getSessionWithSlots.mockResolvedValue({ session: SESSION, slots: [GK] })
+    const entry: WaitlistEntry = {
+      id: 'wait-1',
+      sessionId: 'session-1',
+      playerName: 'Faiz',
+      positions: ['GK'],
+      createdAt: '2026-09-10T00:00:00Z',
+    }
+    listWaitlist.mockResolvedValue([entry])
+    getMyWaitlistEntry.mockResolvedValue({ id: 'wait-1', positions: ['GK'], createdAt: entry.createdAt })
+
+    render(<Probe id="session-1" />)
+    await waitFor(() => expect(screen.getByText('my-wait:wait-1')).toBeTruthy())
+
+    // Auto-fill's own write to the slot arrives on the slots channel...
+    getMySlotIds.mockResolvedValue(new Set(['slot-gk']))
+    act(() => {
+      emitSlot?.({
+        new: {
+          id: 'slot-gk',
+          session_id: 'session-1',
+          team: 'A',
+          position: 'GK',
+          player_name: 'Faiz',
+          claimed_at: '2026-09-10T06:00:00Z',
+        },
+      })
+    })
+    // ...and its deletion of the placed waitlist row arrives on the other.
+    act(() => {
+      emitWaitlist?.({ eventType: 'DELETE', old: { id: 'wait-1' }, new: {} })
+    })
+
+    await waitFor(() => expect(screen.getByText('GK:Faiz:mine')).toBeTruthy())
+    expect(screen.getByText('my-wait:none')).toBeTruthy()
+  })
+
+  it('ignores a malformed realtime waitlist payload rather than crashing', async () => {
+    getSessionWithSlots.mockResolvedValue({ session: SESSION, slots: [GK] })
+    render(<Probe id="session-1" />)
+    await waitFor(() => expect(screen.getByText('GK:empty:theirs')).toBeTruthy())
+
+    act(() => {
+      emitWaitlist?.({ eventType: 'INSERT', old: {}, new: { id: 'wait-1', positions: ['NOPE'] } })
+    })
+
+    expect(screen.getByText('my-wait:none')).toBeTruthy()
   })
 })
