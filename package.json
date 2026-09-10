@@ -18,7 +18,7 @@
     "e2e": "playwright test",
     "db:start": "supabase start",
     "db:reset": "supabase db reset",
-    "test:db": "sh scripts/psql.sh < supabase/tests/schema_test.sql && sh scripts/psql.sh < supabase/tests/rls_test.sql",
+    "test:db": "sh scripts/psql.sh < supabase/tests/schema_test.sql && sh scripts/psql.sh < supabase/tests/rls_test.sql && sh scripts/psql.sh < supabase/tests/waitlist_test.sql",
     "verify:pages": "node scripts/verifyPagesArtifacts.mjs"
   },
   "dependencies": {
