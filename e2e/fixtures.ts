@@ -56,3 +56,32 @@ export async function createTestSession(sessionNo: number): Promise<string> {
 export async function dropTestSession(id: string): Promise<void> {
   await admin().from('sessions').delete().eq('id', id)
 }
+
+/** Fills every slot in the session except the one given, so that position
+ *  becomes the sole free slot anywhere in the session -- used to make a
+ *  waitlist preference genuinely scarce (there are three of every position,
+ *  one per team) rather than merely absent from one team. */
+export async function fillAllSlotsExcept(
+  sessionId: string,
+  team: 'A' | 'B' | 'C',
+  position: string,
+): Promise<void> {
+  const client = admin()
+  const { data: slots, error: selectError } = await client
+    .from('slots')
+    .select('id, team, position')
+    .eq('session_id', sessionId)
+  if (selectError !== null) throw new Error(`fillAllSlotsExcept select failed: ${selectError.message}`)
+
+  const targets = (slots ?? [])
+    .map((row) => asRecord(row))
+    .filter((row) => !(row['team'] === team && row['position'] === position))
+    .map((row) => row['id'])
+    .filter((id): id is string => typeof id === 'string')
+
+  const { error } = await client
+    .from('slots')
+    .update({ player_name: 'Filler', claim_token: crypto.randomUUID(), claimed_at: new Date().toISOString() })
+    .in('id', targets)
+  if (error !== null) throw new Error(`fillAllSlotsExcept update failed: ${error.message}`)
+}
