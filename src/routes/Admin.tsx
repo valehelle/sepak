@@ -87,6 +87,12 @@ export default function Admin() {
 
   const [sessions, setSessions] = useState<Session[]>([])
   const [formValues, setFormValues] = useState<SessionFormValues | null>(null)
+  // Bumped by every opener (openNew/openDuplicate/openEdit) and used as the
+  // SessionForm's key, so the form always remounts with fresh internal state
+  // instead of one opener's values leaking into the next via a preserved
+  // instance — `key={editing?.id ?? 'new'}` would not distinguish "Sesi baru"
+  // from "Duplikasi sesi lepas", since both map to 'new'.
+  const [formKey, setFormKey] = useState(0)
   const [editing, setEditing] = useState<Session | null>(null)
   const [confirmDelete, setConfirmDelete] = useState<Session | null>(null)
   const [busy, setBusy] = useState(false)
@@ -104,10 +110,18 @@ export default function Admin() {
     void reload()
   }, [email, reload])
 
+  // openNew/openDuplicate fetch the next session number before they can
+  // produce final form values, so the formKey bump has to land in the same
+  // batch as setFormValues (i.e. after the await) rather than before it —
+  // bumping it earlier would remount SessionForm once against the *old*
+  // formValues (still on screen from a prior edit) and, since the key would
+  // then be unchanged when the real values arrive, they'd never take.
   const openNew = useCallback(async () => {
-    setEditing(null)
     try {
-      setFormValues({ ...DEFAULTS, sessionNo: await nextSessionNo() })
+      const sessionNo = await nextSessionNo()
+      setEditing(null)
+      setFormKey((key) => key + 1)
+      setFormValues({ ...DEFAULTS, sessionNo })
     } catch {
       show('Gagal menyediakan borang sesi baru.', 'error')
     }
@@ -121,10 +135,12 @@ export default function Admin() {
       show('Belum ada sesi untuk diduplikasi.', 'error')
       return
     }
-    setEditing(null)
     try {
+      const sessionNo = await nextSessionNo()
+      setEditing(null)
+      setFormKey((key) => key + 1)
       setFormValues({
-        sessionNo: await nextSessionNo(),
+        sessionNo,
         title: last.title,
         playDate: '',
         startTime: last.startTime.slice(0, 5),
@@ -142,6 +158,7 @@ export default function Admin() {
 
   function openEdit(session: Session) {
     setEditing(session)
+    setFormKey((key) => key + 1)
     setFormValues({
       sessionNo: session.sessionNo,
       title: session.title,
@@ -288,6 +305,7 @@ export default function Admin() {
         >
           <div className="max-h-[70vh] overflow-y-auto">
             <SessionForm
+              key={formKey}
               initial={formValues}
               submitLabel={editing !== null ? 'Simpan perubahan' : 'Cipta sesi'}
               busy={busy}

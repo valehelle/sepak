@@ -179,14 +179,35 @@ describe('Admin', () => {
 
     // Open the edit sheet, then go straight on to "Sesi baru" without
     // closing it first — the one transition that would post as an update
-    // if `openNew` ever forgot to clear `editing` itself.
+    // (or carry the edited session's own values) if `openNew` ever forgot
+    // to clear `editing`, or if the form failed to remount with fresh state.
     await userEvent.click(await waitFor(() => screen.getByRole('button', { name: 'Sunting' })))
     await waitFor(() => expect(screen.getByLabelText<HTMLInputElement>('Tempat').value).toBe('Padang Presint 8'))
 
     await userEvent.click(screen.getByRole('button', { name: 'Sesi baru' }))
-    await userEvent.click(await waitFor(() => screen.getByRole('button', { name: 'Cipta sesi' })))
 
-    await waitFor(() => expect(createSession).toHaveBeenCalled())
+    // The form must reset to blank defaults, not keep showing the edited
+    // session's stale values.
+    await waitFor(() => {
+      expect(screen.getByLabelText<HTMLInputElement>('Sesi no.').value).toBe('6')
+      expect(screen.getByLabelText<HTMLInputElement>('Nama sesi').value).toBe('')
+      expect(screen.getByLabelText<HTMLInputElement>('Tempat').value).toBe('')
+      expect(screen.getByLabelText<HTMLInputElement>('Tarikh').value).toBe('')
+    })
+
+    await userEvent.type(screen.getByLabelText('Nama sesi'), 'Sesi Baharu')
+    await userEvent.type(screen.getByLabelText('Tarikh'), '2026-09-30')
+    await userEvent.type(screen.getByLabelText('Tempat'), 'Padang Baharu')
+    await userEvent.click(screen.getByRole('button', { name: 'Cipta sesi' }))
+
+    await waitFor(() => expect(createSession).toHaveBeenCalledWith(
+      expect.objectContaining({
+        sessionNo: 6,
+        title: 'Sesi Baharu',
+        venue: 'Padang Baharu',
+        playDate: '2026-09-30',
+      }),
+    ))
     expect(updateSession).not.toHaveBeenCalled()
   })
 
@@ -198,9 +219,28 @@ describe('Admin', () => {
     await waitFor(() => expect(screen.getByLabelText<HTMLInputElement>('Tempat').value).toBe('Padang Presint 8'))
 
     await userEvent.click(screen.getByRole('button', { name: /Duplikasi sesi lepas/ }))
-    await userEvent.click(await waitFor(() => screen.getByRole('button', { name: 'Cipta sesi' })))
 
-    await waitFor(() => expect(createSession).toHaveBeenCalled())
+    // Venue/fee carry over from the last session, the number advances, and
+    // the date resets blank — none of it should be the edited session's own
+    // stale values (sessionNo 5, playDate 2026-09-16).
+    await waitFor(() => {
+      expect(screen.getByLabelText<HTMLInputElement>('Sesi no.').value).toBe('6')
+      expect(screen.getByLabelText<HTMLInputElement>('Tempat').value).toBe('Padang Presint 8')
+      expect(screen.getByLabelText<HTMLInputElement>('Yuran (RM)').value).toBe('27')
+      expect(screen.getByLabelText<HTMLInputElement>('Tarikh').value).toBe('')
+    })
+
+    await userEvent.type(screen.getByLabelText('Tarikh'), '2026-09-30')
+    await userEvent.click(screen.getByRole('button', { name: 'Cipta sesi' }))
+
+    await waitFor(() => expect(createSession).toHaveBeenCalledWith(
+      expect.objectContaining({
+        sessionNo: 6,
+        venue: 'Padang Presint 8',
+        feeMyr: 27,
+        playDate: '2026-09-30',
+      }),
+    ))
     expect(updateSession).not.toHaveBeenCalled()
   })
 })
