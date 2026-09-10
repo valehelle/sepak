@@ -173,10 +173,13 @@ enable_refresh_token_rotation = true
 # Requires enable_refresh_token_rotation = true.
 refresh_token_reuse_interval = 10
 # Allow/disallow new user signups to your project.
-# Deliberately false: `authenticated` holds unrestricted insert/update/delete
-# (plus TRUNCATE) on sessions/slots, so the single organiser account must be
-# created by hand (dashboard/admin API) rather than through open sign-up.
-enable_signup = false
+# Now safe to leave open: `authenticated` no longer holds unrestricted
+# access to sessions/slots (migration 0006_admins.sql) -- write access comes
+# only from a row in public.admins, so a fresh sign-up starts with zero
+# privileges. Adding a second admin therefore no longer needs the
+# service_role-only admin API: the organiser adds the email to public.admins
+# and the new user just registers a password for it via Daftar.
+enable_signup = true
 # Allow/disallow anonymous sign-ins to your project.
 enable_anonymous_sign_ins = false
 # Allow/disallow testing manual linking of accounts

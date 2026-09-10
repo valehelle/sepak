@@ -12,8 +12,12 @@ declare
   v_count int;
   v_claimed public.slots;
 begin
-  -- create_session builds a whole session in one shot
+  -- create_session builds a whole session in one shot. It now needs an
+  -- allowlisted caller (sessions_write/slots_write gate on public.is_admin()
+  -- as of migration 0006_admins.sql), so the JWT carries a seeded admin's
+  -- email -- auth.jwt() ->> 'email' is what is_admin() actually reads.
   set local role authenticated;
+  set local request.jwt.claims = '{"email":"admin@sepak.local","role":"authenticated"}';
   select id into v_session_id from public.create_session(
     1, 'Geng Turun Peluh', '2026-09-16', '20:00:00', 120, 'Padang Presint 8', 27,
     'Merah', 'Putih', 'Kuning');
@@ -32,6 +36,7 @@ begin
   ---------------------------------------------------------------------------
   -- anon has no direct write access to either table
   ---------------------------------------------------------------------------
+  set local request.jwt.claims = '{}';
   set local role anon;
 
   assert (select count(*) from public.sessions) >= 1, 'anon should be able to read sessions';
@@ -179,11 +184,13 @@ begin
   -- moving across sessions is refused
   reset role;
   set local role authenticated;
+  set local request.jwt.claims = '{"email":"admin@sepak.local","role":"authenticated"}';
   select id into v_other_session from public.create_session(
     2, 'Lain', '2026-09-23', '20:00:00', 120, 'Padang Lain', 27, 'Merah', 'Putih', 'Kuning');
   select id into v_other_gk from public.slots
    where session_id = v_other_session and team = 'A' and position = 'GK';
   reset role;
+  set local request.jwt.claims = '{}';
   set local role anon;
 
   begin
@@ -216,4 +223,163 @@ begin
 
   reset role;
   raise notice 'rls_test: all assertions passed';
+end $$;
+
+---------------------------------------------------------------------------
+-- Admin allowlist (migration 0006_admins.sql): membership, not merely being
+-- authenticated, is what authorises a write; only a super admin may manage
+-- the allowlist itself; admins is unreadable to anon; and a super admin can
+-- never be deleted or demoted once they are the only one left.
+---------------------------------------------------------------------------
+do $$
+declare
+  v_session_id uuid;
+  v_slot_id    uuid;
+  v_count      int;
+begin
+  ---------------------------------------------------------------------------
+  -- authenticated but NOT on the allowlist: refused, directly and via RPC
+  ---------------------------------------------------------------------------
+  set local role authenticated;
+  set local request.jwt.claims = '{"email":"stranger@example.test","role":"authenticated"}';
+
+  begin
+    insert into public.sessions (session_no, title, play_date, start_time, venue)
+    values (997, 'Stranger', '2026-11-01', '20:00:00', 'Nowhere');
+    raise exception 'a non-allowlisted authenticated user must not insert sessions';
+  exception when insufficient_privilege then null;
+  end;
+
+  begin
+    perform public.create_session(998, 'Stranger', '2026-11-02', '20:00:00', 120, 'Nowhere', 10,
+      'Merah', 'Putih', 'Kuning');
+    raise exception 'a non-allowlisted authenticated user must not create a session via the RPC';
+  exception when insufficient_privilege then null;
+  end;
+
+  ---------------------------------------------------------------------------
+  -- an allowlisted admin CAN write sessions/slots directly, not just via RPC
+  ---------------------------------------------------------------------------
+  set local request.jwt.claims = '{"email":"admin@sepak.local","role":"authenticated"}';
+
+  insert into public.sessions (session_no, title, play_date, start_time, venue)
+  values (996, 'Allowlisted', '2026-11-03', '20:00:00', 'Padang Allowlist')
+  returning id into v_session_id;
+
+  insert into public.slots (session_id, team, position)
+  values (v_session_id, 'A', 'GK')
+  returning id into v_slot_id;
+
+  update public.slots set player_name = 'Hazmi', claim_token = gen_random_uuid(), claimed_at = now()
+   where id = v_slot_id;
+  assert (select player_name from public.slots where id = v_slot_id) = 'Hazmi',
+    'an allowlisted admin should be able to write slots directly';
+
+  delete from public.sessions where id = v_session_id;
+
+  ---------------------------------------------------------------------------
+  -- admins table: a plain admin may read it, but not write it
+  ---------------------------------------------------------------------------
+  assert (select count(*) from public.admins) >= 2, 'a plain admin should be able to read admins';
+
+  begin
+    insert into public.admins (email, role) values ('sneaky@example.test', 'admin');
+    raise exception 'a plain admin must not insert into admins';
+  exception when insufficient_privilege then null;
+  end;
+
+  -- UPDATE/DELETE are gated by admins_update/admins_delete's USING clause,
+  -- which filters which rows the caller may even touch -- unlike INSERT's
+  -- WITH CHECK above, a row a non-super cannot see simply matches nothing
+  -- (0 rows affected) rather than raising, so the assertion here is on the
+  -- row count and the row's untouched state, not on catching an exception.
+  update public.admins set role = 'super' where email = 'admin@sepak.local';
+  get diagnostics v_count = row_count;
+  assert v_count = 0, 'a plain admin''s update to admins must match no rows';
+  assert (select role from public.admins where email = 'admin@sepak.local') = 'admin',
+    'a plain admin must not be able to change any admins row';
+
+  delete from public.admins where email = 'hazmiirfan92@gmail.com';
+  get diagnostics v_count = row_count;
+  assert v_count = 0, 'a plain admin''s delete from admins must match no rows';
+  assert (select count(*) from public.admins where email = 'hazmiirfan92@gmail.com') = 1,
+    'a plain admin must not be able to delete any admins row';
+
+  ---------------------------------------------------------------------------
+  -- a super admin CAN manage the allowlist
+  ---------------------------------------------------------------------------
+  set local request.jwt.claims = '{"email":"hazmiirfan92@gmail.com","role":"authenticated"}';
+
+  insert into public.admins (email, role, added_by)
+  values ('temp-admin@example.test', 'admin', 'hazmiirfan92@gmail.com');
+
+  update public.admins set role = 'super' where email = 'temp-admin@example.test';
+  assert (select role from public.admins where email = 'temp-admin@example.test') = 'super',
+    'a super admin should be able to promote another admin';
+
+  delete from public.admins where email = 'temp-admin@example.test';
+  assert (select count(*) from public.admins where email = 'temp-admin@example.test') = 0,
+    'a super admin should be able to remove an admin';
+
+  ---------------------------------------------------------------------------
+  -- anon cannot read admins at all -- it is a list of organisers' own emails
+  ---------------------------------------------------------------------------
+  reset role;
+  set local request.jwt.claims = '{}';
+  set local role anon;
+
+  begin
+    perform count(*) from public.admins;
+    raise exception 'anon must not read admins';
+  exception when insufficient_privilege then null;
+  end;
+
+  ---------------------------------------------------------------------------
+  -- last-super protection (prevent_last_super_removal trigger): a super
+  -- admin can never be deleted or demoted once they are the only one left.
+  ---------------------------------------------------------------------------
+  reset role;
+  set local role authenticated;
+  set local request.jwt.claims = '{"email":"hazmiirfan92@gmail.com","role":"authenticated"}';
+
+  insert into public.admins (email, role, added_by)
+  values ('temp-super@example.test', 'super', 'hazmiirfan92@gmail.com');
+
+  -- with two supers, one may remove the other.
+  set local request.jwt.claims = '{"email":"temp-super@example.test","role":"authenticated"}';
+  delete from public.admins where email = 'hazmiirfan92@gmail.com';
+  assert (select count(*) from public.admins where email = 'hazmiirfan92@gmail.com') = 0,
+    'deleting a super admin should succeed while another super remains';
+
+  -- temp-super@example.test is now the only super left.
+  begin
+    delete from public.admins where email = 'temp-super@example.test';
+    raise exception 'deleting the last super admin must fail';
+  exception when others then
+    assert sqlerrm = 'last_super_admin', format('expected last_super_admin, got %s', sqlerrm);
+  end;
+
+  begin
+    update public.admins set role = 'admin' where email = 'temp-super@example.test';
+    raise exception 'demoting the last super admin must fail';
+  exception when others then
+    assert sqlerrm = 'last_super_admin', format('expected last_super_admin, got %s', sqlerrm);
+  end;
+
+  assert (select role from public.admins where email = 'temp-super@example.test') = 'super',
+    'a rejected demotion must leave the last super admin untouched';
+
+  -- restore the seeded state: hazmiirfan92@gmail.com back as super, and the
+  -- temporary super gone -- deleting it now succeeds because, with
+  -- hazmiirfan92 reinserted, temp-super is no longer the last one.
+  insert into public.admins (email, role) values ('hazmiirfan92@gmail.com', 'super');
+  delete from public.admins where email = 'temp-super@example.test';
+
+  reset role;
+  assert (select role from public.admins where email = 'hazmiirfan92@gmail.com') = 'super',
+    'the seeded super admin should be restored';
+  assert (select count(*) from public.admins where email = 'temp-super@example.test') = 0,
+    'the temporary super admin should be cleaned up';
+
+  raise notice 'admins_test: all assertions passed';
 end $$;
