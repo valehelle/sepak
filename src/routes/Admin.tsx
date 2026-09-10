@@ -104,8 +104,12 @@ export default function Admin() {
   }, [email, reload])
 
   const openNew = useCallback(async () => {
-    setFormValues({ ...DEFAULTS, sessionNo: await nextSessionNo() })
-  }, [])
+    try {
+      setFormValues({ ...DEFAULTS, sessionNo: await nextSessionNo() })
+    } catch {
+      show('Gagal menyediakan borang sesi baru.', 'error')
+    }
+  }, [show])
 
   /** The weekly path: everything carries over except the date, which is the
    *  one field that genuinely changes. */
@@ -115,18 +119,22 @@ export default function Admin() {
       show('Belum ada sesi untuk diduplikasi.', 'error')
       return
     }
-    setFormValues({
-      sessionNo: await nextSessionNo(),
-      title: last.title,
-      playDate: '',
-      startTime: last.startTime.slice(0, 5),
-      durationMins: last.durationMins,
-      venue: last.venue,
-      feeMyr: last.feeMyr,
-      teamAName: last.teamNames.A,
-      teamBName: last.teamNames.B,
-      teamCName: last.teamNames.C,
-    })
+    try {
+      setFormValues({
+        sessionNo: await nextSessionNo(),
+        title: last.title,
+        playDate: '',
+        startTime: last.startTime.slice(0, 5),
+        durationMins: last.durationMins,
+        venue: last.venue,
+        feeMyr: last.feeMyr,
+        teamAName: last.teamNames.A,
+        teamBName: last.teamNames.B,
+        teamCName: last.teamNames.C,
+      })
+    } catch {
+      show('Gagal menyediakan borang duplikasi.', 'error')
+    }
   }, [sessions, show])
 
   async function submit(values: SessionFormValues) {
