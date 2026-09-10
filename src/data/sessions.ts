@@ -112,3 +112,22 @@ export async function deleteSession(id: string): Promise<void> {
   const { error } = await supabase.from('sessions').delete().eq('id', id)
   if (error !== null) boom('deleteSession', error.message)
 }
+
+/** Claimed-slot counts keyed by session id. One round trip for the whole list. */
+export async function fillCounts(sessionIds: readonly string[]): Promise<Map<string, number>> {
+  if (sessionIds.length === 0) return new Map()
+
+  const { data, error } = await supabase
+    .from('slots')
+    .select('session_id')
+    .in('session_id', [...sessionIds])
+    .not('player_name', 'is', null)
+  if (error !== null) boom('fillCounts', error.message)
+
+  const counts = new Map<string, number>()
+  for (const row of data ?? []) {
+    const id = Object.fromEntries(Object.entries(row))['session_id']
+    if (typeof id === 'string') counts.set(id, (counts.get(id) ?? 0) + 1)
+  }
+  return counts
+}
