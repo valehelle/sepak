@@ -3,6 +3,7 @@ name: Deploy
 on:
   push:
     branches: [main]
+  pull_request:
   workflow_dispatch:
 
 permissions:
@@ -41,13 +42,57 @@ jobs:
           VITE_SUPABASE_URL: ${{ vars.VITE_SUPABASE_URL }}
           VITE_SUPABASE_ANON_KEY: ${{ vars.VITE_SUPABASE_ANON_KEY }}
 
-      - uses: actions/configure-pages@v5
-      - uses: actions/upload-pages-artifact@v3
+      # `vite preview` (and therefore the e2e deep-link suite) SPA-falls-back
+      # for every path, but GitHub Pages does not -- it serves 404.html
+      # verbatim. This is the only thing that actually asserts postbuild.mjs
+      # ran, so a dropped or broken postbuild step fails the build instead
+      # of shipping a site where every pasted session link 404s.
+      - run: pnpm verify:pages
+
+      # Only needed to feed `deploy`, which itself only runs on push to
+      # main -- skipped on pull_request so a fork PR isn't tripped up by
+      # Pages/OIDC permissions it was never going to use.
+      - if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        uses: actions/configure-pages@v5
+      - if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        uses: actions/upload-pages-artifact@v3
         with:
           path: dist
 
+  # Runs the SQL/RLS and integration suites against a real local Supabase
+  # stack -- the one class of bug this project has actually shipped (a
+  # migration granting `anon` more than intended) is exactly what `pnpm
+  # test`/`pnpm typecheck` above cannot see. Deliberately its own job with no
+  # `needs`/dependents: nothing here gates `deploy`, so a flaky container
+  # start can never block a Pages deploy that would otherwise have shipped.
+  db-tests:
+    if: github.event_name == 'pull_request' || (github.event_name == 'push' && github.ref == 'refs/heads/main')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      - uses: supabase/setup-cli@v1
+        with:
+          version: latest
+
+      - run: supabase start
+
+      - run: pnpm test:db && pnpm test:int
+
   deploy:
     needs: build
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     environment:
       name: github-pages
