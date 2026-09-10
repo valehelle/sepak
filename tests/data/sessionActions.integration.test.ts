@@ -42,6 +42,7 @@ describe('createSession wrapper against local postgres', () => {
 describe('createSession wrapper as an authenticated organiser', () => {
   let userId: string | null = null
   let sessionId: string | null = null
+  let adminEmail: string | null = null
 
   afterEach(async () => {
     // Always sign the shared singleton back out first, even if an
@@ -58,6 +59,10 @@ describe('createSession wrapper as an authenticated organiser', () => {
       await adminClient().auth.admin.deleteUser(userId)
       userId = null
     }
+    if (adminEmail !== null) {
+      await adminClient().from('admins').delete().eq('email', adminEmail)
+      adminEmail = null
+    }
   })
 
   it('creates a session with all 33 slots', async () => {
@@ -72,6 +77,13 @@ describe('createSession wrapper as an authenticated organiser', () => {
     expect(created.error).toBeNull()
     userId = created.data.user?.id ?? null
     expect(userId).not.toBeNull()
+
+    // Being authenticated grants nothing on its own (migration
+    // 0006_admins.sql) -- createSession now also needs this user on the
+    // allowlist, so it is added here as setup and removed in afterEach.
+    adminEmail = email
+    const allowlisted = await adminClient().from('admins').insert({ email, role: 'admin' })
+    expect(allowlisted.error).toBeNull()
 
     const signedIn = await supabase.auth.signInWithPassword({ email, password })
     expect(signedIn.error).toBeNull()
