@@ -7,11 +7,13 @@ import { PitchTeam } from '../components/PitchTeam'
 import { SessionMeta } from '../components/SessionMeta'
 import type { SlotView } from '../components/SlotChip'
 import { useToast } from '../components/Toast'
+import { WaitlistSheet } from '../components/WaitlistSheet'
 import { useAuthUser } from '../data/auth'
 import { SlotActionError, adminClearSlot, claimSlot, moveSlot, releaseSlot } from '../data/slots'
 import type { Slot } from '../data/types'
 import { useSessionRealtime } from '../data/useSessionRealtime'
-import { TEAM_KEYS, positionLabel, type TeamKey } from '../lib/positions'
+import { WaitlistActionError, joinWaitlist, leaveWaitlist } from '../data/waitlist'
+import { TEAM_KEYS, formatPositions, positionLabel, type Position, type TeamKey } from '../lib/positions'
 import { buildWhatsAppMessage } from '../lib/whatsapp'
 
 const VIEW_MODE_KEY = 'sepak.viewMode'
@@ -40,8 +42,22 @@ type OptimisticChange = {
 
 export default function SessionPage() {
   const { id } = useParams()
-  const { session, slots, mySlotIds, loading, error, notFound, applyLocal, setOwned, refetch } =
-    useSessionRealtime(id)
+  const {
+    session,
+    slots,
+    mySlotIds,
+    waitlist,
+    myWaitlistEntry,
+    loading,
+    error,
+    notFound,
+    applyLocal,
+    setOwned,
+    applyWaitlistLocal,
+    removeWaitlistLocal,
+    setMyWaitlistEntry,
+    refetch,
+  } = useSessionRealtime(id)
   const { show } = useToast()
   const { role } = useAuthUser()
   // Being signed in is not enough any more -- a signed-in non-admin must not
@@ -53,6 +69,7 @@ export default function SessionPage() {
   const [busy, setBusy] = useState(false)
   const [viewMode, setViewMode] = useState<'pitch' | 'list'>(readViewMode)
   const [pendingName, setPendingName] = useState('')
+  const [waitlistOpen, setWaitlistOpen] = useState(false)
 
   useEffect(() => {
     setPendingName('')
@@ -60,6 +77,7 @@ export default function SessionPage() {
 
   const mySlot = slots.find((slot) => mySlotIds.has(slot.id)) ?? null
   const filled = slots.filter((slot) => slot.playerName !== null).length
+  const open = 33 - filled
   const closed = session?.status === 'closed'
 
   const duplicateName =
@@ -77,8 +95,9 @@ export default function SessionPage() {
       feeMyr: session.feeMyr,
       teamNames: session.teamNames,
       slots: slots.map(({ team, position, playerName }) => ({ team, position, playerName })),
+      waitlist: waitlist.map(({ playerName, positions }) => ({ playerName, positions })),
     })
-  }, [session, slots])
+  }, [session, slots, waitlist])
 
   function toggleViewMode() {
     const next = viewMode === 'pitch' ? 'list' : 'pitch'
@@ -180,6 +199,45 @@ export default function SessionPage() {
     }
   }
 
+  function onJoinWaitlist(name: string, positions: Position[]) {
+    if (session === null) return
+    setBusy(true)
+    joinWaitlist(session.id, name, positions)
+      .then((result) => {
+        setWaitlistOpen(false)
+        if (result.placed) {
+          // Marking ownership here, ahead of the realtime event for the
+          // slot's own row, is what makes the claimed slot highlighted the
+          // instant the sheet closes — see the design doc's UI section.
+          setOwned(result.slotId, true)
+          show('Slot kosong dah wujud — anda terus dapat tempat!')
+          return
+        }
+        const entry = { id: result.waitlistId, positions, createdAt: new Date().toISOString() }
+        setMyWaitlistEntry(entry)
+        applyWaitlistLocal({ ...entry, sessionId: session.id, playerName: name })
+      })
+      .catch((cause: unknown) => {
+        show(cause instanceof WaitlistActionError ? cause.message : 'Ada masalah. Cuba lagi.', 'error')
+      })
+      .finally(() => setBusy(false))
+  }
+
+  function onLeaveWaitlist() {
+    if (session === null) return
+    const entry = myWaitlistEntry
+    setBusy(true)
+    leaveWaitlist(session.id)
+      .then(() => {
+        if (entry !== null) removeWaitlistLocal(entry.id)
+        setMyWaitlistEntry(null)
+      })
+      .catch((cause: unknown) => {
+        show(cause instanceof WaitlistActionError ? cause.message : 'Ada masalah. Cuba lagi.', 'error')
+      })
+      .finally(() => setBusy(false))
+  }
+
   function onSelect(view: SlotView) {
     if (movingFrom !== null) {
       const target = view.slot
@@ -223,10 +281,35 @@ export default function SessionPage() {
     <div className="mx-auto max-w-md space-y-4 p-4 pb-24">
       <SessionMeta session={session} filled={filled} total={33} />
 
-      {mySlot !== null && (
-        <p className="rounded-2xl bg-amber-400/15 px-4 py-2 text-sm text-amber-200">
+      {mySlot !== null ? (
+        <p className="rounded-lg border border-white/20 bg-white/10 px-3 py-2 font-kit text-[15px]">
           {`Slot anda: Team ${mySlot.team} ${session.teamNames[mySlot.team]} — ${positionLabel(mySlot.position)}`}
         </p>
+      ) : (
+        // Without this, nothing on the page says what to do — every slot looks
+        // like a label rather than a thing you can take.
+        !closed && (
+          <div className="space-y-2 rounded-lg border border-turf-lit/50 bg-turf/25 px-3 py-2">
+            {open > 0 && (
+              <p className="font-kit text-[15px] text-white">
+                {`Tekan posisi kosong untuk daftar — ${open} lagi kosong.`}
+              </p>
+            )}
+            {myWaitlistEntry !== null ? (
+              <p className="font-kit text-[15px] text-white">
+                {`Anda dalam senarai tunggu (${formatPositions(myWaitlistEntry.positions)}).`}
+              </p>
+            ) : (
+              <button
+                type="button"
+                onClick={() => setWaitlistOpen(true)}
+                className="w-full rounded-lg bg-turf-lit px-3 py-2 font-kit text-[15px] font-bold text-white active:opacity-80"
+              >
+                Sertai senarai tunggu
+              </button>
+            )}
+          </div>
+        )
       )}
 
       {movingFrom !== null && (
@@ -257,6 +340,43 @@ export default function SessionPage() {
         />
       ))}
 
+      {waitlist.length > 0 && (
+        <section className="rounded-lg bg-night-2 p-3">
+          <h3 className="mb-2 font-kit text-base font-semibold tracking-wide text-white">
+            {`Senarai Tunggu (${waitlist.length})`}
+          </h3>
+          <ol className="space-y-2">
+            {waitlist.map((entry, index) => {
+              const mine = myWaitlistEntry !== null && myWaitlistEntry.id === entry.id
+              return (
+                <li
+                  key={entry.id}
+                  className={[
+                    'space-y-1 rounded-lg px-3 py-2',
+                    mine ? 'border border-turf-lit/50 bg-turf/25' : 'bg-night',
+                  ].join(' ')}
+                >
+                  <p className="font-sans text-[14px] text-white">
+                    {`${index + 1}. ${entry.playerName}`}
+                    <span className="ml-2 text-white/45">{`(${formatPositions(entry.positions)})`}</span>
+                  </p>
+                  {mine && (
+                    <button
+                      type="button"
+                      disabled={busy}
+                      onClick={onLeaveWaitlist}
+                      className="rounded-md bg-merah/80 px-2 py-1 font-kit text-[12px] font-semibold text-white active:bg-merah disabled:opacity-60"
+                    >
+                      Keluar dari senarai tunggu
+                    </button>
+                  )}
+                </li>
+              )
+            })}
+          </ol>
+        </section>
+      )}
+
       <CopyButton text={whatsappText} label="Salin untuk WhatsApp" />
 
       <ClaimSheet
@@ -278,6 +398,13 @@ export default function SessionPage() {
         }}
         onAdminClear={() => void onAdminClear()}
         onNameChange={setPendingName}
+      />
+
+      <WaitlistSheet
+        open={waitlistOpen}
+        busy={busy}
+        onClose={() => setWaitlistOpen(false)}
+        onJoin={onJoinWaitlist}
       />
     </div>
   )

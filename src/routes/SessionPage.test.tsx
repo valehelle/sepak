@@ -4,6 +4,7 @@ import { MemoryRouter } from 'react-router'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { firstOf } from '../test-utils'
 import type { Session, Slot } from '../data/types'
+import type { MyWaitlistEntry, WaitlistEntry } from '../data/waitlist'
 
 const SESSION: Session = {
   id: 'session-1',
@@ -46,10 +47,20 @@ function withOwned(current: ReadonlySet<string>, slotId: string, owned: boolean)
   return next
 }
 
+function upsertWaitlist(entries: readonly WaitlistEntry[], next: WaitlistEntry): WaitlistEntry[] {
+  return [...entries.filter((e) => e.id !== next.id), next]
+}
+
+function removeWaitlist(entries: readonly WaitlistEntry[], id: string): WaitlistEntry[] {
+  return entries.filter((e) => e.id !== id)
+}
+
 const state = {
   session: SESSION as Session | null,
   slots: emptySlots(),
   mySlotIds: new Set<string>(),
+  waitlist: [] as WaitlistEntry[],
+  myWaitlistEntry: null as MyWaitlistEntry | null,
   loading: false,
   error: null as string | null,
   notFound: false,
@@ -59,6 +70,9 @@ const state = {
   // asked to clear the slot" and "the player actually stops seeing it".
   applyLocal: vi.fn((slot: Slot) => { state.slots = replace(state.slots, slot) }),
   setOwned: vi.fn((slotId: string, owned: boolean) => { state.mySlotIds = withOwned(state.mySlotIds, slotId, owned) }),
+  applyWaitlistLocal: vi.fn((entry: WaitlistEntry) => { state.waitlist = upsertWaitlist(state.waitlist, entry) }),
+  removeWaitlistLocal: vi.fn((id: string) => { state.waitlist = removeWaitlist(state.waitlist, id) }),
+  setMyWaitlistEntry: vi.fn((entry: MyWaitlistEntry | null) => { state.myWaitlistEntry = entry }),
   refetch: vi.fn(),
 }
 
@@ -66,6 +80,8 @@ const claimSlot = vi.fn()
 const releaseSlot = vi.fn()
 const moveSlot = vi.fn()
 const adminClearSlot = vi.fn()
+const joinWaitlist = vi.fn()
+const leaveWaitlist = vi.fn()
 const writeText = vi.fn()
 const authState = { email: null as string | null, role: null as 'super' | 'admin' | null, loading: false }
 
@@ -77,6 +93,13 @@ vi.mock('../data/slots', () => ({
   moveSlot: (...args: unknown[]) => moveSlot(...args),
   adminClearSlot: (id: string) => adminClearSlot(id),
   SlotActionError: class extends Error {
+    constructor(message: string, readonly code: string | null) { super(message) }
+  },
+}))
+vi.mock('../data/waitlist', () => ({
+  joinWaitlist: (...args: unknown[]) => joinWaitlist(...args),
+  leaveWaitlist: (...args: unknown[]) => leaveWaitlist(...args),
+  WaitlistActionError: class extends Error {
     constructor(message: string, readonly code: string | null) { super(message) }
   },
 }))
@@ -113,6 +136,8 @@ describe('SessionPage', () => {
     state.session = SESSION
     state.slots = emptySlots()
     state.mySlotIds = new Set<string>()
+    state.waitlist = []
+    state.myWaitlistEntry = null
     state.loading = false
     state.error = null
     state.notFound = false
@@ -120,6 +145,8 @@ describe('SessionPage', () => {
     releaseSlot.mockReset()
     moveSlot.mockReset()
     adminClearSlot.mockReset().mockResolvedValue(undefined)
+    joinWaitlist.mockReset()
+    leaveWaitlist.mockReset().mockResolvedValue(undefined)
     writeText.mockReset()
     authState.email = null
     authState.role = null
@@ -127,6 +154,9 @@ describe('SessionPage', () => {
     // mutating behaviour is reinstated fresh each test instead of reset away.
     state.applyLocal = vi.fn((slot: Slot) => { state.slots = replace(state.slots, slot) })
     state.setOwned = vi.fn((slotId: string, owned: boolean) => { state.mySlotIds = withOwned(state.mySlotIds, slotId, owned) })
+    state.applyWaitlistLocal = vi.fn((entry: WaitlistEntry) => { state.waitlist = upsertWaitlist(state.waitlist, entry) })
+    state.removeWaitlistLocal = vi.fn((id: string) => { state.waitlist = removeWaitlist(state.waitlist, id) })
+    state.setMyWaitlistEntry = vi.fn((entry: MyWaitlistEntry | null) => { state.myWaitlistEntry = entry })
     state.refetch.mockReset()
     Object.defineProperty(navigator, 'clipboard', { value: { writeText }, configurable: true })
   })
@@ -413,5 +443,96 @@ describe('SessionPage', () => {
     // list, so it must disappear once ownership is actually dropped — not
     // merely because the slot happens to render as empty.
     await waitFor(() => expect(screen.queryByText(/Slot anda:/)).toBeNull())
+  })
+
+  it('replaces the old full-list message with the waitlist affordance when every slot is taken', () => {
+    state.slots = state.slots.map((slot) => ({ ...slot, playerName: 'Someone', claimedAt: 'now' }))
+    view()
+    expect(screen.queryByText(/Semua slot dah penuh/)).toBeNull()
+    expect(screen.getByRole('button', { name: 'Sertai senarai tunggu' })).toBeTruthy()
+  })
+
+  it('offers the waitlist button even while slots remain open', () => {
+    view()
+    expect(screen.getByText(/Tekan posisi kosong untuk daftar/)).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Sertai senarai tunggu' })).toBeTruthy()
+  })
+
+  it('joins the waitlist and shows the device in the queue', async () => {
+    joinWaitlist.mockResolvedValue({ placed: false, waitlistId: 'wait-1' })
+    view()
+
+    await userEvent.click(screen.getByRole('button', { name: 'Sertai senarai tunggu' }))
+    await userEvent.type(screen.getByLabelText('Nama'), 'Faiz')
+    await userEvent.click(screen.getByRole('button', { name: 'MC' }))
+    await userEvent.click(screen.getByRole('button', { name: 'AM' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Sertai' }))
+
+    await waitFor(() => expect(joinWaitlist).toHaveBeenCalledWith('session-1', 'Faiz', ['MC', 'AM']))
+    await waitFor(() => expect(screen.getByText(/1\. Faiz/)).toBeTruthy())
+    expect(screen.getByRole('button', { name: 'Keluar dari senarai tunggu' })).toBeTruthy()
+    // The sheet closes and the player is no longer prompted to join again.
+    expect(screen.queryByLabelText('Nama')).toBeNull()
+  })
+
+  it('closes the sheet and highlights the slot when joining places immediately', async () => {
+    joinWaitlist.mockResolvedValue({ placed: true, slotId: 'A-GK' })
+    view()
+
+    await userEvent.click(screen.getByRole('button', { name: 'Sertai senarai tunggu' }))
+    await userEvent.type(screen.getByLabelText('Nama'), 'Faiz')
+    await userEvent.click(screen.getByRole('button', { name: 'GK' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Sertai' }))
+
+    await waitFor(() => expect(state.setOwned).toHaveBeenCalledWith('A-GK', true))
+    expect(screen.queryByLabelText('Nama')).toBeNull()
+  })
+
+  it('reports the reason when joining the waitlist fails', async () => {
+    const { WaitlistActionError } = await import('../data/waitlist')
+    joinWaitlist.mockRejectedValue(new WaitlistActionError('Anda dah ada slot dalam sesi ini.', 'already_in_slot'))
+    view()
+
+    await userEvent.click(screen.getByRole('button', { name: 'Sertai senarai tunggu' }))
+    await userEvent.type(screen.getByLabelText('Nama'), 'Faiz')
+    await userEvent.click(screen.getByRole('button', { name: 'GK' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Sertai' }))
+
+    await waitFor(() => expect(screen.getByRole('status').textContent).toContain('Anda dah ada slot dalam sesi ini.'))
+  })
+
+  it("shows the whole queue, highlighting only the device's own entry", () => {
+    state.waitlist = [
+      { id: 'wait-1', sessionId: 'session-1', playerName: 'Faiz', positions: ['GK'], createdAt: 't1' },
+      { id: 'wait-2', sessionId: 'session-1', playerName: 'Nabil', positions: ['MC', 'AM'], createdAt: 't2' },
+    ]
+    state.myWaitlistEntry = { id: 'wait-2', positions: ['MC', 'AM'], createdAt: 't2' }
+    view()
+
+    expect(screen.getByText(/1\. Faiz/)).toBeTruthy()
+    expect(screen.getByText(/2\. Nabil/)).toBeTruthy()
+    // Only the device's own row offers the leave button.
+    expect(screen.getAllByRole('button', { name: 'Keluar dari senarai tunggu' })).toHaveLength(1)
+  })
+
+  it('leaves the waitlist', async () => {
+    state.waitlist = [{ id: 'wait-1', sessionId: 'session-1', playerName: 'Faiz', positions: ['GK'], createdAt: 't1' }]
+    state.myWaitlistEntry = { id: 'wait-1', positions: ['GK'], createdAt: 't1' }
+    view()
+
+    await userEvent.click(screen.getByRole('button', { name: 'Keluar dari senarai tunggu' }))
+
+    await waitFor(() => expect(leaveWaitlist).toHaveBeenCalledWith('session-1'))
+    await waitFor(() => expect(screen.queryByText(/Faiz/)).toBeNull())
+  })
+
+  it('includes the waitlist in the WhatsApp text', async () => {
+    state.waitlist = [{ id: 'wait-1', sessionId: 'session-1', playerName: 'Faiz', positions: ['GK'], createdAt: 't1' }]
+    writeText.mockResolvedValue(undefined)
+    view()
+    await userEvent.click(screen.getByRole('button', { name: /Salin untuk WhatsApp/ }))
+    await waitFor(() => expect(writeText).toHaveBeenCalled())
+    const copied = String(firstOf(firstOf(writeText.mock.calls)))
+    expect(copied).toContain('Senarai Tunggu\n1. Faiz (GK)')
   })
 })
