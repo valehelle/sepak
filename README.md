@@ -42,10 +42,11 @@ The booking list is public: anyone with the link can read it and claim a slot.
 That is deliberate — it replaces a WhatsApp message.
 
 Enforcement lives in Postgres, not in the client. `anon` has read-only table
-access and may execute exactly three functions (`claim_slot`, `release_slot`,
-`move_slot`), each of which row-locks before deciding. Every device holds a
-UUID in `localStorage`; presenting it is what authorises releasing or moving a
-slot, so a player can edit their own booking and nobody else's.
+access and may execute exactly four functions (`claim_slot`, `release_slot`,
+`move_slot`, `my_slot_ids`), each of which row-locks (or, for `my_slot_ids`,
+simply reads) before deciding. Every device holds a UUID in `localStorage`;
+presenting it is what authorises releasing or moving a slot, so a player can
+edit their own booking and nobody else's.
 
 Known limitations, accepted deliberately:
 

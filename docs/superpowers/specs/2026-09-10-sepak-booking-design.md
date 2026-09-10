@@ -140,11 +140,23 @@ RLS is enabled on both tables and is the whole enforcement story.
 
 | Role | `sessions` | `slots` |
 |---|---|---|
-| `anon` | select | select |
+| `anon` | select (all columns) | select, **excluding `claim_token`** |
 | `authenticated` | select, insert, update, delete | select, insert, update, delete |
 
-`anon` has **no** direct write access. Player mutations happen only through
-`SECURITY DEFINER` functions, which are the only writes `anon` may execute:
+> **Correction (found in review):** the design originally specified a
+> table-wide `select` grant to `anon` on `slots`, with no column exclusion.
+> That would have let any visitor read every claim's `claim_token` straight
+> off the row — the very value `release_slot`/`move_slot` treat as proof of
+> ownership — defeating the whole "presenting the token authorises you"
+> model. What shipped instead is a column-level grant
+> (`grant select (id, session_id, team, position, player_name, claimed_at)
+> on public.slots to anon`, see `supabase/migrations/0002_rls.sql`) that
+> excludes `claim_token` entirely.
+
+`anon` has **no** direct write access, and cannot read `claim_token` off
+`slots` at all. Player mutations, and the one ownership lookup a device
+needs, happen only through `SECURITY DEFINER` functions, which are the only
+five functions `anon` may execute:
 
 - `claim_slot(p_slot_id uuid, p_name text, p_token uuid)` — claims an empty
   slot in an open session. Errors: `slot_taken`, `session_closed`,
@@ -153,12 +165,27 @@ RLS is enabled on both tables and is the whole enforcement story.
   the token matches. Errors: `wrong_token`, `slot_empty`, `session_closed`.
 - `move_slot(p_from uuid, p_to uuid, p_token uuid)` — releases and claims in
   one transaction, so a move cannot lose the player's place. Errors as above.
-- `create_session(...)` — `authenticated` only. Inserts the session and its
-  thirty-three slots in one transaction, so a session is never half-built.
+- `my_slot_ids(p_session_id uuid, p_token uuid)` — the read side of
+  ownership: returns the ids of slots claimed with the presented token, and
+  nothing else (no names, no tokens). Since `claim_token` is not readable
+  off `slots` directly, this is the only way a device learns which slots
+  are its own. It explicitly raises if called inside a read-only
+  transaction, which is what PostgREST always uses for GET/HEAD regardless
+  of a function's declared volatility — so this refuses GET (which would
+  put the token in the URL, and therefore in access logs and browser
+  history) and only ever succeeds over POST.
+- `create_session(...)` — **`authenticated`-only**, not executable by
+  `anon`. Inserts the session and its thirty-three slots in one
+  transaction, so a session is never half-built.
 
-Each function locks the target rows (`select ... for update`) before
-mutating, which is what makes the simultaneous-claim case resolve to exactly
-one winner rather than a lost update.
+Ownership of a slot is therefore proven by *presenting* `claim_token` to one
+of these functions, never by reading it back off `slots` — the column grant
+above makes that structurally true, not just conventional.
+
+Each of `claim_slot`/`release_slot`/`move_slot` locks the target rows
+(`select ... for update`) before mutating, which is what makes the
+simultaneous-claim case resolve to exactly one winner rather than a lost
+update.
 
 Name input is trimmed, limited to 40 characters, and rejected if empty.
 Names are rendered as text, never as markup.
