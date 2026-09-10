@@ -304,3 +304,78 @@ create trigger slots_fill_from_waitlist
   for each row
   when (OLD.player_name is not null and NEW.player_name is null)
   execute function public.fill_from_waitlist();
+
+---------------------------------------------------------------------------
+-- claim_slot: redefined here (its original definition is in 0003_rpcs.sql;
+-- CREATE OR REPLACE preserves the EXECUTE grants already made there, so
+-- none are re-issued below) to close a hole in the "never both" invariant.
+--
+-- join_waitlist refuses to queue a device that already holds a slot, and
+-- the auto-fill trigger deletes a placed device's queue row -- but nothing
+-- stopped a device that is ALREADY queued from tapping a slot that opens up
+-- and claiming it directly, bypassing auto-fill entirely. That device would
+-- then hold a slot *and* a queue row, and the next slot to free up could
+-- auto-fill them a second time -- exactly the double-occupancy the
+-- invariant exists to prevent, and the likely path in practice: a queued
+-- player watching the page taps an opening the moment they see it rather
+-- than trusting auto-fill to eventually reach them.
+--
+-- Claiming is a stronger statement of intent than queueing, so a successful
+-- claim now quietly removes any queue row for that device in the same
+-- session -- no error, no message. It runs after the update, in the same
+-- transaction as the claim, so a failed claim (slot_taken, session_closed,
+-- ...) leaves the queue row untouched.
+--
+-- move_slot needs no equivalent change: it requires the caller to already
+-- hold the source slot (v_from.player_name is not null, token-checked), and
+-- with this fix in place a device holding a slot can no longer have a
+-- queue row to begin with (join_waitlist already refused to create one, and
+-- claim_slot now removes one on the only other path to holding a slot) --
+-- verified empirically in supabase/tests/waitlist_test.sql rather than
+-- merely assumed.
+---------------------------------------------------------------------------
+create or replace function public.claim_slot(p_slot_id uuid, p_name text, p_token uuid)
+returns public.slots
+language plpgsql
+security definer
+set search_path = public, pg_temp
+as $$
+declare
+  v_slot   public.slots;
+  v_status text;
+  v_name   text := btrim(coalesce(p_name, ''));
+begin
+  if v_name = '' or char_length(v_name) > 40 then
+    raise exception 'invalid_name';
+  end if;
+  if p_token is null then
+    raise exception 'invalid_token';
+  end if;
+
+  -- The lock is what serialises two simultaneous taps on one slot.
+  select * into v_slot from public.slots where id = p_slot_id for update;
+  if not found then
+    raise exception 'slot_not_found';
+  end if;
+
+  select status into v_status from public.sessions where id = v_slot.session_id;
+  if v_status is distinct from 'open' then
+    raise exception 'session_closed';
+  end if;
+
+  if v_slot.player_name is not null then
+    raise exception 'slot_taken';
+  end if;
+
+  update public.slots
+     set player_name = v_name, claim_token = p_token, claimed_at = now()
+   where id = p_slot_id
+  returning * into v_slot;
+
+  delete from public.waitlist
+   where session_id = v_slot.session_id
+     and claim_token = p_token;
+
+  return v_slot;
+end;
+$$;

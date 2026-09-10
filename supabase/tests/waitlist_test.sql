@@ -365,3 +365,83 @@ begin
   reset role;
   raise notice 'waitlist_test: auto-fill trigger assertions passed (release_slot, move_slot source, admin clear, closed session, non-recursion)';
 end $$;
+
+---------------------------------------------------------------------------
+-- The "never both" invariant against the hole claim_slot used to leave
+-- open: a queued device that taps a free slot directly (rather than
+-- waiting on auto-fill) must leave the queue, and must not be eligible for
+-- a second, later auto-fill.
+---------------------------------------------------------------------------
+do $$
+declare
+  v_session_id uuid;
+  v_gk         uuid;
+  v_st         uuid;
+  v_lb         uuid;
+  v_dev        uuid := gen_random_uuid(); -- the queued device that claims directly
+  v_other      uuid := gen_random_uuid(); -- a second device, still properly queued
+  v_claimed    public.slots;
+begin
+  set local role authenticated;
+  set local request.jwt.claims = '{"email":"admin@sepak.local","role":"authenticated"}';
+  select id into v_session_id from public.create_session(
+    904, 'Waitlist Invariant Test', '2026-09-16', '20:00:00', 120, 'Padang Presint 8', 27,
+    'Merah', 'Putih', 'Kuning');
+  select id into v_gk from public.slots where session_id = v_session_id and team = 'A' and position = 'GK';
+  select id into v_st from public.slots where session_id = v_session_id and team = 'A' and position = 'ST';
+  select id into v_lb from public.slots where session_id = v_session_id and team = 'A' and position = 'LB';
+
+  -- Fill every slot except ST and LB -- GK (all three teams) is taken, so
+  -- joining for GK genuinely queues; ST and LB stay free for the device to
+  -- tap directly and to move into later.
+  update public.slots
+     set player_name = 'Filler', claim_token = gen_random_uuid(), claimed_at = now()
+   where session_id = v_session_id and id not in (v_st, v_lb);
+  reset role;
+
+  set local request.jwt.claims = '{}';
+  set local role anon;
+
+  -- Both devices queue for GK, which is taken -- Dev first, Other second.
+  perform public.join_waitlist(v_session_id, 'Dev', array['GK'], v_dev);
+  perform pg_sleep(0.01);
+  perform public.join_waitlist(v_session_id, 'Other', array['GK'], v_other);
+  assert (select count(*) from public.waitlist where session_id = v_session_id) = 2,
+    'sanity: both Dev and Other should be queued';
+
+  -- Dev sees ST open and taps it directly, bypassing auto-fill entirely.
+  select * into v_claimed from public.claim_slot(v_st, 'Dev', v_dev);
+  assert v_claimed.player_name = 'Dev', 'claim_slot should have claimed ST for Dev';
+
+  -- The fix: claiming removes the queue row for that device.
+  assert (select count(*) from public.my_waitlist_entry(v_session_id, v_dev)) = 0,
+    'claim_slot should remove the claiming device''s own waitlist entry';
+  assert (select count(*) from public.waitlist where session_id = v_session_id) = 1,
+    'only Other should remain queued after Dev claims directly';
+
+  -- The consequence that actually matters: GK frees up next. Dev must NOT
+  -- be placed a second time -- Other (still genuinely queued) gets it.
+  reset role;
+  update public.slots set player_name = null, claim_token = null, claimed_at = null where id = v_gk;
+  set local request.jwt.claims = '{}';
+  set local role anon;
+
+  assert (select player_name from public.slots where id = v_gk) = 'Other',
+    'auto-fill must place the still-queued device (Other), not the one that already claimed directly (Dev)';
+  assert (select player_name from public.slots where id = v_st) = 'Dev',
+    'Dev''s directly-claimed slot must be untouched by the later auto-fill';
+  assert (select count(*) from public.waitlist where session_id = v_session_id) = 0,
+    'Other''s entry should be consumed by the auto-fill; none of Dev''s should reappear';
+
+  -- move_slot: Dev, now holding ST (never having gone through join_waitlist
+  -- again), moves to LB. This should not create a waitlist row -- checked,
+  -- not assumed.
+  perform public.move_slot(v_st, v_lb, v_dev);
+  assert (select player_name from public.slots where id = v_lb) = 'Dev', 'move_slot should have moved Dev to LB';
+  assert (select count(*) from public.my_waitlist_entry(v_session_id, v_dev)) = 0,
+    'move_slot must not leave (or create) a waitlist entry for the device it moves';
+
+  reset role;
+  delete from public.sessions where id = v_session_id;
+  raise notice 'waitlist_test: claim_slot-clears-the-queue invariant assertions passed';
+end $$;
