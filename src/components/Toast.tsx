@@ -11,13 +11,13 @@ export function useToast(): ToastApi {
   return api
 }
 
-type Current = { message: string; tone: Tone; key: number }
+type Current = { message: string; tone: Tone }
 
 export function ToastProvider({ children }: { children: ReactNode }) {
   const [current, setCurrent] = useState<Current | null>(null)
 
   const show = useCallback((message: string, tone: Tone = 'info') => {
-    setCurrent({ message, tone, key: Date.now() })
+    setCurrent({ message, tone })
   }, [])
 
   useEffect(() => {
