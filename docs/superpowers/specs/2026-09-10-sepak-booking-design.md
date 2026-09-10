@@ -155,8 +155,8 @@ RLS is enabled on both tables and is the whole enforcement story.
 
 `anon` has **no** direct write access, and cannot read `claim_token` off
 `slots` at all. Player mutations, and the one ownership lookup a device
-needs, happen only through `SECURITY DEFINER` functions, which are the only
-five functions `anon` may execute:
+needs, happen only through `SECURITY DEFINER` functions — five of them in
+total, four of which `anon` may execute:
 
 - `claim_slot(p_slot_id uuid, p_name text, p_token uuid)` — claims an empty
   slot in an open session. Errors: `slot_taken`, `session_closed`,
