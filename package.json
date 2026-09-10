@@ -16,7 +16,7 @@
     "e2e": "playwright test",
     "db:start": "supabase start",
     "db:reset": "supabase db reset",
-    "test:db": "sh scripts/psql.sh < supabase/tests/schema_test.sql"
+    "test:db": "sh scripts/psql.sh < supabase/tests/schema_test.sql && sh scripts/psql.sh < supabase/tests/rls_test.sql"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.58.0",
