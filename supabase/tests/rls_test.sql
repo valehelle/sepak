@@ -10,6 +10,7 @@ declare
   v_token uuid := gen_random_uuid();
   v_intruder uuid := gen_random_uuid();
   v_count int;
+  v_claimed public.slots;
 begin
   -- create_session builds a whole session in one shot
   set local role authenticated;
@@ -63,12 +64,27 @@ begin
   exception when insufficient_privilege then null;
   end;
 
+  begin
+    truncate public.slots;
+    raise exception 'anon must not truncate slots';
+  exception when insufficient_privilege then null;
+  end;
+
+  begin
+    perform claim_token from public.slots where id = v_gk;
+    raise exception 'anon must not read claim_token';
+  exception when insufficient_privilege then null;
+  end;
+
   ---------------------------------------------------------------------------
   -- claim_slot
   ---------------------------------------------------------------------------
-  perform public.claim_slot(v_gk, 'Hazmi', v_token);
-  assert (select player_name from public.slots where id = v_gk) = 'Hazmi', 'claim should set the name';
-  assert (select claim_token from public.slots where id = v_gk) = v_token, 'claim should store the token';
+  -- claim_token comes back on the returned row (the API's own answer to "what
+  -- did you just store"), never by reading the column back off the table --
+  -- anon holds no select privilege on it, by design.
+  select * into v_claimed from public.claim_slot(v_gk, 'Hazmi', v_token);
+  assert v_claimed.player_name = 'Hazmi', 'claim should set the name';
+  assert v_claimed.claim_token = v_token, 'claim should store the token';
 
   begin
     perform public.claim_slot(v_gk, 'Intruder', v_intruder);
@@ -103,6 +119,19 @@ begin
   assert (select player_name from public.slots where id = v_st) = 'Zulazhar', 'claim should trim the name';
 
   ---------------------------------------------------------------------------
+  -- my_slot_ids: how a device discovers its own slots now that claim_token
+  -- is no longer directly readable -- it must present the token, not read it.
+  ---------------------------------------------------------------------------
+  assert (select count(*) from public.my_slot_ids(v_session_id, v_token)) = 2,
+    'my_slot_ids should return both slots claimed with this token';
+  assert v_gk in (select * from public.my_slot_ids(v_session_id, v_token)),
+    'my_slot_ids should include the GK slot';
+  assert v_st in (select * from public.my_slot_ids(v_session_id, v_token)),
+    'my_slot_ids should include the ST slot';
+  assert (select count(*) from public.my_slot_ids(v_session_id, v_intruder)) = 0,
+    'my_slot_ids should return nothing for a token that claimed nothing';
+
+  ---------------------------------------------------------------------------
   -- release_slot: the token is the authorisation
   ---------------------------------------------------------------------------
   begin
@@ -114,9 +143,10 @@ begin
   assert (select player_name from public.slots where id = v_gk) = 'Hazmi',
     'a rejected release must leave the slot untouched';
 
-  perform public.release_slot(v_gk, v_token);
-  assert (select player_name from public.slots where id = v_gk) is null, 'release should empty the slot';
-  assert (select claim_token from public.slots where id = v_gk) is null, 'release should clear the token';
+  -- Again read the token off the returned row, not the table.
+  select * into v_claimed from public.release_slot(v_gk, v_token);
+  assert v_claimed.player_name is null, 'release should empty the slot';
+  assert v_claimed.claim_token is null, 'release should clear the token';
 
   begin
     perform public.release_slot(v_gk, v_token);

@@ -70,7 +70,10 @@ begin
     raise exception 'slot_empty';
   end if;
 
-  -- Holding the token is the whole authorisation story for a player.
+  -- Holding the token is the whole authorisation story for a player. A null
+  -- p_token is safe to compare here only because slots_claim_complete never
+  -- allows a named slot to carry a null claim_token -- v_slot.claim_token is
+  -- guaranteed non-null once v_slot.player_name is not null (checked above).
   if v_slot.claim_token is distinct from p_token then
     raise exception 'wrong_token';
   end if;
@@ -121,6 +124,8 @@ begin
   end if;
 
   if v_from.player_name is null then raise exception 'slot_empty'; end if;
+  -- Safe against a null p_token only because slots_claim_complete guarantees
+  -- v_from.claim_token is non-null whenever v_from.player_name is (checked above).
   if v_from.claim_token is distinct from p_token then raise exception 'wrong_token'; end if;
   if v_to.player_name is not null then raise exception 'slot_taken'; end if;
 
@@ -156,6 +161,7 @@ create or replace function public.create_session(
 )
 returns public.sessions
 language plpgsql
+set search_path = public, pg_temp
 as $$
 declare
   v_session public.sessions;
@@ -184,6 +190,25 @@ end;
 $$;
 
 ---------------------------------------------------------------------------
+-- my_slot_ids: how a device learns which slots are its own now that
+-- claim_token is no longer readable off the table. It leaks nothing --
+-- ownership must already be demonstrated by presenting the token, and only
+-- ids come back, never names or tokens.
+---------------------------------------------------------------------------
+create or replace function public.my_slot_ids(p_session_id uuid, p_token uuid)
+returns setof uuid
+language sql
+security definer
+set search_path = public, pg_temp
+stable
+as $$
+  select id from public.slots
+   where session_id = p_session_id
+     and p_token is not null
+     and claim_token = p_token;
+$$;
+
+---------------------------------------------------------------------------
 -- Execute grants. Functions are executable by PUBLIC by default, so each
 -- one is revoked first and then granted deliberately.
 ---------------------------------------------------------------------------
@@ -191,8 +216,10 @@ revoke all on function public.claim_slot(uuid, text, uuid)   from public;
 revoke all on function public.release_slot(uuid, uuid)        from public;
 revoke all on function public.move_slot(uuid, uuid, uuid)     from public;
 revoke all on function public.create_session(int, text, date, time, int, text, numeric, text, text, text) from public;
+revoke all on function public.my_slot_ids(uuid, uuid)         from public;
 
 grant execute on function public.claim_slot(uuid, text, uuid)  to anon, authenticated;
 grant execute on function public.release_slot(uuid, uuid)      to anon, authenticated;
 grant execute on function public.move_slot(uuid, uuid, uuid)   to anon, authenticated;
 grant execute on function public.create_session(int, text, date, time, int, text, numeric, text, text, text) to authenticated;
+grant execute on function public.my_slot_ids(uuid, uuid)       to anon, authenticated;
