@@ -194,18 +194,37 @@ $$;
 -- claim_token is no longer readable off the table. It leaks nothing --
 -- ownership must already be demonstrated by presenting the token, and only
 -- ids come back, never names or tokens.
+--
+-- p_token is the entire player authorisation model, so this must never be
+-- callable over GET -- that would put it in the URL, and therefore in Kong
+-- access logs and browser history. Dropping the `stable` marker alone does
+-- NOT achieve this: PostgREST always runs GET/HEAD against a function in a
+-- READ ONLY transaction regardless of its declared volatility (this is
+-- true for VOLATILE functions too), and only rejects the call if the
+-- function actually attempts something that transaction mode forbids. A
+-- plain `select` has nothing to forbid, so a merely-non-stable version of
+-- this function still returns 200 on GET. The explicit read-only check
+-- below is what actually closes it, reusing Postgres's own
+-- read_only_sql_transaction SQLSTATE (25006) so PostgREST maps it to the
+-- same 405 the other four RPCs already produce under GET.
 ---------------------------------------------------------------------------
 create or replace function public.my_slot_ids(p_session_id uuid, p_token uuid)
 returns setof uuid
-language sql
+language plpgsql
 security definer
 set search_path = public, pg_temp
-stable
 as $$
+begin
+  if current_setting('transaction_read_only')::boolean then
+    raise exception 'read_only_not_allowed' using errcode = '25006';
+  end if;
+
+  return query
   select id from public.slots
    where session_id = p_session_id
      and p_token is not null
      and claim_token = p_token;
+end;
 $$;
 
 ---------------------------------------------------------------------------
