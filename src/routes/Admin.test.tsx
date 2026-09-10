@@ -1,0 +1,149 @@
+import { render, screen, waitFor } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
+import { MemoryRouter } from 'react-router'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
+import type { Session } from '../data/types'
+
+const SESSION: Session = {
+  id: 'session-1',
+  sessionNo: 5,
+  title: 'Geng Turun Peluh',
+  playDate: '2026-09-16',
+  startTime: '20:00:00',
+  durationMins: 120,
+  venue: 'Padang Presint 8',
+  feeMyr: 27,
+  teamNames: { A: 'Merah', B: 'Putih', C: 'Kuning' },
+  status: 'open',
+  createdAt: '2026-09-10T00:00:00Z',
+}
+
+const auth = { email: null as string | null, loading: false }
+const signIn = vi.fn()
+const signOut = vi.fn()
+const listSessions = vi.fn()
+const createSession = vi.fn()
+const setSessionStatus = vi.fn()
+const deleteSessionFn = vi.fn()
+const nextSessionNo = vi.fn()
+
+vi.mock('../data/auth', () => ({
+  useAuthUser: () => auth,
+  signIn: (email: string, password: string) => signIn(email, password),
+  signOut: () => signOut(),
+}))
+
+vi.mock('../data/sessions', () => ({
+  listSessions: () => listSessions(),
+  createSession: (input: unknown) => createSession(input),
+  updateSession: vi.fn(),
+  setSessionStatus: (id: string, status: string) => setSessionStatus(id, status),
+  deleteSession: (id: string) => deleteSessionFn(id),
+  nextSessionNo: () => nextSessionNo(),
+  fillCounts: () => Promise.resolve(new Map()),
+}))
+
+const { ToastProvider } = await import('../components/Toast')
+const { default: Admin } = await import('./Admin')
+
+function view() {
+  return render(<MemoryRouter><ToastProvider><Admin /></ToastProvider></MemoryRouter>)
+}
+
+describe('Admin', () => {
+  beforeEach(() => {
+    auth.email = null
+    auth.loading = false
+    signIn.mockReset()
+    signOut.mockReset()
+    listSessions.mockReset().mockResolvedValue([SESSION])
+    createSession.mockReset().mockResolvedValue({ ...SESSION, id: 'new-session' })
+    setSessionStatus.mockReset().mockResolvedValue({ ...SESSION, status: 'closed' })
+    deleteSessionFn.mockReset().mockResolvedValue(undefined)
+    nextSessionNo.mockReset().mockResolvedValue(6)
+  })
+
+  it('asks for a login when signed out', () => {
+    view()
+    expect(screen.getByLabelText('E-mel')).toBeTruthy()
+    expect(screen.getByLabelText('Kata laluan')).toBeTruthy()
+    expect(screen.queryByRole('button', { name: /Sesi baru/ })).toBeNull()
+  })
+
+  it('signs in', async () => {
+    signIn.mockResolvedValue(undefined)
+    view()
+    await userEvent.type(screen.getByLabelText('E-mel'), 'hazmi@example.com')
+    await userEvent.type(screen.getByLabelText('Kata laluan'), 'rahsia123')
+    await userEvent.click(screen.getByRole('button', { name: 'Masuk' }))
+    expect(signIn).toHaveBeenCalledWith('hazmi@example.com', 'rahsia123')
+  })
+
+  it('reports a bad login', async () => {
+    signIn.mockRejectedValue(new Error('Invalid login credentials'))
+    view()
+    await userEvent.type(screen.getByLabelText('E-mel'), 'hazmi@example.com')
+    await userEvent.type(screen.getByLabelText('Kata laluan'), 'salah')
+    await userEvent.click(screen.getByRole('button', { name: 'Masuk' }))
+    await waitFor(() => expect(screen.getByRole('status').textContent).toContain('E-mel atau kata laluan salah.'))
+  })
+
+  it('lists sessions once signed in', async () => {
+    auth.email = 'hazmi@example.com'
+    view()
+    await waitFor(() => expect(screen.getByText(/Sesi 005/)).toBeTruthy())
+  })
+
+  it('creates a session, prefilling the next number', async () => {
+    auth.email = 'hazmi@example.com'
+    view()
+    await userEvent.click(await waitFor(() => screen.getByRole('button', { name: 'Sesi baru' })))
+    await waitFor(() => expect(screen.getByLabelText<HTMLInputElement>('Sesi no.').value).toBe('6'))
+
+    await userEvent.type(screen.getByLabelText('Nama sesi'), 'Geng Turun Peluh')
+    await userEvent.type(screen.getByLabelText('Tarikh'), '2026-09-23')
+    await userEvent.type(screen.getByLabelText('Tempat'), 'Padang Presint 8')
+    await userEvent.click(screen.getByRole('button', { name: 'Cipta sesi' }))
+
+    await waitFor(() => expect(createSession).toHaveBeenCalledWith(
+      expect.objectContaining({ sessionNo: 6, venue: 'Padang Presint 8' }),
+    ))
+  })
+
+  it('duplicates the last session, keeping venue and fee but clearing nothing else', async () => {
+    auth.email = 'hazmi@example.com'
+    view()
+    await userEvent.click(await waitFor(() => screen.getByRole('button', { name: /Duplikasi sesi lepas/ })))
+
+    await waitFor(() => {
+      expect(screen.getByLabelText<HTMLInputElement>('Tempat').value).toBe('Padang Presint 8')
+      expect(screen.getByLabelText<HTMLInputElement>('Yuran (RM)').value).toBe('27')
+      expect(screen.getByLabelText<HTMLInputElement>('Sesi no.').value).toBe('6')
+      // The date is deliberately blank: it is the one thing that must change.
+      expect(screen.getByLabelText<HTMLInputElement>('Tarikh').value).toBe('')
+    })
+  })
+
+  it('closes a session', async () => {
+    auth.email = 'hazmi@example.com'
+    view()
+    await userEvent.click(await waitFor(() => screen.getByRole('button', { name: 'Tutup sesi' })))
+    expect(setSessionStatus).toHaveBeenCalledWith('session-1', 'closed')
+  })
+
+  it('requires confirmation before deleting', async () => {
+    auth.email = 'hazmi@example.com'
+    view()
+    await userEvent.click(await waitFor(() => screen.getByRole('button', { name: 'Hapus' })))
+    expect(deleteSessionFn).not.toHaveBeenCalled()
+    await userEvent.click(screen.getByRole('button', { name: 'Ya, hapus' }))
+    expect(deleteSessionFn).toHaveBeenCalledWith('session-1')
+  })
+
+  it('signs out', async () => {
+    auth.email = 'hazmi@example.com'
+    view()
+    await userEvent.click(await waitFor(() => screen.getByRole('button', { name: 'Keluar' })))
+    expect(signOut).toHaveBeenCalled()
+  })
+})
