@@ -20,7 +20,7 @@ const SESSION: Session = {
 describe('SessionMeta', () => {
   it('shows the session details in the familiar order', () => {
     render(<SessionMeta session={SESSION} filled={24} total={33} />)
-    expect(screen.getByText('Sesi 005 Geng Turun Peluh')).toBeTruthy()
+    expect(screen.getByRole('heading', { name: 'Sesi 005 Geng Turun Peluh' })).toBeTruthy()
     expect(screen.getByText('16/09/2026 (RABU)')).toBeTruthy()
     expect(screen.getByText('8:00 PM')).toBeTruthy()
     expect(screen.getByText('Padang Presint 8')).toBeTruthy()

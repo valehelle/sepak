@@ -1,9 +1,23 @@
 @import 'tailwindcss';
+@import url('https://fonts.googleapis.com/css2?family=Barlow:wght@400;500;600&family=Barlow+Condensed:wght@500;600;700&display=swap');
 
 @theme {
-  --color-pitch: oklch(0.42 0.09 152);
-  --color-pitch-line: oklch(0.58 0.06 152);
-  --font-sans: ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif;
+  /* A padang at night, away from the floodlights. */
+  --color-night: #0a1017;
+  --color-night-2: #111b25;
+
+  /* Turf under floodlights: saturated, with a warm cast from the lamps. */
+  --color-turf: #1b7a3e;
+  --color-turf-lit: #23904a;
+  --color-line: #ffffff;
+
+  /* The three bibs. These carry team identity — nothing else needs to. */
+  --color-merah: #e23d33;
+  --color-putih: #efede4;
+  --color-kuning: #f4c231;
+
+  --font-sans: 'Barlow', ui-sans-serif, system-ui, sans-serif;
+  --font-kit: 'Barlow Condensed', 'Barlow', ui-sans-serif, sans-serif;
 }
 
 html {
@@ -11,6 +25,79 @@ html {
 }
 
 body {
-  @apply bg-slate-950 text-slate-100 font-sans antialiased;
+  @apply bg-night font-sans text-white antialiased;
   padding-bottom: env(safe-area-inset-bottom);
+}
+
+/* Tailwind v4's Preflight sets buttons to `cursor: default` to match the CSS
+   spec, where v3 used `pointer`. On a booking screen made almost entirely of
+   tappable slots, a pointer is the affordance telling you a slot can be
+   claimed — so put it back, and leave disabled slots alone. */
+button:not(:disabled),
+[role='button']:not(:disabled),
+a[href],
+label[for],
+summary {
+  cursor: pointer;
+}
+
+/* Mown stripes, running across the pitch as a roller would leave them. */
+.turf {
+  background-image: repeating-linear-gradient(
+    to bottom,
+    var(--color-turf) 0 26px,
+    var(--color-turf-lit) 26px 52px
+  );
+}
+
+/* Pitch markings are drawn, not decorative: goal and boxes at the top, the
+   centre circle cut by the halfway line at the bottom — so a 4-3-3 laid over
+   it lands where those players actually stand. */
+.mark {
+  position: absolute;
+  pointer-events: none;
+  border: 1.5px solid var(--color-line);
+  opacity: 0.4;
+}
+
+/* Boxes open at the top, because the goal line IS the top edge. */
+.mark-box {
+  border-top: none;
+  left: 50%;
+  transform: translateX(-50%);
+  top: -1px;
+}
+
+.mark-goal {
+  left: 50%;
+  transform: translateX(-50%);
+  top: -1px;
+  width: 26%;
+  height: 9px;
+  border-top: none;
+  border-width: 2.5px;
+  opacity: 0.85;
+}
+
+.mark-circle {
+  left: 50%;
+  bottom: 0;
+  width: 42%;
+  aspect-ratio: 1;
+  transform: translate(-50%, 50%);
+  border-radius: 50%;
+}
+
+.mark-halfway {
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 0;
+  border-width: 1.5px 0 0 0;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  * {
+    transition-duration: 0.01ms !important;
+  }
 }

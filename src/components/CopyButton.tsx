@@ -21,9 +21,14 @@ export function CopyButton({ text, label }: CopyButtonProps) {
     <button
       type="button"
       onClick={copy}
-      className="w-full rounded-2xl bg-slate-800 px-4 py-3 text-sm font-semibold text-slate-100 active:bg-slate-700"
+      className={[
+        'w-full rounded-lg border px-4 py-3 font-kit text-[15px] font-semibold tracking-wide transition',
+        copied
+          ? 'border-turf-lit bg-turf-lit text-white'
+          : 'border-white/15 bg-white/5 text-white active:bg-white/10',
+      ].join(' ')}
     >
-      {copied ? '✅ Dah disalin' : `📋 ${label}`}
+      {copied ? 'Dah disalin' : label}
     </button>
   )
 }
