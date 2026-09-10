@@ -1,4 +1,5 @@
 import { act, render, screen, waitFor } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { Session, Slot } from './types'
 
@@ -63,6 +64,26 @@ function Probe({ id }: { id: string | undefined }) {
         </li>
       ))}
     </ul>
+  )
+}
+
+/** Drives `setOwned` through real button clicks and reads ownership back out
+ *  of rendered DOM, not off the hook's return value directly — a `mySlotIds`
+ *  update that mutated the Set in place (same reference, no re-render) must
+ *  fail this test loudly rather than pass by reading the very object that
+ *  was just mutated. `onRender` additionally reports the current `mySlotIds`
+ *  reference on every render, so the test can also assert directly that a
+ *  new Set was produced. */
+function OwnProbe({ id, onRender }: { id: string | undefined; onRender: (ids: ReadonlySet<string>) => void }) {
+  const state = useSessionRealtime(id)
+  onRender(state.mySlotIds)
+  if (state.loading) return <p>loading</p>
+  return (
+    <>
+      <button onClick={() => state.setOwned('slot-gk', true)}>own</button>
+      <button onClick={() => state.setOwned('slot-gk', false)}>disown</button>
+      <p>{`mine:${state.mySlotIds.has('slot-gk') ? 'yes' : 'no'}`}</p>
+    </>
   )
 }
 
@@ -150,34 +171,35 @@ describe('useSessionRealtime', () => {
     expect(getMySlotIds).toHaveBeenCalledWith('session-1')
   })
 
-  it('setOwned adds and removes ownership locally without refetching', async () => {
+  it('setOwned adds and removes ownership locally, re-rendering, without refetching', async () => {
     getSessionWithSlots.mockResolvedValue({ session: SESSION, slots: [GK] })
     getMySlotIds.mockResolvedValue(new Set<string>())
+    const user = userEvent.setup()
 
-    // A ref-object rather than a reassigned `let`: TS's control-flow
-    // narrowing does not track mutation through a nested component's
-    // closure, so a plain `let` reassigned only inside `Capture` would
-    // narrow to `null` at every read site below.
-    const ref: { current: ReturnType<typeof useSessionRealtime> | null } = { current: null }
-    function Capture({ id }: { id: string }) {
-      ref.current = useSessionRealtime(id)
-      return null
-    }
+    // Property assignment on a ref-object, not a reassigned `let`: TS's
+    // control-flow narrowing does not track mutation through a nested
+    // component's closure, so a plain `let` written only inside `OwnProbe`
+    // would narrow to its initial value at every read site below.
+    const seen: { current: ReadonlySet<string> | null } = { current: null }
 
-    render(<Capture id="session-1" />)
-    await waitFor(() => expect(ref.current?.loading).toBe(false))
-    expect(ref.current?.mySlotIds.has('slot-gk')).toBe(false)
+    render(<OwnProbe id="session-1" onRender={(ids) => (seen.current = ids)} />)
+    await waitFor(() => expect(screen.getByText('mine:no')).toBeTruthy())
+    const initial = seen.current
 
-    act(() => {
-      ref.current?.setOwned('slot-gk', true)
-    })
-    await waitFor(() => expect(ref.current?.mySlotIds.has('slot-gk')).toBe(true))
+    await user.click(screen.getByRole('button', { name: 'own' }))
+    // Fails loudly (times out) if setOwned mutated the Set in place: with no
+    // new reference, React bails out of the re-render and this text never
+    // changes.
+    await waitFor(() => expect(screen.getByText('mine:yes')).toBeTruthy())
+    expect(seen.current).not.toBe(initial)
+    expect(getSessionWithSlots).toHaveBeenCalledTimes(1)
     expect(getMySlotIds).toHaveBeenCalledTimes(1)
 
-    act(() => {
-      ref.current?.setOwned('slot-gk', false)
-    })
-    await waitFor(() => expect(ref.current?.mySlotIds.has('slot-gk')).toBe(false))
+    const afterOwn = seen.current
+    await user.click(screen.getByRole('button', { name: 'disown' }))
+    await waitFor(() => expect(screen.getByText('mine:no')).toBeTruthy())
+    expect(seen.current).not.toBe(afterOwn)
+    expect(getSessionWithSlots).toHaveBeenCalledTimes(1)
     expect(getMySlotIds).toHaveBeenCalledTimes(1)
   })
 
