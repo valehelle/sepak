@@ -67,7 +67,7 @@ const releaseSlot = vi.fn()
 const moveSlot = vi.fn()
 const adminClearSlot = vi.fn()
 const writeText = vi.fn()
-const authState = { email: null as string | null, loading: false }
+const authState = { email: null as string | null, role: null as 'super' | 'admin' | null, loading: false }
 
 vi.mock('../data/useSessionRealtime', () => ({ useSessionRealtime: () => state }))
 vi.mock('../data/auth', () => ({ useAuthUser: () => authState }))
@@ -122,6 +122,7 @@ describe('SessionPage', () => {
     adminClearSlot.mockReset().mockResolvedValue(undefined)
     writeText.mockReset()
     authState.email = null
+    authState.role = null
     // `mockReset` would also discard the implementations above, so the
     // mutating behaviour is reinstated fresh each test instead of reset away.
     state.applyLocal = vi.fn((slot: Slot) => { state.slots = replace(state.slots, slot) })
@@ -132,7 +133,7 @@ describe('SessionPage', () => {
 
   it('shows the session header and all three teams', () => {
     view()
-    expect(screen.getByText('Sesi 005 Geng Turun Peluh')).toBeTruthy()
+    expect(screen.getByRole('heading', { name: 'Sesi 005 Geng Turun Peluh' })).toBeTruthy()
     expect(screen.getByText('Team A Merah')).toBeTruthy()
     expect(screen.getByText('Team B Putih')).toBeTruthy()
     expect(screen.getByText('Team C Kuning')).toBeTruthy()
@@ -344,6 +345,7 @@ describe('SessionPage', () => {
 
   it('offers the organiser an override on any occupied slot', async () => {
     authState.email = 'hazmi@example.com'
+    authState.role = 'admin'
     state.slots = state.slots.map((slot) =>
       slot.id === 'A-LB' ? { ...slot, playerName: 'Joke Name', claimedAt: 'now' } : slot,
     )
@@ -356,6 +358,20 @@ describe('SessionPage', () => {
 
   it('does not offer the override to a player', async () => {
     authState.email = null
+    authState.role = null
+    state.slots = state.slots.map((slot) =>
+      slot.id === 'A-LB' ? { ...slot, playerName: 'Amir', claimedAt: 'now' } : slot,
+    )
+    view()
+    await userEvent.click(firstOf(screen.getAllByRole('button', { name: /^LB/ })))
+    expect(screen.queryByRole('button', { name: /admin/i })).toBeNull()
+  })
+
+  it('does not offer the override to a signed-in user who is not on the allowlist', async () => {
+    // Signed in (there is a session/email) but no admins row -- role stays
+    // null. The override must key off role, not merely being authenticated.
+    authState.email = 'stranger@example.com'
+    authState.role = null
     state.slots = state.slots.map((slot) =>
       slot.id === 'A-LB' ? { ...slot, playerName: 'Amir', claimedAt: 'now' } : slot,
     )
@@ -367,6 +383,7 @@ describe('SessionPage', () => {
   it('reports the specific reason when an admin clear fails', async () => {
     const { SlotActionError } = await import('../data/slots')
     authState.email = 'hazmi@example.com'
+    authState.role = 'admin'
     state.slots = state.slots.map((slot) =>
       slot.id === 'A-LB' ? { ...slot, playerName: 'Joke Name', claimedAt: 'now' } : slot,
     )
@@ -381,6 +398,7 @@ describe('SessionPage', () => {
 
   it('drops local ownership when the organiser clears their own slot via the override', async () => {
     authState.email = 'hazmi@example.com'
+    authState.role = 'admin'
     state.slots = withClaim(state.slots, 'B-MC')
     state.mySlotIds = new Set(['B-MC'])
     view()

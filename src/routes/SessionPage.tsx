@@ -43,8 +43,10 @@ export default function SessionPage() {
   const { session, slots, mySlotIds, loading, error, notFound, applyLocal, setOwned, refetch } =
     useSessionRealtime(id)
   const { show } = useToast()
-  const { email: adminEmail } = useAuthUser()
-  const isAdmin = adminEmail !== null
+  const { role } = useAuthUser()
+  // Being signed in is not enough any more -- a signed-in non-admin must not
+  // get the organiser override, only someone with a row in public.admins.
+  const isAdmin = role !== null
 
   const [selected, setSelected] = useState<SlotView | null>(null)
   const [movingFrom, setMovingFrom] = useState<Slot | null>(null)
@@ -237,7 +239,7 @@ export default function SessionPage() {
       <button
         type="button"
         onClick={toggleViewMode}
-        className="w-full rounded-2xl bg-slate-800/70 px-4 py-2 text-xs font-semibold text-slate-300"
+        className="ml-auto block rounded-md px-2 py-1 font-kit text-[13px] font-medium text-white/45 underline decoration-white/20 underline-offset-4 active:text-white"
       >
         {viewMode === 'pitch' ? 'Papar senarai' : 'Papar padang'}
       </button>

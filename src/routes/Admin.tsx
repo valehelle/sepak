@@ -1,9 +1,10 @@
 import { useCallback, useEffect, useState } from 'react'
 import { Link } from 'react-router'
+import { AdminList } from '../components/AdminList'
 import { SessionForm, type SessionFormValues } from '../components/SessionForm'
 import { Sheet } from '../components/Sheet'
 import { useToast } from '../components/Toast'
-import { signIn, signOut, useAuthUser } from '../data/auth'
+import { signIn, signOut, signUp, useAuthUser } from '../data/auth'
 import { createSession, deleteSession, listSessions, nextSessionNo, setSessionStatus, updateSession } from '../data/sessions'
 import type { Session } from '../data/types'
 import { formatPlayDate, formatStartTime } from '../lib/format'
@@ -23,6 +24,7 @@ const DEFAULTS: SessionFormValues = {
 
 function LoginForm() {
   const { show } = useToast()
+  const [mode, setMode] = useState<'signin' | 'signup'>('signin')
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [busy, setBusy] = useState(false)
@@ -30,13 +32,20 @@ function LoginForm() {
   async function submit() {
     setBusy(true)
     try {
-      await signIn(email, password)
+      if (mode === 'signup') {
+        await signUp(email, password)
+        show('Akaun dicipta. Anda akan dimasukkan secara automatik.')
+      } else {
+        await signIn(email, password)
+      }
     } catch (cause: unknown) {
       const message = cause instanceof Error ? cause.message : ''
       show(
         message.includes('Invalid login credentials')
           ? 'E-mel atau kata laluan salah.'
-          : 'Gagal masuk. Cuba lagi.',
+          : mode === 'signup'
+            ? 'Gagal mendaftar. Cuba lagi.'
+            : 'Gagal masuk. Cuba lagi.',
         'error',
       )
     } finally {
@@ -63,7 +72,7 @@ function LoginForm() {
         <input
           id="password"
           type="password"
-          autoComplete="current-password"
+          autoComplete={mode === 'signup' ? 'new-password' : 'current-password'}
           value={password}
           onChange={(e) => setPassword(e.target.value)}
           className="w-full rounded-2xl bg-slate-800 px-4 py-3 text-base outline-none focus:ring-2 focus:ring-emerald-400"
@@ -75,14 +84,40 @@ function LoginForm() {
         onClick={() => void submit()}
         className="w-full rounded-2xl bg-emerald-500 px-4 py-3 text-sm font-bold text-slate-950 disabled:opacity-60"
       >
-        Masuk
+        {mode === 'signup' ? 'Daftar' : 'Masuk'}
+      </button>
+      <button
+        type="button"
+        onClick={() => setMode(mode === 'signup' ? 'signin' : 'signup')}
+        className="w-full text-center text-xs text-slate-400 underline"
+      >
+        {mode === 'signup' ? 'Dah ada akaun? Masuk' : 'Admin baru? Daftar di sini'}
+      </button>
+    </div>
+  )
+}
+
+/** Shown when a session resolved (there is an email) but the account holds
+ *  no row in public.admins -- signing up creates an account, but it grants
+ *  nothing on its own under the allowlist model. */
+function NotAllowlisted() {
+  return (
+    <div className="mx-auto max-w-sm space-y-3 p-6 text-center">
+      <h1 className="text-xl font-bold">Admin</h1>
+      <p className="text-sm text-slate-300">Akaun ini bukan admin. Minta admin utama tambah e-mel anda.</p>
+      <button
+        type="button"
+        onClick={() => void signOut()}
+        className="text-sm text-slate-400 underline"
+      >
+        Keluar
       </button>
     </div>
   )
 }
 
 export default function Admin() {
-  const { email, loading } = useAuthUser()
+  const { email, role, loading } = useAuthUser()
   const { show } = useToast()
 
   const [sessions, setSessions] = useState<Session[]>([])
@@ -106,9 +141,9 @@ export default function Admin() {
   }, [show])
 
   useEffect(() => {
-    if (email === null) return
+    if (role === null) return
     void reload()
-  }, [email, reload])
+  }, [role, reload])
 
   // openNew/openDuplicate fetch the next session number before they can
   // produce final form values, so the formKey bump has to land in the same
@@ -231,6 +266,7 @@ export default function Admin() {
 
   if (loading) return <p className="p-6 text-slate-400">Memuatkan…</p>
   if (email === null) return <LoginForm />
+  if (role === null) return <NotAllowlisted />
 
   return (
     <div className="mx-auto max-w-md space-y-4 p-4 pb-24">
@@ -329,6 +365,8 @@ export default function Admin() {
           </button>
         </Sheet>
       )}
+
+      {role === 'super' && <AdminList currentEmail={email} />}
     </div>
   )
 }

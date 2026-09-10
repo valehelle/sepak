@@ -18,8 +18,9 @@ const SESSION: Session = {
   createdAt: '2026-09-10T00:00:00Z',
 }
 
-const auth = { email: null as string | null, loading: false }
+const auth = { email: null as string | null, role: null as 'super' | 'admin' | null, loading: false }
 const signIn = vi.fn()
+const signUp = vi.fn()
 const signOut = vi.fn()
 const listSessions = vi.fn()
 const createSession = vi.fn()
@@ -27,11 +28,19 @@ const updateSession = vi.fn()
 const setSessionStatus = vi.fn()
 const deleteSessionFn = vi.fn()
 const nextSessionNo = vi.fn()
+const listAdmins = vi.fn()
 
 vi.mock('../data/auth', () => ({
   useAuthUser: () => auth,
   signIn: (email: string, password: string) => signIn(email, password),
+  signUp: (email: string, password: string) => signUp(email, password),
   signOut: () => signOut(),
+}))
+
+vi.mock('../data/admins', () => ({
+  listAdmins: () => listAdmins(),
+  addAdmin: vi.fn(),
+  removeAdmin: vi.fn(),
 }))
 
 vi.mock('../data/sessions', () => ({
@@ -54,8 +63,10 @@ function view() {
 describe('Admin', () => {
   beforeEach(() => {
     auth.email = null
+    auth.role = null
     auth.loading = false
     signIn.mockReset()
+    signUp.mockReset()
     signOut.mockReset()
     listSessions.mockReset().mockResolvedValue([SESSION])
     createSession.mockReset().mockResolvedValue({ ...SESSION, id: 'new-session' })
@@ -63,6 +74,7 @@ describe('Admin', () => {
     setSessionStatus.mockReset().mockResolvedValue({ ...SESSION, status: 'closed' })
     deleteSessionFn.mockReset().mockResolvedValue(undefined)
     nextSessionNo.mockReset().mockResolvedValue(6)
+    listAdmins.mockReset().mockResolvedValue([])
   })
 
   it('asks for a login when signed out', () => {
@@ -90,14 +102,34 @@ describe('Admin', () => {
     await waitFor(() => expect(screen.getByRole('status').textContent).toContain('E-mel atau kata laluan salah.'))
   })
 
+  it('signs up through the Daftar toggle', async () => {
+    signUp.mockResolvedValue(undefined)
+    view()
+    await userEvent.click(screen.getByRole('button', { name: /Daftar di sini/ }))
+    await userEvent.type(screen.getByLabelText('E-mel'), 'baru@example.com')
+    await userEvent.type(screen.getByLabelText('Kata laluan'), 'rahsia123')
+    await userEvent.click(screen.getByRole('button', { name: 'Daftar' }))
+    expect(signUp).toHaveBeenCalledWith('baru@example.com', 'rahsia123')
+  })
+
+  it('tells a signed-in non-admin their account is not on the allowlist', () => {
+    auth.email = 'stranger@example.com'
+    auth.role = null
+    view()
+    expect(screen.getByText('Akaun ini bukan admin. Minta admin utama tambah e-mel anda.')).toBeTruthy()
+    expect(screen.queryByRole('button', { name: /Sesi baru/ })).toBeNull()
+  })
+
   it('lists sessions once signed in', async () => {
     auth.email = 'hazmi@example.com'
+    auth.role = 'admin'
     view()
     await waitFor(() => expect(screen.getByText(/Sesi 005/)).toBeTruthy())
   })
 
   it('creates a session, prefilling the next number', async () => {
     auth.email = 'hazmi@example.com'
+    auth.role = 'admin'
     view()
     await userEvent.click(await waitFor(() => screen.getByRole('button', { name: 'Sesi baru' })))
     await waitFor(() => expect(screen.getByLabelText<HTMLInputElement>('Sesi no.').value).toBe('6'))
@@ -114,6 +146,7 @@ describe('Admin', () => {
 
   it('duplicates the last session, keeping venue and fee but clearing nothing else', async () => {
     auth.email = 'hazmi@example.com'
+    auth.role = 'admin'
     view()
     await userEvent.click(await waitFor(() => screen.getByRole('button', { name: /Duplikasi sesi lepas/ })))
 
@@ -128,6 +161,7 @@ describe('Admin', () => {
 
   it('closes a session', async () => {
     auth.email = 'hazmi@example.com'
+    auth.role = 'admin'
     view()
     await userEvent.click(await waitFor(() => screen.getByRole('button', { name: 'Tutup sesi' })))
     expect(setSessionStatus).toHaveBeenCalledWith('session-1', 'closed')
@@ -135,6 +169,7 @@ describe('Admin', () => {
 
   it('requires confirmation before deleting', async () => {
     auth.email = 'hazmi@example.com'
+    auth.role = 'admin'
     view()
     await userEvent.click(await waitFor(() => screen.getByRole('button', { name: 'Hapus' })))
     expect(deleteSessionFn).not.toHaveBeenCalled()
@@ -144,6 +179,7 @@ describe('Admin', () => {
 
   it('signs out', async () => {
     auth.email = 'hazmi@example.com'
+    auth.role = 'admin'
     view()
     await userEvent.click(await waitFor(() => screen.getByRole('button', { name: 'Keluar' })))
     expect(signOut).toHaveBeenCalled()
@@ -154,6 +190,7 @@ describe('Admin', () => {
     // spy (see the vi.mock factory above), not a spy itself — assert against
     // the spy directly rather than the re-imported wrapper function.
     auth.email = 'hazmi@example.com'
+    auth.role = 'admin'
     view()
 
     await userEvent.click(await waitFor(() => screen.getByRole('button', { name: 'Sunting' })))
@@ -168,6 +205,7 @@ describe('Admin', () => {
 
   it('keeps a session editable after it has been closed', async () => {
     auth.email = 'hazmi@example.com'
+    auth.role = 'admin'
     listSessions.mockResolvedValue([{ ...SESSION, status: 'closed' }])
     view()
     expect(await waitFor(() => screen.getByRole('button', { name: 'Sunting' }))).toBeTruthy()
@@ -175,6 +213,7 @@ describe('Admin', () => {
 
   it('never lets a stale edit leak into a new session', async () => {
     auth.email = 'hazmi@example.com'
+    auth.role = 'admin'
     view()
 
     // Open the edit sheet, then go straight on to "Sesi baru" without
@@ -213,6 +252,7 @@ describe('Admin', () => {
 
   it('never lets a stale edit leak into a duplicated session', async () => {
     auth.email = 'hazmi@example.com'
+    auth.role = 'admin'
     view()
 
     await userEvent.click(await waitFor(() => screen.getByRole('button', { name: 'Sunting' })))
@@ -242,5 +282,22 @@ describe('Admin', () => {
       }),
     ))
     expect(updateSession).not.toHaveBeenCalled()
+  })
+
+  it('shows the admin allowlist to a super admin', async () => {
+    auth.email = 'hazmi@example.com'
+    auth.role = 'super'
+    view()
+    await waitFor(() => expect(listAdmins).toHaveBeenCalled())
+    expect(await screen.findByRole('heading', { name: 'Admin', level: 2 })).toBeTruthy()
+  })
+
+  it('hides the admin allowlist from a plain admin', async () => {
+    auth.email = 'hazmi@example.com'
+    auth.role = 'admin'
+    view()
+    await waitFor(() => expect(screen.getByText(/Sesi 005/)).toBeTruthy())
+    expect(screen.queryByRole('heading', { name: 'Admin', level: 2 })).toBeNull()
+    expect(listAdmins).not.toHaveBeenCalled()
   })
 })
