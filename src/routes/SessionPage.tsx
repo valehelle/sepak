@@ -164,6 +164,11 @@ export default function SessionPage() {
     try {
       await adminClearSlot(slot.id)
       applyLocal({ ...slot, playerName: null, claimedAt: null })
+      // The organiser may be clearing their own claim: drop local ownership
+      // too, or `mySlotIds` keeps pointing at a slot that is now empty (the
+      // "Slot anda" summary would keep naming it, and reopening it would
+      // offer a release/move that no longer applies to anyone).
+      setOwned(slot.id, false)
       setSelected(null)
     } catch {
       show('Gagal mengosongkan slot.', 'error')

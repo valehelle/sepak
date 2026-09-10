@@ -363,4 +363,22 @@ describe('SessionPage', () => {
     await userEvent.click(firstOf(screen.getAllByRole('button', { name: /^LB/ })))
     expect(screen.queryByRole('button', { name: /admin/i })).toBeNull()
   })
+
+  it('drops local ownership when the organiser clears their own slot via the override', async () => {
+    authState.email = 'hazmi@example.com'
+    state.slots = withClaim(state.slots, 'B-MC')
+    state.mySlotIds = new Set(['B-MC'])
+    view()
+
+    expect(screen.getByText(/Slot anda: Team B Putih — MC/)).toBeTruthy()
+
+    // Three teams each have an MC slot; only Team B's is claimed and owned.
+    await userEvent.click(screen.getByRole('button', { name: /^MC.*slot anda/i }))
+    await userEvent.click(screen.getByRole('button', { name: 'Kosongkan slot (admin)' }))
+
+    // The "Slot anda" summary reads off mySlotIds against the current slot
+    // list, so it must disappear once ownership is actually dropped — not
+    // merely because the slot happens to render as empty.
+    await waitFor(() => expect(screen.queryByText(/Slot anda:/)).toBeNull())
+  })
 })
