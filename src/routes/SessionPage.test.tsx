@@ -364,6 +364,21 @@ describe('SessionPage', () => {
     expect(screen.queryByRole('button', { name: /admin/i })).toBeNull()
   })
 
+  it('reports the specific reason when an admin clear fails', async () => {
+    const { SlotActionError } = await import('../data/slots')
+    authState.email = 'hazmi@example.com'
+    state.slots = state.slots.map((slot) =>
+      slot.id === 'A-LB' ? { ...slot, playerName: 'Joke Name', claimedAt: 'now' } : slot,
+    )
+    adminClearSlot.mockRejectedValue(new SlotActionError('Slot tak dijumpai.', 'slot_not_found'))
+    view()
+
+    await userEvent.click(firstOf(screen.getAllByRole('button', { name: /^LB/ })))
+    await userEvent.click(screen.getByRole('button', { name: 'Kosongkan slot (admin)' }))
+
+    await waitFor(() => expect(screen.getByRole('status').textContent).toContain('Slot tak dijumpai.'))
+  })
+
   it('drops local ownership when the organiser clears their own slot via the override', async () => {
     authState.email = 'hazmi@example.com'
     state.slots = withClaim(state.slots, 'B-MC')

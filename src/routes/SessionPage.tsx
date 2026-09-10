@@ -170,8 +170,8 @@ export default function SessionPage() {
       // offer a release/move that no longer applies to anyone).
       setOwned(slot.id, false)
       setSelected(null)
-    } catch {
-      show('Gagal mengosongkan slot.', 'error')
+    } catch (cause: unknown) {
+      show(cause instanceof SlotActionError ? cause.message : 'Gagal mengosongkan slot.', 'error')
       refetch()
     } finally {
       setBusy(false)

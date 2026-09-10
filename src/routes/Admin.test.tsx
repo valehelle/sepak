@@ -172,4 +172,35 @@ describe('Admin', () => {
     view()
     expect(await waitFor(() => screen.getByRole('button', { name: 'Sunting' }))).toBeTruthy()
   })
+
+  it('never lets a stale edit leak into a new session', async () => {
+    auth.email = 'hazmi@example.com'
+    view()
+
+    // Open the edit sheet, then go straight on to "Sesi baru" without
+    // closing it first — the one transition that would post as an update
+    // if `openNew` ever forgot to clear `editing` itself.
+    await userEvent.click(await waitFor(() => screen.getByRole('button', { name: 'Sunting' })))
+    await waitFor(() => expect(screen.getByLabelText<HTMLInputElement>('Tempat').value).toBe('Padang Presint 8'))
+
+    await userEvent.click(screen.getByRole('button', { name: 'Sesi baru' }))
+    await userEvent.click(await waitFor(() => screen.getByRole('button', { name: 'Cipta sesi' })))
+
+    await waitFor(() => expect(createSession).toHaveBeenCalled())
+    expect(updateSession).not.toHaveBeenCalled()
+  })
+
+  it('never lets a stale edit leak into a duplicated session', async () => {
+    auth.email = 'hazmi@example.com'
+    view()
+
+    await userEvent.click(await waitFor(() => screen.getByRole('button', { name: 'Sunting' })))
+    await waitFor(() => expect(screen.getByLabelText<HTMLInputElement>('Tempat').value).toBe('Padang Presint 8'))
+
+    await userEvent.click(screen.getByRole('button', { name: /Duplikasi sesi lepas/ }))
+    await userEvent.click(await waitFor(() => screen.getByRole('button', { name: 'Cipta sesi' })))
+
+    await waitFor(() => expect(createSession).toHaveBeenCalled())
+    expect(updateSession).not.toHaveBeenCalled()
+  })
 })
