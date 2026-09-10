@@ -42,3 +42,32 @@ export function isTeamKey(value: string): value is TeamKey {
   // Same widening as isPosition, for the same reason.
   return (TEAM_KEYS as readonly string[]).includes(value)
 }
+
+/** The waitlist sheet's two one-tap presets. The database only ever stores
+ *  the expanded set (see 0007_waitlist.sql) -- these exist purely to fill
+ *  the tappable grid in, not as a stored concept. */
+export const ALL_POSITIONS: readonly Position[] = POSITIONS
+export const ALL_POSITIONS_EXCEPT_GK: readonly Position[] = POSITIONS.filter((position) => position !== 'GK')
+
+/** Canonical pitch order, de-duplicating along the way: the eleven-element
+ *  POSITIONS array visited once each, keeping only the ones present. */
+function inPitchOrder(positions: readonly Position[]): Position[] {
+  const set = new Set(positions)
+  return POSITIONS.filter((position) => set.has(position))
+}
+
+function sameSet(a: readonly Position[], b: readonly Position[]): boolean {
+  if (a.length !== b.length) return false
+  const set = new Set(a)
+  return b.every((position) => set.has(position))
+}
+
+/** The queue list and WhatsApp text both need a one-line summary of a
+ *  waitlist entry's acceptable positions: the two presets collapse to their
+ *  name, anything else is a plain comma list in pitch order. */
+export function formatPositions(positions: readonly Position[]): string {
+  const ordered = inPitchOrder(positions)
+  if (sameSet(ordered, ALL_POSITIONS)) return 'Semua'
+  if (sameSet(ordered, ALL_POSITIONS_EXCEPT_GK)) return 'Semua kecuali GK'
+  return ordered.map(positionLabel).join(', ')
+}

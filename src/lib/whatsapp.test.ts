@@ -107,4 +107,25 @@ describe('buildWhatsAppMessage', () => {
     const message = buildWhatsAppMessage(input({ slots: onlyTeamA }))
     expect(message).toContain('Team B Putih\nGK-\nLB-\nCB-\nCB-\nRB-\nDM-\nMC-\nAM-\nLWF-\nRWF-\nST-')
   })
+
+  it('omits the Senarai Tunggu block entirely for an empty waitlist', () => {
+    const withEmptyArray = buildWhatsAppMessage(input({ waitlist: [] }))
+    const withUndefined = buildWhatsAppMessage(input())
+    expect(withEmptyArray).not.toContain('Senarai Tunggu')
+    // Byte-identical to the message before the waitlist feature existed.
+    expect(withEmptyArray).toBe(EXPECTED)
+    expect(withUndefined).toBe(EXPECTED)
+  })
+
+  it('appends the Senarai Tunggu block, numbered in order, when non-empty', () => {
+    const message = buildWhatsAppMessage(
+      input({
+        waitlist: [
+          { playerName: 'Faiz', positions: ['LB', 'CB1', 'CB2', 'RB', 'DM', 'MC', 'AM', 'LWF', 'RWF', 'ST'] },
+          { playerName: 'Nabil', positions: ['MC', 'AM'] },
+        ],
+      }),
+    )
+    expect(message.endsWith('\n\nSenarai Tunggu\n1. Faiz (Semua kecuali GK)\n2. Nabil (MC, AM)')).toBe(true)
+  })
 })

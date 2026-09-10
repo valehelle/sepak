@@ -1,10 +1,15 @@
 import { formatFee, formatPlayDate, formatStartTime } from './format'
-import { POSITIONS, TEAM_KEYS, positionLabel, type Position, type TeamKey } from './positions'
+import { POSITIONS, TEAM_KEYS, formatPositions, positionLabel, type Position, type TeamKey } from './positions'
 
 export type WhatsAppSlot = {
   team: TeamKey
   position: Position
   playerName: string | null
+}
+
+export type WhatsAppWaitlistEntry = {
+  playerName: string
+  positions: readonly Position[]
 }
 
 export type WhatsAppInput = {
@@ -16,6 +21,9 @@ export type WhatsAppInput = {
   feeMyr: number | null
   teamNames: Record<TeamKey, string>
   slots: readonly WhatsAppSlot[]
+  // Optional and defaulting to empty so every existing call site -- and the
+  // message for a session with no queue -- stays byte-identical.
+  waitlist?: readonly WhatsAppWaitlistEntry[]
 }
 
 type Roster = Map<string, string | null>
@@ -39,6 +47,16 @@ function teamBlock(team: TeamKey, teamName: string, roster: Roster): string {
   return [`Team ${team} ${teamName}`, ...lines].join('\n')
 }
 
+/** Appended only when the queue is non-empty -- omitted entirely otherwise,
+ *  so the message for a session with no waitlist is unchanged. */
+function waitlistBlock(waitlist: readonly WhatsAppWaitlistEntry[]): string | null {
+  if (waitlist.length === 0) return null
+  const lines = waitlist.map(
+    (entry, index) => `${index + 1}. ${entry.playerName} (${formatPositions(entry.positions)})`,
+  )
+  return ['Senarai Tunggu', ...lines].join('\n')
+}
+
 /** Regenerates the organiser's existing WhatsApp message so the site
  *  complements the group rather than competing with it. */
 export function buildWhatsAppMessage(input: WhatsAppInput): string {
@@ -54,6 +72,7 @@ export function buildWhatsAppMessage(input: WhatsAppInput): string {
   ].join('\n')
 
   const teams = TEAM_KEYS.map((team) => teamBlock(team, input.teamNames[team], roster))
+  const waitlist = waitlistBlock(input.waitlist ?? [])
 
-  return [header, ...teams].join('\n\n')
+  return [header, ...teams, ...(waitlist === null ? [] : [waitlist])].join('\n\n')
 }
