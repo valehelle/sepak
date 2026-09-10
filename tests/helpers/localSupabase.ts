@@ -3,10 +3,9 @@ import { createClient, type SupabaseClient } from '@supabase/supabase-js'
 
 type Status = { API_URL: string; ANON_KEY: string; SERVICE_ROLE_KEY: string; DB_URL: string }
 
-/** Column list the anon role is actually allowed to select on `slots` (see
- *  migration 0002): `claim_token` is deliberately excluded. Tests reading as
- *  anon must use this, not `select('*')`, or they get a 401/42501. */
-export const SLOT_COLUMNS = 'id, session_id, team, position, player_name, claimed_at'
+// SLOT_COLUMNS lives in src/data/sessions.ts, the single source for the
+// anon column-level grant on `slots` — import it from there, not a second
+// hand-written copy here.
 
 function asRecord(value: unknown): Record<string, unknown> {
   if (typeof value !== 'object' || value === null) throw new Error('expected an object')

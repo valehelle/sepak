@@ -85,7 +85,7 @@ export async function createSession(input: NewSessionInput): Promise<Session> {
 }
 
 export async function updateSession(id: string, patch: SessionPatch): Promise<Session> {
-  const row: Record<string, string | number | null> = {}
+  const row: Record<string, string | number | null | undefined> = {}
   if (patch.sessionNo !== undefined) row['session_no'] = patch.sessionNo
   if (patch.title !== undefined) row['title'] = patch.title
   if (patch.playDate !== undefined) row['play_date'] = patch.playDate
