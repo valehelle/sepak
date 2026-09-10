@@ -221,8 +221,13 @@ web3 = 30
 
 [auth.email]
 # Allow/disallow new user signups via email to your project.
-# Deliberately false: see the note on [auth].enable_signup above.
-enable_signup = false
+# NOT the sign-up switch despite the name: the Supabase CLI maps this key to
+# GOTRUE_EXTERNAL_EMAIL_ENABLED, the email *provider* toggle. Disabling it
+# refuses the password grant outright (`email_provider_disabled`, "Email
+# logins are disabled"), which would kill every /admin sign-in, not just
+# self-registration. [auth].enable_signup above (-> GOTRUE_DISABLE_SIGNUP)
+# is what actually closes the self-registration hole; leave this one true.
+enable_signup = true
 # If enabled, a user will be required to confirm any email change on both the old, and new email
 # addresses. If disabled, only the new email is required to confirm.
 double_confirm_changes = true
