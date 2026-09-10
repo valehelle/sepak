@@ -128,10 +128,17 @@ export default function SessionPage() {
   }
 
   function onMove(fromId: string, toId: string) {
+    // `moveSlot` returns only the destination row. Left alone, the source
+    // row would show the mover's name — untouchable, since ownership has
+    // already moved — until the realtime event for it arrives. Clearing it
+    // here from the slot already in hand keeps the move as instant as claim
+    // and release, which are both fully resolved from their response.
+    const source = movingFrom
     void run(
       () => moveSlot(fromId, toId),
       { slot: null, owned: [], revertSlot: null, revertOwned: [] },
       () => {
+        if (source !== null) applyLocal({ ...source, playerName: null, claimedAt: null })
         setOwned(fromId, false)
         setOwned(toId, true)
       },

@@ -33,6 +33,19 @@ function emptySlots(): Slot[] {
   )
 }
 
+function replace(slots: readonly Slot[], next: Slot): Slot[] {
+  const index = slots.findIndex((slot) => slot.id === next.id)
+  if (index === -1) return [...slots, next]
+  return slots.map((slot) => (slot.id === next.id ? next : slot))
+}
+
+function withOwned(current: ReadonlySet<string>, slotId: string, owned: boolean): Set<string> {
+  const next = new Set(current)
+  if (owned) next.add(slotId)
+  else next.delete(slotId)
+  return next
+}
+
 const state = {
   session: SESSION as Session | null,
   slots: emptySlots(),
@@ -40,8 +53,12 @@ const state = {
   loading: false,
   error: null as string | null,
   notFound: false,
-  applyLocal: vi.fn(),
-  setOwned: vi.fn(),
+  // Real (not just recorded) implementations: mutating `state` here is what
+  // lets a test assert on rendered DOM after an optimistic change, rather
+  // than only on the call the page made — the difference between "the page
+  // asked to clear the slot" and "the player actually stops seeing it".
+  applyLocal: vi.fn((slot: Slot) => { state.slots = replace(state.slots, slot) }),
+  setOwned: vi.fn((slotId: string, owned: boolean) => { state.mySlotIds = withOwned(state.mySlotIds, slotId, owned) }),
   refetch: vi.fn(),
 }
 
@@ -99,8 +116,10 @@ describe('SessionPage', () => {
     releaseSlot.mockReset()
     moveSlot.mockReset()
     writeText.mockReset()
-    state.applyLocal.mockReset()
-    state.setOwned.mockReset()
+    // `mockReset` would also discard the implementations above, so the
+    // mutating behaviour is reinstated fresh each test instead of reset away.
+    state.applyLocal = vi.fn((slot: Slot) => { state.slots = replace(state.slots, slot) })
+    state.setOwned = vi.fn((slotId: string, owned: boolean) => { state.mySlotIds = withOwned(state.mySlotIds, slotId, owned) })
     state.refetch.mockReset()
     Object.defineProperty(navigator, 'clipboard', { value: { writeText }, configurable: true })
   })
@@ -174,6 +193,35 @@ describe('SessionPage', () => {
     await waitFor(() => expect(state.setOwned).toHaveBeenCalledWith('A-ST', false))
   })
 
+  it('reverts the optimistic release and ownership, and reports the reason on failure', async () => {
+    const { SlotActionError } = await import('../data/slots')
+    state.slots = withClaim(state.slots, 'A-ST')
+    state.mySlotIds = new Set(['A-ST'])
+    releaseSlot.mockRejectedValue(new SlotActionError('Slot ini bukan milik anda.', 'wrong_token'))
+    view()
+
+    await userEvent.click(firstOf(screen.getAllByRole('button', { name: /^ST/ })))
+    await userEvent.click(screen.getByRole('button', { name: 'Lepaskan slot' }))
+
+    await waitFor(() => expect(screen.getByRole('status').textContent).toContain('Slot ini bukan milik anda.'))
+
+    // both the optimistic release and the optimistic ownership drop must be
+    // undone, in the order they were applied.
+    const [firstOwned, secondOwned] = state.setOwned.mock.calls
+    expect(firstOwned).toEqual(['A-ST', false])
+    expect(secondOwned).toEqual(['A-ST', true])
+
+    const [firstApplied, secondApplied] = state.applyLocal.mock.calls
+    expect(firstApplied?.[0]).toMatchObject({ id: 'A-ST', playerName: null })
+    expect(secondApplied?.[0]).toMatchObject({ id: 'A-ST', playerName: 'Hazmi' })
+
+    expect(state.refetch).toHaveBeenCalled()
+
+    // the player's name is restored in the rendered DOM, not just requested.
+    const stButtons = screen.getAllByRole('button', { name: /^ST/ })
+    expect(firstOf(stButtons).getAttribute('aria-label')).toContain('Hazmi')
+  })
+
   it('moves your slot to an empty position', async () => {
     state.slots = withClaim(state.slots, 'A-ST')
     state.mySlotIds = new Set(['A-ST'])
@@ -189,6 +237,17 @@ describe('SessionPage', () => {
     await waitFor(() => expect(moveSlot).toHaveBeenCalledWith('A-ST', 'A-GK'))
     await waitFor(() => expect(state.setOwned).toHaveBeenCalledWith('A-ST', false))
     expect(state.setOwned).toHaveBeenCalledWith('A-GK', true)
+
+    // `moveSlot` only returns the destination row, so the source slot must be
+    // cleared locally too — otherwise the mover's own name would keep
+    // occupying the slot they just left, rendered as taken by someone else,
+    // until a realtime event for that row happens to arrive.
+    await waitFor(() => {
+      const stButtons = screen.getAllByRole('button', { name: /^ST/ })
+      expect(firstOf(stButtons).getAttribute('aria-label')).not.toContain('Hazmi')
+    })
+    const gkButtons = screen.getAllByRole('button', { name: /^GK/ })
+    expect(firstOf(gkButtons).getAttribute('aria-label')).toContain('Hazmi')
   })
 
   it('cancels a move without touching any slot', async () => {
