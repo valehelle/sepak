@@ -95,6 +95,8 @@ export function useSessionRealtime(sessionId: string | undefined): SessionRealti
   useEffect(() => {
     if (sessionId === undefined) return
 
+    let everConnected = false
+
     const channel = supabase
       .channel(`slots:${sessionId}`)
       .on(
@@ -111,12 +113,20 @@ export function useSessionRealtime(sessionId: string | undefined): SessionRealti
           }
         },
       )
-      .subscribe()
+      .subscribe((status: string) => {
+        // Slots may have changed while the socket was down, so a reconnect
+        // refetches rather than trusting what is on screen. The first connect
+        // is skipped: the initial load already fetched.
+        if (status === 'SUBSCRIBED') {
+          if (everConnected) refetch()
+          everConnected = true
+        }
+      })
 
     return () => {
       supabase.removeChannel(channel)
     }
-  }, [sessionId])
+  }, [sessionId, refetch])
 
   return { session, slots, mySlotIds, loading, error, notFound, applyLocal, setOwned, refetch }
 }

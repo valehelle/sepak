@@ -8,6 +8,7 @@ export type TeamViewProps = {
   slots: readonly Slot[]
   mySlotIds: ReadonlySet<string>
   disabled: boolean
+  adminOverride?: boolean
   onSelect: (view: SlotView) => void
 }
 
@@ -26,7 +27,7 @@ export function toViews(
   return views
 }
 
-export function PitchTeam({ team, teamName, slots, mySlotIds, disabled, onSelect }: TeamViewProps) {
+export function PitchTeam({ team, teamName, slots, mySlotIds, disabled, adminOverride = false, onSelect }: TeamViewProps) {
   const views = toViews(slots, mySlotIds)
 
   return (
@@ -47,6 +48,7 @@ export function PitchTeam({ team, teamName, slots, mySlotIds, disabled, onSelect
                 key={position}
                 label={positionLabel(position)}
                 disabled={disabled}
+                adminOverride={adminOverride}
                 onSelect={onSelect}
                 view={views.get(position) ?? { slot: null, position, mine: false }}
               />

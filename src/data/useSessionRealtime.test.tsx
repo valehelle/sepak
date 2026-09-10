@@ -29,6 +29,7 @@ const GK: Slot = {
 const getSessionWithSlots = vi.fn()
 const getMySlotIds = vi.fn()
 let emit: ((payload: { new: Record<string, unknown> }) => void) | null = null
+let subscribeCallback: ((status: string) => void) | null = null
 const unsubscribe = vi.fn()
 
 vi.mock('./sessions', () => ({ getSessionWithSlots: (id: string) => getSessionWithSlots(id) }))
@@ -40,7 +41,10 @@ vi.mock('../lib/supabase', () => ({
       on: (_event: string, _filter: unknown, handler: (payload: { new: Record<string, unknown> }) => void) => {
         emit = handler
         return {
-          subscribe: () => ({ unsubscribe }),
+          subscribe: (cb?: (status: string) => void) => {
+            subscribeCallback = cb ?? null
+            return { unsubscribe }
+          },
         }
       },
     }),
@@ -94,6 +98,7 @@ describe('useSessionRealtime', () => {
     getMySlotIds.mockResolvedValue(new Set<string>())
     unsubscribe.mockReset()
     emit = null
+    subscribeCallback = null
   })
 
   it('loads the session and its slots', async () => {
@@ -209,5 +214,25 @@ describe('useSessionRealtime', () => {
 
     render(<Probe id="session-1" />)
     await waitFor(() => expect(screen.getByText('GK:empty:theirs')).toBeTruthy())
+  })
+
+  it('refetches when the channel reports it has reconnected', async () => {
+    getSessionWithSlots.mockResolvedValue({ session: SESSION, slots: [GK] })
+    render(<Probe id="session-1" />)
+    await waitFor(() => expect(getSessionWithSlots).toHaveBeenCalledTimes(1))
+
+    act(() => {
+      subscribeCallback?.('SUBSCRIBED')
+    })
+    act(() => {
+      subscribeCallback?.('CHANNEL_ERROR')
+    })
+    act(() => {
+      subscribeCallback?.('SUBSCRIBED')
+    })
+
+    // The first SUBSCRIBED is the initial connect and must not refetch; only the
+    // one after an error does, because state may have moved on while offline.
+    await waitFor(() => expect(getSessionWithSlots).toHaveBeenCalledTimes(2))
   })
 })

@@ -4,7 +4,7 @@ import { SessionForm, type SessionFormValues } from '../components/SessionForm'
 import { Sheet } from '../components/Sheet'
 import { useToast } from '../components/Toast'
 import { signIn, signOut, useAuthUser } from '../data/auth'
-import { createSession, deleteSession, listSessions, nextSessionNo, setSessionStatus } from '../data/sessions'
+import { createSession, deleteSession, listSessions, nextSessionNo, setSessionStatus, updateSession } from '../data/sessions'
 import type { Session } from '../data/types'
 import { formatPlayDate, formatStartTime } from '../lib/format'
 
@@ -87,6 +87,7 @@ export default function Admin() {
 
   const [sessions, setSessions] = useState<Session[]>([])
   const [formValues, setFormValues] = useState<SessionFormValues | null>(null)
+  const [editing, setEditing] = useState<Session | null>(null)
   const [confirmDelete, setConfirmDelete] = useState<Session | null>(null)
   const [busy, setBusy] = useState(false)
 
@@ -104,6 +105,7 @@ export default function Admin() {
   }, [email, reload])
 
   const openNew = useCallback(async () => {
+    setEditing(null)
     try {
       setFormValues({ ...DEFAULTS, sessionNo: await nextSessionNo() })
     } catch {
@@ -119,6 +121,7 @@ export default function Admin() {
       show('Belum ada sesi untuk diduplikasi.', 'error')
       return
     }
+    setEditing(null)
     try {
       setFormValues({
         sessionNo: await nextSessionNo(),
@@ -137,10 +140,28 @@ export default function Admin() {
     }
   }, [sessions, show])
 
+  function openEdit(session: Session) {
+    setEditing(session)
+    setFormValues({
+      sessionNo: session.sessionNo,
+      title: session.title,
+      playDate: session.playDate,
+      startTime: session.startTime.slice(0, 5),
+      durationMins: session.durationMins,
+      venue: session.venue,
+      feeMyr: session.feeMyr,
+      teamAName: session.teamNames.A,
+      teamBName: session.teamNames.B,
+      teamCName: session.teamNames.C,
+    })
+  }
+
+  /** Every field stays editable after creation, including the fee: this
+   *  payload is shared between creating and updating a session. */
   async function submit(values: SessionFormValues) {
     setBusy(true)
     try {
-      await createSession({
+      const payload = {
         sessionNo: values.sessionNo,
         title: values.title,
         playDate: values.playDate,
@@ -151,12 +172,21 @@ export default function Admin() {
         teamAName: values.teamAName,
         teamBName: values.teamBName,
         teamCName: values.teamCName,
-      })
+      }
+
+      if (editing !== null) {
+        await updateSession(editing.id, payload)
+        show('Sesi dikemas kini.')
+      } else {
+        await createSession(payload)
+        show('Sesi dicipta.')
+      }
+
       setFormValues(null)
+      setEditing(null)
       await reload()
-      show('Sesi dicipta.')
     } catch {
-      show('Gagal mencipta sesi.', 'error')
+      show(editing !== null ? 'Gagal mengemas kini sesi.' : 'Gagal mencipta sesi.', 'error')
     } finally {
       setBusy(false)
     }
@@ -233,6 +263,13 @@ export default function Admin() {
               </button>
               <button
                 type="button"
+                onClick={() => openEdit(session)}
+                className="rounded-xl bg-slate-800 px-3 py-2 text-xs font-semibold"
+              >
+                Sunting
+              </button>
+              <button
+                type="button"
                 onClick={() => setConfirmDelete(session)}
                 className="rounded-xl bg-red-500/20 px-3 py-2 text-xs font-semibold text-red-300"
               >
@@ -244,9 +281,18 @@ export default function Admin() {
       </ul>
 
       {formValues !== null && (
-        <Sheet open title="Sesi" onClose={() => setFormValues(null)}>
+        <Sheet
+          open
+          title={editing !== null ? 'Sunting sesi' : 'Sesi baru'}
+          onClose={() => { setFormValues(null); setEditing(null) }}
+        >
           <div className="max-h-[70vh] overflow-y-auto">
-            <SessionForm initial={formValues} submitLabel="Cipta sesi" busy={busy} onSubmit={(v) => void submit(v)} />
+            <SessionForm
+              initial={formValues}
+              submitLabel={editing !== null ? 'Simpan perubahan' : 'Cipta sesi'}
+              busy={busy}
+              onSubmit={(v) => void submit(v)}
+            />
           </div>
         </Sheet>
       )}

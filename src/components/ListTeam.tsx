@@ -2,7 +2,7 @@ import { POSITIONS, positionLabel } from '../lib/positions'
 import { SlotChip } from './SlotChip'
 import { toViews, type TeamViewProps } from './PitchTeam'
 
-export function ListTeam({ team, teamName, slots, mySlotIds, disabled, onSelect }: TeamViewProps) {
+export function ListTeam({ team, teamName, slots, mySlotIds, disabled, adminOverride = false, onSelect }: TeamViewProps) {
   const views = toViews(slots, mySlotIds)
 
   return (
@@ -16,6 +16,7 @@ export function ListTeam({ team, teamName, slots, mySlotIds, disabled, onSelect 
             <SlotChip
               label={positionLabel(position)}
               disabled={disabled}
+              adminOverride={adminOverride}
               onSelect={onSelect}
               view={views.get(position) ?? { slot: null, position, mine: false }}
             />

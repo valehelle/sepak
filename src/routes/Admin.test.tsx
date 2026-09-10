@@ -23,6 +23,7 @@ const signIn = vi.fn()
 const signOut = vi.fn()
 const listSessions = vi.fn()
 const createSession = vi.fn()
+const updateSession = vi.fn()
 const setSessionStatus = vi.fn()
 const deleteSessionFn = vi.fn()
 const nextSessionNo = vi.fn()
@@ -36,7 +37,7 @@ vi.mock('../data/auth', () => ({
 vi.mock('../data/sessions', () => ({
   listSessions: () => listSessions(),
   createSession: (input: unknown) => createSession(input),
-  updateSession: vi.fn(),
+  updateSession: (id: string, patch: unknown) => updateSession(id, patch),
   setSessionStatus: (id: string, status: string) => setSessionStatus(id, status),
   deleteSession: (id: string) => deleteSessionFn(id),
   nextSessionNo: () => nextSessionNo(),
@@ -58,6 +59,7 @@ describe('Admin', () => {
     signOut.mockReset()
     listSessions.mockReset().mockResolvedValue([SESSION])
     createSession.mockReset().mockResolvedValue({ ...SESSION, id: 'new-session' })
+    updateSession.mockReset().mockResolvedValue(SESSION)
     setSessionStatus.mockReset().mockResolvedValue({ ...SESSION, status: 'closed' })
     deleteSessionFn.mockReset().mockResolvedValue(undefined)
     nextSessionNo.mockReset().mockResolvedValue(6)
@@ -145,5 +147,29 @@ describe('Admin', () => {
     view()
     await userEvent.click(await waitFor(() => screen.getByRole('button', { name: 'Keluar' })))
     expect(signOut).toHaveBeenCalled()
+  })
+
+  it('edits an existing session, prefilled from its current values', async () => {
+    // `updateSession` from the mocked module is a thin wrapper around this
+    // spy (see the vi.mock factory above), not a spy itself — assert against
+    // the spy directly rather than the re-imported wrapper function.
+    auth.email = 'hazmi@example.com'
+    view()
+
+    await userEvent.click(await waitFor(() => screen.getByRole('button', { name: 'Sunting' })))
+    await waitFor(() => expect(screen.getByLabelText<HTMLInputElement>('Tempat').value).toBe('Padang Presint 8'))
+
+    await userEvent.clear(screen.getByLabelText('Yuran (RM)'))
+    await userEvent.type(screen.getByLabelText('Yuran (RM)'), '30')
+    await userEvent.click(screen.getByRole('button', { name: 'Simpan perubahan' }))
+
+    await waitFor(() => expect(updateSession).toHaveBeenCalledWith('session-1', expect.objectContaining({ feeMyr: 30 })))
+  })
+
+  it('keeps a session editable after it has been closed', async () => {
+    auth.email = 'hazmi@example.com'
+    listSessions.mockResolvedValue([{ ...SESSION, status: 'closed' }])
+    view()
+    expect(await waitFor(() => screen.getByRole('button', { name: 'Sunting' }))).toBeTruthy()
   })
 })

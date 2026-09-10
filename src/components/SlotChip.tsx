@@ -7,14 +7,16 @@ type SlotChipProps = {
   view: SlotView
   label: string
   disabled: boolean
+  adminOverride?: boolean
   onSelect: (view: SlotView) => void
 }
 
-export function SlotChip({ view, label, disabled, onSelect }: SlotChipProps) {
+export function SlotChip({ view, label, disabled, adminOverride = false, onSelect }: SlotChipProps) {
   const name = view.slot?.playerName ?? null
   const taken = name !== null
-  // Someone else's slot is inert: only its owner or the organiser can change it.
-  const inert = disabled || (taken && !view.mine)
+  // Someone else's slot is inert for players; the organiser can still open it
+  // to clear an orphaned or joke entry.
+  const inert = disabled || (taken && !view.mine && !adminOverride)
 
   const accessibleName = [label, name ?? 'kosong', view.mine ? 'slot anda' : null]
     .filter((part) => part !== null)

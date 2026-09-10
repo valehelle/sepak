@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { Link, useParams } from 'react-router'
 import { ClaimSheet } from '../components/ClaimSheet'
 import { CopyButton } from '../components/CopyButton'
@@ -7,7 +7,8 @@ import { PitchTeam } from '../components/PitchTeam'
 import { SessionMeta } from '../components/SessionMeta'
 import type { SlotView } from '../components/SlotChip'
 import { useToast } from '../components/Toast'
-import { SlotActionError, claimSlot, moveSlot, releaseSlot } from '../data/slots'
+import { useAuthUser } from '../data/auth'
+import { SlotActionError, adminClearSlot, claimSlot, moveSlot, releaseSlot } from '../data/slots'
 import type { Slot } from '../data/types'
 import { useSessionRealtime } from '../data/useSessionRealtime'
 import { TEAM_KEYS, positionLabel, type TeamKey } from '../lib/positions'
@@ -42,15 +43,26 @@ export default function SessionPage() {
   const { session, slots, mySlotIds, loading, error, notFound, applyLocal, setOwned, refetch } =
     useSessionRealtime(id)
   const { show } = useToast()
+  const { email: adminEmail } = useAuthUser()
+  const isAdmin = adminEmail !== null
 
   const [selected, setSelected] = useState<SlotView | null>(null)
   const [movingFrom, setMovingFrom] = useState<Slot | null>(null)
   const [busy, setBusy] = useState(false)
   const [viewMode, setViewMode] = useState<'pitch' | 'list'>(readViewMode)
+  const [pendingName, setPendingName] = useState('')
+
+  useEffect(() => {
+    setPendingName('')
+  }, [selected])
 
   const mySlot = slots.find((slot) => mySlotIds.has(slot.id)) ?? null
   const filled = slots.filter((slot) => slot.playerName !== null).length
   const closed = session?.status === 'closed'
+
+  const duplicateName =
+    pendingName.trim() !== '' &&
+    slots.some((slot) => slot.playerName?.toLowerCase() === pendingName.trim().toLowerCase())
 
   const whatsappText = useMemo(() => {
     if (session === null) return ''
@@ -145,6 +157,22 @@ export default function SessionPage() {
     )
   }
 
+  async function onAdminClear() {
+    const slot = selected?.slot
+    if (slot === undefined || slot === null) return
+    setBusy(true)
+    try {
+      await adminClearSlot(slot.id)
+      applyLocal({ ...slot, playerName: null, claimedAt: null })
+      setSelected(null)
+    } catch {
+      show('Gagal mengosongkan slot.', 'error')
+      refetch()
+    } finally {
+      setBusy(false)
+    }
+  }
+
   function onSelect(view: SlotView) {
     if (movingFrom !== null) {
       const target = view.slot
@@ -217,6 +245,7 @@ export default function SessionPage() {
           slots={slots.filter((slot) => slot.team === team)}
           mySlotIds={mySlotIds}
           disabled={closed || busy}
+          adminOverride={isAdmin}
           onSelect={onSelect}
         />
       ))}
@@ -226,9 +255,13 @@ export default function SessionPage() {
       <ClaimSheet
         view={selected}
         teamName={
-          selected?.slot == null ? '' : `Team ${selected.slot.team} ${session.teamNames[selected.slot.team]}`
+          selected?.slot === undefined || selected.slot === null
+            ? ''
+            : `Team ${selected.slot.team} ${session.teamNames[selected.slot.team]}`
         }
         busy={busy}
+        duplicateName={duplicateName}
+        isAdmin={isAdmin}
         onClose={() => setSelected(null)}
         onClaim={onClaim}
         onRelease={onRelease}
@@ -236,6 +269,8 @@ export default function SessionPage() {
           setMovingFrom(selected?.slot ?? null)
           setSelected(null)
         }}
+        onAdminClear={() => void onAdminClear()}
+        onNameChange={setPendingName}
       />
     </div>
   )

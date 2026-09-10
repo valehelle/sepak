@@ -80,4 +80,11 @@ describe('PitchTeam', () => {
     await userEvent.click(firstOf(screen.getAllByRole('button')))
     expect(onSelect).not.toHaveBeenCalled()
   })
+
+  it('lets an admin tap an occupied slot owned by someone else', async () => {
+    const onSelect = vi.fn()
+    render(<PitchTeam {...base} adminOverride onSelect={onSelect} slots={[slot('ST', 'Amir')]} />)
+    await userEvent.click(screen.getByRole('button', { name: /ST/ }))
+    expect(onSelect).toHaveBeenCalled()
+  })
 })

@@ -65,13 +65,17 @@ const state = {
 const claimSlot = vi.fn()
 const releaseSlot = vi.fn()
 const moveSlot = vi.fn()
+const adminClearSlot = vi.fn()
 const writeText = vi.fn()
+const authState = { email: null as string | null, loading: false }
 
 vi.mock('../data/useSessionRealtime', () => ({ useSessionRealtime: () => state }))
+vi.mock('../data/auth', () => ({ useAuthUser: () => authState }))
 vi.mock('../data/slots', () => ({
   claimSlot: (...args: unknown[]) => claimSlot(...args),
   releaseSlot: (...args: unknown[]) => releaseSlot(...args),
   moveSlot: (...args: unknown[]) => moveSlot(...args),
+  adminClearSlot: (id: string) => adminClearSlot(id),
   SlotActionError: class extends Error {
     constructor(message: string, readonly code: string | null) { super(message) }
   },
@@ -115,7 +119,9 @@ describe('SessionPage', () => {
     claimSlot.mockReset()
     releaseSlot.mockReset()
     moveSlot.mockReset()
+    adminClearSlot.mockReset().mockResolvedValue(undefined)
     writeText.mockReset()
+    authState.email = null
     // `mockReset` would also discard the implementations above, so the
     // mutating behaviour is reinstated fresh each test instead of reset away.
     state.applyLocal = vi.fn((slot: Slot) => { state.slots = replace(state.slots, slot) })
@@ -313,5 +319,48 @@ describe('SessionPage', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Papar senarai' }))
     expect(screen.getByRole('button', { name: 'Papar padang' })).toBeTruthy()
     expect(localStorage.getItem('sepak.viewMode')).toBe('list')
+  })
+
+  it('warns about a duplicate name but still allows the claim', async () => {
+    state.slots = withClaim(state.slots, 'B-GK')
+    claimSlot.mockResolvedValue({ ...findSlot(state.slots, 'A-GK'), playerName: 'Hazmi', claimedAt: 'now' })
+    view()
+
+    await userEvent.click(firstOf(screen.getAllByRole('button', { name: /^GK/ })))
+    await userEvent.type(screen.getByLabelText('Nama'), 'Hazmi')
+
+    expect(screen.getByText(/Nama ini dah ada dalam sesi/)).toBeTruthy()
+
+    await userEvent.click(screen.getByRole('button', { name: 'Ambil slot' }))
+    await waitFor(() => expect(claimSlot).toHaveBeenCalledWith('A-GK', 'Hazmi'))
+  })
+
+  it('does not warn when the name is unique', async () => {
+    view()
+    await userEvent.click(firstOf(screen.getAllByRole('button', { name: /^GK/ })))
+    await userEvent.type(screen.getByLabelText('Nama'), 'Zulazhar')
+    expect(screen.queryByText(/Nama ini dah ada/)).toBeNull()
+  })
+
+  it('offers the organiser an override on any occupied slot', async () => {
+    authState.email = 'hazmi@example.com'
+    state.slots = state.slots.map((slot) =>
+      slot.id === 'A-LB' ? { ...slot, playerName: 'Joke Name', claimedAt: 'now' } : slot,
+    )
+    view()
+
+    await userEvent.click(firstOf(screen.getAllByRole('button', { name: /^LB/ })))
+    await userEvent.click(screen.getByRole('button', { name: 'Kosongkan slot (admin)' }))
+    await waitFor(() => expect(adminClearSlot).toHaveBeenCalledWith('A-LB'))
+  })
+
+  it('does not offer the override to a player', async () => {
+    authState.email = null
+    state.slots = state.slots.map((slot) =>
+      slot.id === 'A-LB' ? { ...slot, playerName: 'Amir', claimedAt: 'now' } : slot,
+    )
+    view()
+    await userEvent.click(firstOf(screen.getAllByRole('button', { name: /^LB/ })))
+    expect(screen.queryByRole('button', { name: /admin/i })).toBeNull()
   })
 })
