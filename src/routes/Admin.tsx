@@ -298,20 +298,20 @@ export default function Admin() {
                     <p>{session.venue}</p>
                   </div>
                 </div>
-                <div className="flex flex-wrap gap-2 md:w-[190px] md:shrink-0 md:justify-end">
+                <div className="grid grid-cols-2 gap-2 md:w-[264px] md:shrink-0">
                   <Link
                     to={`/s/${session.id}`}
-                    className="rounded-lg border border-white/15 bg-white/5 px-3 py-2 font-kit text-xs font-semibold tracking-wide text-white transition active:brightness-110"
+                    className="flex items-center justify-center whitespace-nowrap rounded-lg border border-white/15 bg-white/5 px-3 py-2 font-kit text-xs font-semibold tracking-wide text-white transition active:brightness-110"
                   >
                     Buka
                   </Link>
-                  <Button variant="secondary" className="px-3 py-2 text-xs" onClick={() => void toggleStatus(session)}>
+                  <Button variant="secondary" className="w-full whitespace-nowrap px-3 py-2 text-xs" onClick={() => void toggleStatus(session)}>
                     {session.status === 'open' ? 'Tutup sesi' : 'Buka semula'}
                   </Button>
-                  <Button variant="secondary" className="px-3 py-2 text-xs" onClick={() => openEdit(session)}>
+                  <Button variant="secondary" className="w-full whitespace-nowrap px-3 py-2 text-xs" onClick={() => openEdit(session)}>
                     Sunting
                   </Button>
-                  <Button variant="destructive" className="px-3 py-2 text-xs" onClick={() => setConfirmDelete(session)}>
+                  <Button variant="destructive" className="w-full whitespace-nowrap px-3 py-2 text-xs" onClick={() => setConfirmDelete(session)}>
                     Hapus
                   </Button>
                 </div>
