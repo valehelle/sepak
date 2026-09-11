@@ -262,19 +262,19 @@ begin
 end $$;
 
 ---------------------------------------------------------------------------
--- Auto-fill trigger: fires on release_slot, on move_slot's vacated source,
--- and on an admin clear; does not fire on a closed session; does not
--- recurse.
+-- Auto-fill trigger: path-independent -- it fires on any player_name
+-- non-null -> null transition on public.slots, so it must fire whichever of
+-- the two ways a slot can vacate produced that transition. Asserted
+-- separately for each: release_slot (an RPC write) and an admin clear (a
+-- direct table write) -- plus that it does not fire on a closed session and
+-- does not recurse.
 ---------------------------------------------------------------------------
 do $$
 declare
   v_session_id uuid;
   v_gk         uuid;
-  v_st         uuid;
-  v_lb         uuid;
   v_rb         uuid;
   v_faiz_token uuid := gen_random_uuid();
-  v_nabil_token uuid := gen_random_uuid();
 begin
   set local role authenticated;
   set local request.jwt.claims = '{"email":"admin@sepak.local","role":"authenticated"}';
@@ -282,8 +282,6 @@ begin
     903, 'Waitlist Trigger Test', '2026-09-16', '20:00:00', 120, 'Padang Presint 8', 27,
     'Merah', 'Putih', 'Kuning');
   select id into v_gk from public.slots where session_id = v_session_id and team = 'A' and position = 'GK';
-  select id into v_st from public.slots where session_id = v_session_id and team = 'A' and position = 'ST';
-  select id into v_lb from public.slots where session_id = v_session_id and team = 'A' and position = 'LB';
   select id into v_rb from public.slots where session_id = v_session_id and team = 'A' and position = 'RB';
 
   ---------------------------------------------------------------------------
@@ -298,19 +296,6 @@ begin
     'auto-fill should place Faiz when release_slot frees a matching slot';
   assert (select count(*) from public.waitlist where session_id = v_session_id) = 0,
     'auto-fill should delete the placed entry';
-
-  ---------------------------------------------------------------------------
-  -- fires on move_slot's vacated source
-  ---------------------------------------------------------------------------
-  update public.slots set player_name = 'Holder', claim_token = gen_random_uuid(), claimed_at = now() where id = v_st;
-  insert into public.waitlist (session_id, player_name, claim_token, positions)
-  values (v_session_id, 'Nabil', v_nabil_token, array['ST']);
-
-  perform public.move_slot(v_st, v_lb, (select claim_token from public.slots where id = v_st));
-  assert (select player_name from public.slots where id = v_st) = 'Nabil',
-    'auto-fill should place Nabil into the source slot that move_slot just vacated';
-  assert (select player_name from public.slots where id = v_lb) = 'Holder',
-    'move_slot''s destination should still hold the mover';
 
   ---------------------------------------------------------------------------
   -- fires on an admin clear (a direct table update, not an RPC)
@@ -363,7 +348,7 @@ begin
 
   delete from public.sessions where id = v_session_id;
   reset role;
-  raise notice 'waitlist_test: auto-fill trigger assertions passed (release_slot, move_slot source, admin clear, closed session, non-recursion)';
+  raise notice 'waitlist_test: auto-fill trigger assertions passed (release_slot, admin clear, closed session, non-recursion)';
 end $$;
 
 ---------------------------------------------------------------------------
@@ -377,7 +362,6 @@ declare
   v_session_id uuid;
   v_gk         uuid;
   v_st         uuid;
-  v_lb         uuid;
   v_dev        uuid := gen_random_uuid(); -- the queued device that claims directly
   v_other      uuid := gen_random_uuid(); -- a second device, still properly queued
   v_claimed    public.slots;
@@ -389,14 +373,12 @@ begin
     'Merah', 'Putih', 'Kuning');
   select id into v_gk from public.slots where session_id = v_session_id and team = 'A' and position = 'GK';
   select id into v_st from public.slots where session_id = v_session_id and team = 'A' and position = 'ST';
-  select id into v_lb from public.slots where session_id = v_session_id and team = 'A' and position = 'LB';
 
-  -- Fill every slot except ST and LB -- GK (all three teams) is taken, so
-  -- joining for GK genuinely queues; ST and LB stay free for the device to
-  -- tap directly and to move into later.
+  -- Fill every slot except ST -- GK (all three teams) is taken, so joining
+  -- for GK genuinely queues; ST stays free for the device to tap directly.
   update public.slots
      set player_name = 'Filler', claim_token = gen_random_uuid(), claimed_at = now()
-   where session_id = v_session_id and id not in (v_st, v_lb);
+   where session_id = v_session_id and id <> v_st;
   reset role;
 
   set local request.jwt.claims = '{}';
@@ -432,14 +414,6 @@ begin
     'Dev''s directly-claimed slot must be untouched by the later auto-fill';
   assert (select count(*) from public.waitlist where session_id = v_session_id) = 0,
     'Other''s entry should be consumed by the auto-fill; none of Dev''s should reappear';
-
-  -- move_slot: Dev, now holding ST (never having gone through join_waitlist
-  -- again), moves to LB. This should not create a waitlist row -- checked,
-  -- not assumed.
-  perform public.move_slot(v_st, v_lb, v_dev);
-  assert (select player_name from public.slots where id = v_lb) = 'Dev', 'move_slot should have moved Dev to LB';
-  assert (select count(*) from public.my_waitlist_entry(v_session_id, v_dev)) = 0,
-    'move_slot must not leave (or create) a waitlist entry for the device it moves';
 
   reset role;
   delete from public.sessions where id = v_session_id;

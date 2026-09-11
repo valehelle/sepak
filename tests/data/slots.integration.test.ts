@@ -72,25 +72,6 @@ describe('slot RPCs against local postgres', () => {
     expect(data).toMatchObject({ player_name: null })
   })
 
-  it('moves a claim between positions atomically', async () => {
-    const gk = slotId(ids, 'A', 'GK')
-    const st = slotId(ids, 'A', 'ST')
-    await claim(client, gk, 'Hazmi', TOKEN_A)
-
-    const { error } = await client.rpc('move_slot', { p_from: gk, p_to: st, p_token: TOKEN_A })
-    expect(error).toBeNull()
-
-    const { data } = await client.from('slots').select('id, player_name').in('id', [gk, st])
-    const byId = new Map(
-      (data ?? []).map((row) => {
-        const r = Object.fromEntries(Object.entries(row))
-        return [String(r['id']), r['player_name']]
-      }),
-    )
-    expect(byId.get(gk)).toBeNull()
-    expect(byId.get(st)).toBe('Hazmi')
-  })
-
   it('cannot write slots directly as anon', async () => {
     const gk = slotId(ids, 'A', 'GK')
     const { error } = await client

@@ -128,8 +128,6 @@ export const RPC_ERROR_CODES = [
   'wrong_token',
   'slot_empty',
   'slot_not_found',
-  'cross_session',
-  'same_slot',
   // Waitlist (0007_waitlist.sql): invalid_name, session_closed and
   // invalid_token are shared with the slot RPCs above.
   'invalid_positions',
@@ -157,8 +155,6 @@ export const RPC_MESSAGES: Record<RpcErrorCode, string> = {
   wrong_token: 'Slot ini bukan milik anda.',
   slot_empty: 'Slot ini kosong.',
   slot_not_found: 'Slot tak dijumpai.',
-  cross_session: 'Tak boleh tukar ke sesi lain.',
-  same_slot: 'Slot yang sama.',
   invalid_positions: 'Pilih sekurang-kurangnya satu posisi.',
   already_in_slot: 'Anda dah ada slot dalam sesi ini.',
   already_waitlisted: 'Anda dah dalam senarai tunggu.',

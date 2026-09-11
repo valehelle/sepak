@@ -12,7 +12,6 @@ type ClaimSheetProps = {
   onClose: () => void
   onClaim: (name: string) => void
   onRelease: () => void
-  onStartMove: () => void
   onAdminClear: () => void
   onNameChange: (name: string) => void
 }
@@ -26,7 +25,6 @@ export function ClaimSheet({
   onClose,
   onClaim,
   onRelease,
-  onStartMove,
   onAdminClear,
   onNameChange,
 }: ClaimSheetProps) {
@@ -52,24 +50,14 @@ export function ClaimSheet({
         </p>
         <div className="space-y-2">
           {view.mine && (
-            <>
-              <button
-                type="button"
-                disabled={busy}
-                onClick={onStartMove}
-                className="w-full rounded-2xl bg-slate-800 px-4 py-3 text-sm font-semibold active:bg-slate-700"
-              >
-                Tukar posisi
-              </button>
-              <button
-                type="button"
-                disabled={busy}
-                onClick={onRelease}
-                className="w-full rounded-2xl bg-red-500/90 px-4 py-3 text-sm font-semibold text-white active:bg-red-500"
-              >
-                Lepaskan slot
-              </button>
-            </>
+            <button
+              type="button"
+              disabled={busy}
+              onClick={onRelease}
+              className="w-full rounded-2xl bg-red-500/90 px-4 py-3 text-sm font-semibold text-white active:bg-red-500"
+            >
+              Lepaskan slot
+            </button>
           )}
           {isAdmin && (
             <button

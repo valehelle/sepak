@@ -33,16 +33,6 @@ export async function releaseSlot(slotId: string): Promise<Slot> {
   return parseSlot(data)
 }
 
-export async function moveSlot(fromId: string, toId: string): Promise<Slot> {
-  const { data, error } = await supabase.rpc('move_slot', {
-    p_from: fromId,
-    p_to: toId,
-    p_token: getClaimToken(),
-  })
-  if (error !== null) fail(error)
-  return parseSlot(data)
-}
-
 /** Organiser override for orphaned slots — a player who cleared their browser,
  *  or a joke name. Writes the table directly, which RLS allows only for an
  *  authenticated session. */

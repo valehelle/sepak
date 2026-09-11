@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { anonClient, deleteSession, seedSession, slotId } from '../helpers/localSupabase'
 import { resetClaimTokenCache } from '../../src/lib/claimToken'
-import { SlotActionError, claimSlot, getMySlotIds, moveSlot, releaseSlot } from '../../src/data/slots'
+import { SlotActionError, claimSlot, getMySlotIds, releaseSlot } from '../../src/data/slots'
 
 // A second "device": the wrapper functions always act as the current
 // device (via getClaimToken()'s module-level cache), so a genuinely
@@ -71,19 +71,6 @@ describe('slot action wrappers against local postgres', () => {
     expect(released.claimedAt).toBeNull()
 
     const mine = await getMySlotIds(sessionId)
-    expect(mine.has(gk)).toBe(false)
-  })
-
-  it('moveSlot moves a claim between positions', async () => {
-    const gk = slotId(ids, 'A', 'GK')
-    const st = slotId(ids, 'A', 'ST')
-    await claimSlot(gk, 'Hazmi')
-
-    const moved = await moveSlot(gk, st)
-    expect(moved).toMatchObject({ id: st, playerName: 'Hazmi' })
-
-    const mine = await getMySlotIds(sessionId)
-    expect(mine.has(st)).toBe(true)
     expect(mine.has(gk)).toBe(false)
   })
 

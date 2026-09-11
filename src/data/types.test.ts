@@ -91,7 +91,7 @@ describe('rpcErrorCode', () => {
   })
 
   it('has Malay copy for every code', () => {
-    for (const code of ['slot_taken', 'session_closed', 'invalid_name', 'wrong_token', 'slot_empty', 'slot_not_found', 'cross_session', 'same_slot'] as const) {
+    for (const code of ['slot_taken', 'session_closed', 'invalid_name', 'wrong_token', 'slot_empty', 'slot_not_found'] as const) {
       expect(RPC_MESSAGES[code].length).toBeGreaterThan(0)
     }
   })

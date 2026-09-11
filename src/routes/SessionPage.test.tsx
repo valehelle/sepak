@@ -78,7 +78,6 @@ const state = {
 
 const claimSlot = vi.fn()
 const releaseSlot = vi.fn()
-const moveSlot = vi.fn()
 const adminClearSlot = vi.fn()
 const joinWaitlist = vi.fn()
 const leaveWaitlist = vi.fn()
@@ -90,7 +89,6 @@ vi.mock('../data/auth', () => ({ useAuthUser: () => authState }))
 vi.mock('../data/slots', () => ({
   claimSlot: (...args: unknown[]) => claimSlot(...args),
   releaseSlot: (...args: unknown[]) => releaseSlot(...args),
-  moveSlot: (...args: unknown[]) => moveSlot(...args),
   adminClearSlot: (id: string) => adminClearSlot(id),
   SlotActionError: class extends Error {
     constructor(message: string, readonly code: string | null) { super(message) }
@@ -143,7 +141,6 @@ describe('SessionPage', () => {
     state.notFound = false
     claimSlot.mockReset()
     releaseSlot.mockReset()
-    moveSlot.mockReset()
     adminClearSlot.mockReset().mockResolvedValue(undefined)
     joinWaitlist.mockReset()
     leaveWaitlist.mockReset().mockResolvedValue(undefined)
@@ -215,7 +212,7 @@ describe('SessionPage', () => {
     expect(state.refetch).toHaveBeenCalled()
   })
 
-  it('offers release and move on your own slot', async () => {
+  it('offers release on your own slot', async () => {
     state.slots = withClaim(state.slots, 'A-ST')
     state.mySlotIds = new Set(['A-ST'])
     releaseSlot.mockResolvedValue({ ...findSlot(state.slots, 'A-ST'), playerName: null, claimedAt: null })
@@ -223,7 +220,6 @@ describe('SessionPage', () => {
 
     await userEvent.click(firstOf(screen.getAllByRole('button', { name: /^ST/ })))
     expect(screen.getByRole('button', { name: 'Lepaskan slot' })).toBeTruthy()
-    expect(screen.getByRole('button', { name: 'Tukar posisi' })).toBeTruthy()
 
     await userEvent.click(screen.getByRole('button', { name: 'Lepaskan slot' }))
     await waitFor(() => expect(releaseSlot).toHaveBeenCalledWith('A-ST'))
@@ -257,51 +253,6 @@ describe('SessionPage', () => {
     // the player's name is restored in the rendered DOM, not just requested.
     const stButtons = screen.getAllByRole('button', { name: /^ST/ })
     expect(firstOf(stButtons).getAttribute('aria-label')).toContain('Hazmi')
-  })
-
-  it('moves your slot to an empty position', async () => {
-    state.slots = withClaim(state.slots, 'A-ST')
-    state.mySlotIds = new Set(['A-ST'])
-    moveSlot.mockResolvedValue({ ...findSlot(state.slots, 'A-GK'), playerName: 'Hazmi', claimedAt: 'now' })
-    view()
-
-    await userEvent.click(firstOf(screen.getAllByRole('button', { name: /^ST/ })))
-    await userEvent.click(screen.getByRole('button', { name: 'Tukar posisi' }))
-    expect(screen.getByRole('button', { name: 'Batal' })).toBeTruthy()
-
-    await userEvent.click(firstOf(screen.getAllByRole('button', { name: /^GK/ })))
-
-    await waitFor(() => expect(moveSlot).toHaveBeenCalledWith('A-ST', 'A-GK'))
-    await waitFor(() => expect(state.setOwned).toHaveBeenCalledWith('A-ST', false))
-    expect(state.setOwned).toHaveBeenCalledWith('A-GK', true)
-
-    // `moveSlot` only returns the destination row, so the source slot must be
-    // cleared locally too — otherwise the mover's own name would keep
-    // occupying the slot they just left, rendered as taken by someone else,
-    // until a realtime event for that row happens to arrive.
-    await waitFor(() => {
-      const stButtons = screen.getAllByRole('button', { name: /^ST/ })
-      expect(firstOf(stButtons).getAttribute('aria-label')).not.toContain('Hazmi')
-    })
-    const gkButtons = screen.getAllByRole('button', { name: /^GK/ })
-    expect(firstOf(gkButtons).getAttribute('aria-label')).toContain('Hazmi')
-  })
-
-  it('cancels a move without touching any slot', async () => {
-    state.slots = withClaim(state.slots, 'A-ST')
-    state.mySlotIds = new Set(['A-ST'])
-    view()
-
-    await userEvent.click(firstOf(screen.getAllByRole('button', { name: /^ST/ })))
-    await userEvent.click(screen.getByRole('button', { name: 'Tukar posisi' }))
-    await userEvent.click(screen.getByRole('button', { name: 'Batal' }))
-
-    expect(screen.queryByRole('button', { name: 'Batal' })).toBeNull()
-
-    // an empty slot now opens the ordinary claim sheet, not a move.
-    await userEvent.click(firstOf(screen.getAllByRole('button', { name: /^GK/ })))
-    expect(screen.getByLabelText('Nama')).toBeTruthy()
-    expect(moveSlot).not.toHaveBeenCalled()
   })
 
   it('summarises your slot at the top of the page', () => {

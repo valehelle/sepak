@@ -8,9 +8,8 @@
 
 When all 33 slots are taken, a player can join a waitlist with the positions
 they are willing to play. The moment a matching slot frees up — someone
-releases it, someone moves away from it, or the organiser clears it — the
-longest-waiting player whose preferences include that position is placed into
-it automatically.
+releases it, or the organiser clears it — the longest-waiting player whose
+preferences include that position is placed into it automatically.
 
 Today a full list means the conversation moves to WhatsApp: "aku standby",
 "kalau ada orang tarik diri bagitahu". The organiser then has to remember who
@@ -121,19 +120,18 @@ from non-null to null and the session is `open`:
    waitlist row — in the same transaction as the release.
 
 Why a trigger rather than logic inside `release_slot`: the slot can also be
-freed by `move_slot` vacating its source and by the organiser's admin clear.
-A trigger covers all three paths and cannot be forgotten by a future caller.
-Being in the releasing transaction is what makes it unraceable — there is no
-window in which the slot is visibly empty and unclaimed.
+freed by the organiser's admin clear, a direct table write rather than an
+RPC call. A trigger covers both paths and cannot be forgotten by a future
+caller — it fires on the underlying `player_name` transition itself, not on
+however that transition was produced. Being in the releasing transaction is
+what makes it unraceable — there is no window in which the slot is visibly
+empty and unclaimed.
 
 **Recursion is not a risk:** the trigger's own write moves `player_name` from
 null to non-null, which does not satisfy the firing condition.
 
 **Chained fills do not occur**, because a waitlisted player holds no slot —
 placing them frees nothing.
-
-`move_slot` is the interesting interaction: vacating the source may
-immediately hand it to a waitlister, which is correct and desirable.
 
 ## UI
 
@@ -187,9 +185,8 @@ session with no queue.
   respected when two entries match; a narrower-but-later entry does **not**
   jump an earlier broader one; `join_waitlist` claims immediately when a
   preferred slot is free; the slot-and-waitlist invariant holds both ways;
-  auto-fill fires on `release_slot`, on `move_slot`'s vacated source, and on
-  an admin clear; auto-fill does **not** fire on a closed session; the trigger
-  does not recurse.
+  auto-fill fires on `release_slot` and on an admin clear; auto-fill does
+  **not** fire on a closed session; the trigger does not recurse.
 - **Integration:** the four RPC wrappers against local Postgres, including two
   concurrent `join_waitlist` calls racing one free slot.
 - **End-to-end:** two browsers — one holding a slot, one waitlisted; the first

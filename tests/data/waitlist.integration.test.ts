@@ -235,10 +235,8 @@ describe('waitlist RPCs against local postgres', () => {
     expect(waitlistRows).toHaveLength(1)
   })
 
-  it("auto-fill fires on release_slot, on move_slot's vacated source, and on an admin clear", async () => {
+  it('auto-fill fires on release_slot and on an admin clear', async () => {
     const gk = slotId(ids, 'A', 'GK')
-    const st = slotId(ids, 'A', 'ST')
-    const lb = slotId(ids, 'A', 'LB')
     const rb = slotId(ids, 'A', 'RB')
 
     async function occupy(id: string, token: string) {
@@ -256,15 +254,6 @@ describe('waitlist RPCs against local postgres', () => {
     expect(released.error).toBeNull()
     const { data: gkRow } = await adminClient().from('slots').select('player_name').eq('id', gk).single()
     expect(gkRow).toMatchObject({ player_name: 'Faiz' })
-
-    // move_slot's vacated source
-    const moveToken = '66666666-6666-4666-8666-666666666666'
-    await occupy(st, moveToken)
-    await seedWaitlistEntry(sessionId, 'Nabil', ['ST'], TOKEN_B)
-    const moved = await client.rpc('move_slot', { p_from: st, p_to: lb, p_token: moveToken })
-    expect(moved.error).toBeNull()
-    const { data: stRow } = await adminClient().from('slots').select('player_name').eq('id', st).single()
-    expect(stRow).toMatchObject({ player_name: 'Nabil' })
 
     // admin clear (a direct table update, not an RPC)
     const clearToken = '88888888-8888-4888-8888-888888888888'

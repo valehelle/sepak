@@ -122,12 +122,12 @@ Thirty-three slots exist per session from the moment it is created.
 
 There are no player accounts. On first visit the app generates a UUID and
 stores it in `localStorage` as the device's `claim_token`. Claiming a slot
-writes that token alongside the name; releasing or moving a slot requires
-presenting it.
+writes that token alongside the name; releasing a slot requires presenting
+it.
 
-This means a player can free or move **their own** slot and nobody else's.
-It deliberately does not prevent someone typing another player's name into
-a slot — that is a social problem, and the admin override is the answer.
+This means a player can free **their own** slot and nobody else's. It
+deliberately does not prevent someone typing another player's name into a
+slot — that is a social problem, and the admin override is the answer.
 
 Consequences accepted: clearing browser data or switching phones orphans a
 slot, which the admin can clear. This is the correct trade for a booking
@@ -146,7 +146,7 @@ RLS is enabled on both tables and is the whole enforcement story.
 > **Correction (found in review):** the design originally specified a
 > table-wide `select` grant to `anon` on `slots`, with no column exclusion.
 > That would have let any visitor read every claim's `claim_token` straight
-> off the row — the very value `release_slot`/`move_slot` treat as proof of
+> off the row — the very value `release_slot` treats as proof of
 > ownership — defeating the whole "presenting the token authorises you"
 > model. What shipped instead is a column-level grant
 > (`grant select (id, session_id, team, position, player_name, claimed_at)
@@ -155,16 +155,14 @@ RLS is enabled on both tables and is the whole enforcement story.
 
 `anon` has **no** direct write access, and cannot read `claim_token` off
 `slots` at all. Player mutations, and the one ownership lookup a device
-needs, happen only through `SECURITY DEFINER` functions — five of them in
-total, four of which `anon` may execute:
+needs, happen only through `SECURITY DEFINER` functions — four of them in
+total, three of which `anon` may execute:
 
 - `claim_slot(p_slot_id uuid, p_name text, p_token uuid)` — claims an empty
   slot in an open session. Errors: `slot_taken`, `session_closed`,
   `invalid_name`.
 - `release_slot(p_slot_id uuid, p_token uuid)` — empties a slot only when
   the token matches. Errors: `wrong_token`, `slot_empty`, `session_closed`.
-- `move_slot(p_from uuid, p_to uuid, p_token uuid)` — releases and claims in
-  one transaction, so a move cannot lose the player's place. Errors as above.
 - `my_slot_ids(p_session_id uuid, p_token uuid)` — the read side of
   ownership: returns the ids of slots claimed with the presented token, and
   nothing else (no names, no tokens). Since `claim_token` is not readable
@@ -182,7 +180,7 @@ Ownership of a slot is therefore proven by *presenting* `claim_token` to one
 of these functions, never by reading it back off `slots` — the column grant
 above makes that structurally true, not just conventional.
 
-Each of `claim_slot`/`release_slot`/`move_slot` locks the target rows
+Each of `claim_slot`/`release_slot` locks the target row
 (`select ... for update`) before mutating, which is what makes the
 simultaneous-claim case resolve to exactly one winner rather than a lost
 update.
@@ -223,7 +221,9 @@ player finds their slot by looking where they play rather than by reading
 eleven labels. A list-view toggle is available and its choice is remembered.
 
 - Tapping an empty slot opens a sheet asking for a name, then claims it.
-- Tapping your own slot offers release or move.
+- Tapping your own slot offers release. There is no way to move a claim
+  directly — a player who wants a different position releases theirs, then
+  claims the new one as a separate action.
 - Tapping someone else's slot does nothing.
 - Your slot is highlighted and summarised at the top of the page.
 - A closed session shows the list read-only with a "Sesi ditutup" banner.
@@ -278,8 +278,8 @@ form (GK, CB, ST) as footballers use them.
   `slot_taken`; two concurrent `claim_slot` calls produce exactly one winner;
   `create_session` yields exactly thirty-three slots and rolls back whole on
   failure.
-- **End-to-end (Playwright, local Supabase):** claim, release, move; two
-  browser contexts racing one slot; realtime propagation between contexts;
+- **End-to-end (Playwright, local Supabase):** claim, release; two browser
+  contexts racing one slot; realtime propagation between contexts;
   deep link and refresh on `/s/:id` against the built site, which is what
   proves the `404.html` step works.
 

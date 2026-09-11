@@ -9,7 +9,7 @@ import type { SlotView } from '../components/SlotChip'
 import { useToast } from '../components/Toast'
 import { WaitlistSheet } from '../components/WaitlistSheet'
 import { useAuthUser } from '../data/auth'
-import { SlotActionError, adminClearSlot, claimSlot, moveSlot, releaseSlot } from '../data/slots'
+import { SlotActionError, adminClearSlot, claimSlot, releaseSlot } from '../data/slots'
 import type { Slot } from '../data/types'
 import { useSessionRealtime } from '../data/useSessionRealtime'
 import { WaitlistActionError, joinWaitlist, leaveWaitlist } from '../data/waitlist'
@@ -30,9 +30,7 @@ function readViewMode(): 'pitch' | 'list' {
 type OwnershipChange = readonly [slotId: string, owned: boolean]
 
 /** What an action changes optimistically, and what undoes it if the write
- *  fails. `slot`/`revertSlot` are `null` for a move: it touches two rows, so
- *  rather than guess both optimistically the page waits for the real result
- *  and fixes ownership from that outcome instead (see `onMove`). */
+ *  fails. */
 type OptimisticChange = {
   slot: Slot | null
   owned: readonly OwnershipChange[]
@@ -65,7 +63,6 @@ export default function SessionPage() {
   const isAdmin = role !== null
 
   const [selected, setSelected] = useState<SlotView | null>(null)
-  const [movingFrom, setMovingFrom] = useState<Slot | null>(null)
   const [busy, setBusy] = useState(false)
   const [viewMode, setViewMode] = useState<'pitch' | 'list'>(readViewMode)
   const [pendingName, setPendingName] = useState('')
@@ -125,7 +122,6 @@ export default function SessionPage() {
       applyLocal(result)
       onSuccess?.(result)
       setSelected(null)
-      setMovingFrom(null)
     } catch (cause: unknown) {
       if (optimistic.revertSlot !== null) applyLocal(optimistic.revertSlot)
       for (const [slotId, owned] of optimistic.revertOwned) setOwned(slotId, owned)
@@ -160,24 +156,6 @@ export default function SessionPage() {
     })
   }
 
-  function onMove(fromId: string, toId: string) {
-    // `moveSlot` returns only the destination row. Left alone, the source
-    // row would show the mover's name — untouchable, since ownership has
-    // already moved — until the realtime event for it arrives. Clearing it
-    // here from the slot already in hand keeps the move as instant as claim
-    // and release, which are both fully resolved from their response.
-    const source = movingFrom
-    void run(
-      () => moveSlot(fromId, toId),
-      { slot: null, owned: [], revertSlot: null, revertOwned: [] },
-      () => {
-        if (source !== null) applyLocal({ ...source, playerName: null, claimedAt: null })
-        setOwned(fromId, false)
-        setOwned(toId, true)
-      },
-    )
-  }
-
   async function onAdminClear() {
     const slot = selected?.slot
     if (slot === undefined || slot === null) return
@@ -188,7 +166,7 @@ export default function SessionPage() {
       // The organiser may be clearing their own claim: drop local ownership
       // too, or `mySlotIds` keeps pointing at a slot that is now empty (the
       // "Slot anda" summary would keep naming it, and reopening it would
-      // offer a release/move that no longer applies to anyone).
+      // offer a release that no longer applies to anyone).
       setOwned(slot.id, false)
       setSelected(null)
     } catch (cause: unknown) {
@@ -236,17 +214,6 @@ export default function SessionPage() {
         show(cause instanceof WaitlistActionError ? cause.message : 'Ada masalah. Cuba lagi.', 'error')
       })
       .finally(() => setBusy(false))
-  }
-
-  function onSelect(view: SlotView) {
-    if (movingFrom !== null) {
-      const target = view.slot
-      if (target !== null && target.playerName === null) {
-        onMove(movingFrom.id, target.id)
-        return
-      }
-    }
-    setSelected(view)
   }
 
   if (loading) return <p className="p-6 text-slate-400">Memuatkan…</p>
@@ -312,13 +279,6 @@ export default function SessionPage() {
         )
       )}
 
-      {movingFrom !== null && (
-        <p className="rounded-2xl bg-sky-400/15 px-4 py-2 text-sm text-sky-200">
-          Pilih posisi kosong untuk bertukar.{' '}
-          <button type="button" onClick={() => setMovingFrom(null)} className="underline">Batal</button>
-        </p>
-      )}
-
       <button
         type="button"
         onClick={toggleViewMode}
@@ -336,7 +296,7 @@ export default function SessionPage() {
           mySlotIds={mySlotIds}
           disabled={closed || busy}
           adminOverride={isAdmin}
-          onSelect={onSelect}
+          onSelect={setSelected}
         />
       ))}
 
@@ -392,10 +352,6 @@ export default function SessionPage() {
         onClose={() => setSelected(null)}
         onClaim={onClaim}
         onRelease={onRelease}
-        onStartMove={() => {
-          setMovingFrom(selected?.slot ?? null)
-          setSelected(null)
-        }}
         onAdminClear={() => void onAdminClear()}
         onNameChange={setPendingName}
       />

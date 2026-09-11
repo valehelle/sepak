@@ -5,8 +5,6 @@ declare
   v_session_id uuid;
   v_gk uuid;
   v_st uuid;
-  v_other_session uuid;
-  v_other_gk uuid;
   v_token uuid := gen_random_uuid();
   v_intruder uuid := gen_random_uuid();
   v_count int;
@@ -158,46 +156,6 @@ begin
     raise exception 'releasing an empty slot must fail';
   exception when others then
     assert sqlerrm = 'slot_empty', format('expected slot_empty, got %s', sqlerrm);
-  end;
-
-  ---------------------------------------------------------------------------
-  -- move_slot
-  ---------------------------------------------------------------------------
-  perform public.move_slot(v_st, v_gk, v_token);
-  assert (select player_name from public.slots where id = v_gk) = 'Zulazhar', 'move should fill the target';
-  assert (select player_name from public.slots where id = v_st) is null, 'move should empty the source';
-
-  begin
-    perform public.move_slot(v_gk, v_gk, v_token);
-    raise exception 'moving onto the same slot must fail';
-  exception when others then
-    assert sqlerrm = 'same_slot', format('expected same_slot, got %s', sqlerrm);
-  end;
-
-  begin
-    perform public.move_slot(v_gk, v_st, v_intruder);
-    raise exception 'moving with the wrong token must fail';
-  exception when others then
-    assert sqlerrm = 'wrong_token', format('expected wrong_token, got %s', sqlerrm);
-  end;
-
-  -- moving across sessions is refused
-  reset role;
-  set local role authenticated;
-  set local request.jwt.claims = '{"email":"admin@sepak.local","role":"authenticated"}';
-  select id into v_other_session from public.create_session(
-    2, 'Lain', '2026-09-23', '20:00:00', 120, 'Padang Lain', 27, 'Merah', 'Putih', 'Kuning');
-  select id into v_other_gk from public.slots
-   where session_id = v_other_session and team = 'A' and position = 'GK';
-  reset role;
-  set local request.jwt.claims = '{}';
-  set local role anon;
-
-  begin
-    perform public.move_slot(v_gk, v_other_gk, v_token);
-    raise exception 'moving across sessions must fail';
-  exception when others then
-    assert sqlerrm = 'cross_session', format('expected cross_session, got %s', sqlerrm);
   end;
 
   ---------------------------------------------------------------------------
