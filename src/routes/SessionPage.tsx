@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Link, useParams } from 'react-router'
+import { Button } from '../components/Button'
 import { ClaimSheet } from '../components/ClaimSheet'
 import { CopyButton } from '../components/CopyButton'
 import { ListTeam } from '../components/ListTeam'
@@ -216,13 +217,13 @@ export default function SessionPage() {
       .finally(() => setBusy(false))
   }
 
-  if (loading) return <p className="p-6 text-slate-400">Memuatkan…</p>
+  if (loading) return <p className="p-6 font-sans text-white/45">Memuatkan…</p>
 
   if (notFound) {
     return (
       <div className="space-y-3 p-6">
-        <p>Sesi tak dijumpai.</p>
-        <Link to="/" className="text-emerald-400 underline">Balik ke senarai sesi</Link>
+        <p className="font-sans text-[15px] text-white/70">Sesi tak dijumpai.</p>
+        <Link to="/" className="text-turf-lit underline">Balik ke senarai sesi</Link>
       </div>
     )
   }
@@ -230,14 +231,10 @@ export default function SessionPage() {
   if (error !== null || session === null) {
     return (
       <div className="space-y-3 p-6">
-        <p className="text-red-400">Gagal memuatkan sesi.</p>
-        <button
-          type="button"
-          onClick={refetch}
-          className="rounded-2xl bg-slate-800 px-4 py-2 text-sm font-semibold"
-        >
+        <p className="font-sans text-[15px] text-merah-soft">Gagal memuatkan sesi.</p>
+        <Button variant="secondary" onClick={refetch}>
           Cuba lagi
-        </button>
+        </Button>
       </div>
     )
   }
@@ -245,99 +242,101 @@ export default function SessionPage() {
   const TeamView = viewMode === 'pitch' ? PitchTeam : ListTeam
 
   return (
-    <div className="mx-auto max-w-md space-y-4 p-4 pb-24">
-      <SessionMeta session={session} filled={filled} total={33} />
+    <div className="mx-auto max-w-6xl space-y-4 p-4 pb-24 md:p-8 lg:grid lg:grid-cols-[340px_1fr] lg:items-start lg:gap-8 lg:space-y-0">
+      <div className="space-y-4 lg:sticky lg:top-8">
+        <SessionMeta session={session} filled={filled} total={33} />
 
-      {mySlot !== null ? (
-        <p className="rounded-lg border border-white/20 bg-white/10 px-3 py-2 font-kit text-[15px]">
-          {`Slot anda: Team ${mySlot.team} ${session.teamNames[mySlot.team]} — ${positionLabel(mySlot.position)}`}
-        </p>
-      ) : (
-        // Without this, nothing on the page says what to do — every slot looks
-        // like a label rather than a thing you can take.
-        !closed && (
-          <div className="space-y-2 rounded-lg border border-turf-lit/50 bg-turf/25 px-3 py-2">
-            {open > 0 && (
-              <p className="font-kit text-[15px] text-white">
-                {`Tekan posisi kosong untuk daftar — ${open} lagi kosong.`}
-              </p>
-            )}
-            {myWaitlistEntry !== null ? (
-              <p className="font-kit text-[15px] text-white">
-                {`Anda dalam senarai tunggu (${formatPositions(myWaitlistEntry.positions)}).`}
-              </p>
-            ) : (
-              <button
-                type="button"
-                onClick={() => setWaitlistOpen(true)}
-                className="w-full rounded-lg bg-turf-lit px-3 py-2 font-kit text-[15px] font-bold text-white active:opacity-80"
-              >
-                Sertai senarai tunggu
-              </button>
-            )}
-          </div>
-        )
-      )}
+        {mySlot !== null ? (
+          <p className="rounded-lg border border-white/20 bg-white/10 px-3 py-2 font-kit text-[15px]">
+            {`Slot anda: Team ${mySlot.team} ${session.teamNames[mySlot.team]} — ${positionLabel(mySlot.position)}`}
+          </p>
+        ) : (
+          // Without this, nothing on the page says what to do — every slot looks
+          // like a label rather than a thing you can take.
+          !closed && (
+            <div className="space-y-2 rounded-lg border border-turf-lit/50 bg-turf/25 px-3 py-2">
+              {open > 0 && (
+                <p className="font-kit text-[15px] text-white">
+                  {`Tekan posisi kosong untuk daftar — ${open} lagi kosong.`}
+                </p>
+              )}
+              {myWaitlistEntry !== null ? (
+                <p className="font-kit text-[15px] text-white">
+                  {`Anda dalam senarai tunggu (${formatPositions(myWaitlistEntry.positions)}).`}
+                </p>
+              ) : (
+                <Button variant="primary" onClick={() => setWaitlistOpen(true)} className="w-full">
+                  Sertai senarai tunggu
+                </Button>
+              )}
+            </div>
+          )
+        )}
 
-      <button
-        type="button"
-        onClick={toggleViewMode}
-        className="ml-auto block rounded-md px-2 py-1 font-kit text-[13px] font-medium text-white/45 underline decoration-white/20 underline-offset-4 active:text-white"
-      >
-        {viewMode === 'pitch' ? 'Papar senarai' : 'Papar padang'}
-      </button>
+        <button
+          type="button"
+          onClick={toggleViewMode}
+          className="ml-auto block rounded-md px-2 py-1 font-kit text-[13px] font-medium text-white/45 underline decoration-white/20 underline-offset-4 active:text-white"
+        >
+          {viewMode === 'pitch' ? 'Papar senarai' : 'Papar padang'}
+        </button>
 
-      {TEAM_KEYS.map((team: TeamKey) => (
-        <TeamView
-          key={team}
-          team={team}
-          teamName={session.teamNames[team]}
-          slots={slots.filter((slot) => slot.team === team)}
-          mySlotIds={mySlotIds}
-          disabled={closed || busy}
-          adminOverride={isAdmin}
-          onSelect={setSelected}
-        />
-      ))}
+        <CopyButton text={whatsappText} label="Salin untuk WhatsApp" />
+      </div>
 
-      {waitlist.length > 0 && (
-        <section className="rounded-lg bg-night-2 p-3">
-          <h3 className="mb-2 font-kit text-base font-semibold tracking-wide text-white">
-            {`Senarai Tunggu (${waitlist.length})`}
-          </h3>
-          <ol className="space-y-2">
-            {waitlist.map((entry, index) => {
-              const mine = myWaitlistEntry !== null && myWaitlistEntry.id === entry.id
-              return (
-                <li
-                  key={entry.id}
-                  className={[
-                    'space-y-1 rounded-lg px-3 py-2',
-                    mine ? 'border border-turf-lit/50 bg-turf/25' : 'bg-night',
-                  ].join(' ')}
-                >
-                  <p className="font-sans text-[14px] text-white">
-                    {`${index + 1}. ${entry.playerName}`}
-                    <span className="ml-2 text-white/45">{`(${formatPositions(entry.positions)})`}</span>
-                  </p>
-                  {mine && (
-                    <button
-                      type="button"
-                      disabled={busy}
-                      onClick={onLeaveWaitlist}
-                      className="rounded-md bg-merah/80 px-2 py-1 font-kit text-[12px] font-semibold text-white active:bg-merah disabled:opacity-60"
-                    >
-                      Keluar dari senarai tunggu
-                    </button>
-                  )}
-                </li>
-              )
-            })}
-          </ol>
-        </section>
-      )}
+      <div className="space-y-4">
+        <div className="grid gap-4 md:grid-cols-3">
+          {TEAM_KEYS.map((team: TeamKey) => (
+            <TeamView
+              key={team}
+              team={team}
+              teamName={session.teamNames[team]}
+              slots={slots.filter((slot) => slot.team === team)}
+              mySlotIds={mySlotIds}
+              disabled={closed || busy}
+              adminOverride={isAdmin}
+              onSelect={setSelected}
+            />
+          ))}
+        </div>
 
-      <CopyButton text={whatsappText} label="Salin untuk WhatsApp" />
+        {waitlist.length > 0 && (
+          <section className="rounded-lg bg-night-2 p-3">
+            <h3 className="mb-2 font-kit text-base font-semibold tracking-wide text-white">
+              {`Senarai Tunggu (${waitlist.length})`}
+            </h3>
+            <ol className="space-y-2">
+              {waitlist.map((entry, index) => {
+                const mine = myWaitlistEntry !== null && myWaitlistEntry.id === entry.id
+                return (
+                  <li
+                    key={entry.id}
+                    className={[
+                      'space-y-1 rounded-lg px-3 py-2',
+                      mine ? 'border border-turf-lit/50 bg-turf/25' : 'bg-night',
+                    ].join(' ')}
+                  >
+                    <p className="font-sans text-[14px] text-white">
+                      {`${index + 1}. ${entry.playerName}`}
+                      <span className="ml-2 text-white/45">{`(${formatPositions(entry.positions)})`}</span>
+                    </p>
+                    {mine && (
+                      <Button
+                        variant="destructive"
+                        disabled={busy}
+                        onClick={onLeaveWaitlist}
+                        className="px-2 py-1 text-[12px]"
+                      >
+                        Keluar dari senarai tunggu
+                      </Button>
+                    )}
+                  </li>
+                )
+              })}
+            </ol>
+          </section>
+        )}
+      </div>
 
       <ClaimSheet
         view={selected}
