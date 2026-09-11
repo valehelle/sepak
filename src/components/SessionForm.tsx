@@ -1,5 +1,7 @@
 import { useState, type ReactNode } from 'react'
 import { formatPlayDate } from '../lib/format'
+import { Button } from './Button'
+import { inputClass } from './Input'
 
 export type SessionFormValues = {
   sessionNo: number
@@ -21,17 +23,24 @@ type SessionFormProps = {
   onSubmit: (values: SessionFormValues) => void
 }
 
-function Field({ id, label, children }: { id: string; label: string; children: ReactNode }) {
+function Field({
+  id,
+  label,
+  className,
+  children,
+}: {
+  id: string
+  label: string
+  className?: string
+  children: ReactNode
+}) {
   return (
-    <div className="space-y-1">
-      <label htmlFor={id} className="block text-xs font-semibold text-slate-400">{label}</label>
+    <div className={['space-y-1', className].filter(Boolean).join(' ')}>
+      <label htmlFor={id} className="block font-kit text-[13px] text-white/45">{label}</label>
       {children}
     </div>
   )
 }
-
-const inputClass =
-  'w-full rounded-2xl bg-slate-800 px-4 py-3 text-base outline-none ring-emerald-400 focus:ring-2'
 
 export function SessionForm({ initial, submitLabel, busy, onSubmit }: SessionFormProps) {
   const [values, setValues] = useState(initial)
@@ -72,22 +81,7 @@ export function SessionForm({ initial, submitLabel, busy, onSubmit }: SessionFor
   }
 
   return (
-    <div className="space-y-3">
-      <Field id="session-no" label="Sesi no.">
-        <input
-          id="session-no"
-          type="number"
-          inputMode="numeric"
-          value={values.sessionNo}
-          onChange={(e) => set('sessionNo', Number(e.target.value))}
-          className={inputClass}
-        />
-      </Field>
-
-      <Field id="title" label="Nama sesi">
-        <input id="title" value={values.title} onChange={(e) => set('title', e.target.value)} className={inputClass} />
-      </Field>
-
+    <div className="space-y-3 md:grid md:grid-cols-2 md:gap-x-4 md:gap-y-3 md:space-y-0">
       <Field id="play-date" label="Tarikh">
         <input
           id="play-date"
@@ -96,8 +90,8 @@ export function SessionForm({ initial, submitLabel, busy, onSubmit }: SessionFor
           onChange={(e) => set('playDate', e.target.value)}
           className={inputClass}
         />
+        {dayHint !== null && <p className="font-sans text-xs text-turf-lit">{dayHint}</p>}
       </Field>
-      {dayHint !== null && <p className="text-xs text-emerald-400">{dayHint}</p>}
 
       <Field id="start-time" label="Masa">
         <input
@@ -120,10 +114,6 @@ export function SessionForm({ initial, submitLabel, busy, onSubmit }: SessionFor
         />
       </Field>
 
-      <Field id="venue" label="Tempat">
-        <input id="venue" value={values.venue} onChange={(e) => set('venue', e.target.value)} className={inputClass} />
-      </Field>
-
       <Field id="fee" label="Yuran (RM)">
         <input
           id="fee"
@@ -137,7 +127,26 @@ export function SessionForm({ initial, submitLabel, busy, onSubmit }: SessionFor
         />
       </Field>
 
-      <div className="grid grid-cols-3 gap-2">
+      <Field id="session-no" label="Sesi no.">
+        <input
+          id="session-no"
+          type="number"
+          inputMode="numeric"
+          value={values.sessionNo}
+          onChange={(e) => set('sessionNo', Number(e.target.value))}
+          className={inputClass}
+        />
+      </Field>
+
+      <Field id="title" label="Nama sesi" className="md:col-span-2">
+        <input id="title" value={values.title} onChange={(e) => set('title', e.target.value)} className={inputClass} />
+      </Field>
+
+      <Field id="venue" label="Tempat" className="md:col-span-2">
+        <input id="venue" value={values.venue} onChange={(e) => set('venue', e.target.value)} className={inputClass} />
+      </Field>
+
+      <div className="grid grid-cols-3 gap-2 md:col-span-2">
         <Field id="team-a" label="Pasukan A">
           <input id="team-a" value={values.teamAName} onChange={(e) => set('teamAName', e.target.value)} className={inputClass} />
         </Field>
@@ -149,16 +158,17 @@ export function SessionForm({ initial, submitLabel, busy, onSubmit }: SessionFor
         </Field>
       </div>
 
-      {problem !== null && <p className="text-xs text-red-400">{problem}</p>}
+      {problem !== null && <p className="font-sans text-xs text-merah-soft md:col-span-2">{problem}</p>}
 
-      <button
+      <Button
         type="button"
+        variant="primary"
         disabled={busy}
         onClick={submit}
-        className="w-full rounded-2xl bg-emerald-500 px-4 py-3 text-sm font-bold text-slate-950 active:bg-emerald-400 disabled:opacity-60"
+        className="w-full md:col-span-2"
       >
         {submitLabel}
-      </button>
+      </Button>
     </div>
   )
 }
