@@ -15,6 +15,9 @@
   --color-merah: #e23d33;
   --color-putih: #efede4;
   --color-kuning: #f4c231;
+  /* A lighter red for error copy on dark panels, where full-strength merah
+     is too heavy to read as body text. */
+  --color-merah-soft: #f08a83;
 
   --font-sans: 'Barlow', ui-sans-serif, system-ui, sans-serif;
   --font-kit: 'Barlow Condensed', 'Barlow', ui-sans-serif, sans-serif;
