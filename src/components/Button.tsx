@@ -1,15 +1,24 @@
 import type { ButtonHTMLAttributes } from 'react'
 
-type ButtonVariant = 'primary' | 'secondary' | 'destructive'
+export type ButtonVariant = 'primary' | 'secondary' | 'destructive'
+export type ButtonSize = 'md' | 'sm'
 
 type ButtonProps = ButtonHTMLAttributes<HTMLButtonElement> & {
   variant?: ButtonVariant
+  size?: ButtonSize
 }
 
-/** Base classes shared by every button in the app, regardless of variant --
- *  size, type, and font are never a per-call decision. */
+/** Shared by every button regardless of variant or size. Font size and
+ *  padding are deliberately NOT here: they come from SIZE, so a caller can
+ *  never half-override them with a stray `text-xs` and land on whichever
+ *  utility Tailwind happened to emit last. */
 const BASE =
-  'rounded-lg px-4 py-2.5 font-kit text-[15px] font-semibold tracking-wide transition active:brightness-110 disabled:opacity-50 disabled:cursor-default'
+  'inline-flex items-center justify-center whitespace-nowrap rounded-lg font-kit font-semibold tracking-wide transition active:brightness-110 disabled:opacity-50 disabled:cursor-default'
+
+const SIZE: Record<ButtonSize, string> = {
+  md: 'px-4 py-2.5 text-[15px]',
+  sm: 'px-3 py-2 text-[13px]',
+}
 
 const VARIANT: Record<ButtonVariant, string> = {
   primary: 'bg-turf-lit text-white',
@@ -17,7 +26,19 @@ const VARIANT: Record<ButtonVariant, string> = {
   destructive: 'bg-merah text-white',
 }
 
-export function Button({ variant = 'primary', className, type = 'button', ...rest }: ButtonProps) {
-  const classes = [BASE, VARIANT[variant], className].filter(Boolean).join(' ')
+/** The exact class string a Button renders with -- for the rare element that
+ *  must look like a button but be something else (a router Link). */
+export function buttonClass(variant: ButtonVariant = 'primary', size: ButtonSize = 'md'): string {
+  return [BASE, SIZE[size], VARIANT[variant]].join(' ')
+}
+
+export function Button({
+  variant = 'primary',
+  size = 'md',
+  className,
+  type = 'button',
+  ...rest
+}: ButtonProps) {
+  const classes = [buttonClass(variant, size), className].filter(Boolean).join(' ')
   return <button type={type} className={classes} {...rest} />
 }

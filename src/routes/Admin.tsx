@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import { Link } from 'react-router'
 import { AdminList } from '../components/AdminList'
-import { Button } from '../components/Button'
+import { Button, buttonClass } from '../components/Button'
 import { inputClass } from '../components/Input'
 import { SessionForm, type SessionFormValues } from '../components/SessionForm'
 import { Sheet } from '../components/Sheet'
@@ -301,17 +301,17 @@ export default function Admin() {
                 <div className="grid grid-cols-2 gap-2 md:w-[264px] md:shrink-0">
                   <Link
                     to={`/s/${session.id}`}
-                    className="flex items-center justify-center whitespace-nowrap rounded-lg border border-white/15 bg-white/5 px-3 py-2 font-kit text-xs font-semibold tracking-wide text-white transition active:brightness-110"
+                    className={buttonClass('secondary', 'sm')}
                   >
                     Buka
                   </Link>
-                  <Button variant="secondary" className="w-full whitespace-nowrap px-3 py-2 text-xs" onClick={() => void toggleStatus(session)}>
+                  <Button variant="secondary" size="sm" className="w-full" onClick={() => void toggleStatus(session)}>
                     {session.status === 'open' ? 'Tutup sesi' : 'Buka semula'}
                   </Button>
-                  <Button variant="secondary" className="w-full whitespace-nowrap px-3 py-2 text-xs" onClick={() => openEdit(session)}>
+                  <Button variant="secondary" size="sm" className="w-full" onClick={() => openEdit(session)}>
                     Sunting
                   </Button>
-                  <Button variant="destructive" className="w-full whitespace-nowrap px-3 py-2 text-xs" onClick={() => setConfirmDelete(session)}>
+                  <Button variant="destructive" size="sm" className="w-full" onClick={() => setConfirmDelete(session)}>
                     Hapus
                   </Button>
                 </div>

@@ -102,7 +102,7 @@ export function AdminList({ currentEmail }: AdminListProps) {
                       variant="destructive"
                       disabled={busy}
                       onClick={() => void remove(a)}
-                      className="px-2 py-1 text-xs"
+                      size="sm"
                     >
                       Buang
                     </Button>
