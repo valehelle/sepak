@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import { addAdmin, listAdmins, removeAdmin, type Admin, type AdminRole } from '../data/admins'
+import { Button } from './Button'
+import { inputClass } from './Input'
 import { useToast } from './Toast'
 
 type AdminListProps = { currentEmail: string }
@@ -96,14 +98,14 @@ export function AdminList({ currentEmail }: AdminListProps) {
                     {ROLE_LABEL[a.role]}
                   </span>
                   {canRemove && (
-                    <button
-                      type="button"
+                    <Button
+                      variant="destructive"
                       disabled={busy}
                       onClick={() => void remove(a)}
-                      className="rounded-md bg-merah px-2 py-1 font-kit text-xs font-semibold text-white disabled:opacity-60"
+                      className="px-2 py-1 text-xs"
                     >
                       Buang
-                    </button>
+                    </Button>
                   )}
                 </div>
               </li>
@@ -129,7 +131,7 @@ export function AdminList({ currentEmail }: AdminListProps) {
             autoComplete="off"
             value={email}
             onChange={(e) => setEmail(e.target.value)}
-            className="w-full rounded-lg bg-white/5 px-3 py-2 font-sans text-[15px] text-white outline-none focus:ring-2 focus:ring-turf-lit"
+            className={inputClass}
           />
         </div>
 
@@ -158,13 +160,9 @@ export function AdminList({ currentEmail }: AdminListProps) {
           </button>
         </div>
 
-        <button
-          type="submit"
-          disabled={busy || email.trim() === ''}
-          className="w-full rounded-lg bg-turf-lit px-4 py-3 font-kit text-[15px] font-semibold text-white disabled:opacity-60"
-        >
+        <Button type="submit" variant="primary" disabled={busy || email.trim() === ''} className="w-full">
           Tambah admin
-        </button>
+        </Button>
       </form>
     </section>
   )

@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useState } from 'react'
 import { Link } from 'react-router'
 import { AdminList } from '../components/AdminList'
+import { Button } from '../components/Button'
+import { inputClass } from '../components/Input'
 import { SessionForm, type SessionFormValues } from '../components/SessionForm'
 import { Sheet } from '../components/Sheet'
 import { useToast } from '../components/Toast'
@@ -54,45 +56,42 @@ function LoginForm() {
   }
 
   return (
-    <div className="mx-auto max-w-sm space-y-3 p-6">
-      <h1 className="text-xl font-bold">Admin</h1>
-      <div className="space-y-1">
-        <label htmlFor="email" className="block text-xs font-semibold text-slate-400">E-mel</label>
-        <input
-          id="email"
-          type="email"
-          autoComplete="email"
-          value={email}
-          onChange={(e) => setEmail(e.target.value)}
-          className="w-full rounded-2xl bg-slate-800 px-4 py-3 text-base outline-none focus:ring-2 focus:ring-emerald-400"
-        />
+    <div className="flex min-h-dvh items-center justify-center p-6">
+      <div className="w-full max-w-sm space-y-3 rounded-lg border border-white/10 bg-night-2 p-6">
+        <h1 className="font-kit text-2xl font-semibold text-white">Admin</h1>
+        <div className="space-y-1">
+          <label htmlFor="email" className="block font-kit text-[13px] text-white/45">E-mel</label>
+          <input
+            id="email"
+            type="email"
+            autoComplete="email"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            className={inputClass}
+          />
+        </div>
+        <div className="space-y-1">
+          <label htmlFor="password" className="block font-kit text-[13px] text-white/45">Kata laluan</label>
+          <input
+            id="password"
+            type="password"
+            autoComplete={mode === 'signup' ? 'new-password' : 'current-password'}
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            className={inputClass}
+          />
+        </div>
+        <Button variant="primary" disabled={busy} onClick={() => void submit()} className="w-full">
+          {mode === 'signup' ? 'Daftar' : 'Masuk'}
+        </Button>
+        <button
+          type="button"
+          onClick={() => setMode(mode === 'signup' ? 'signin' : 'signup')}
+          className="w-full text-center font-kit text-[13px] text-white/45"
+        >
+          {mode === 'signup' ? 'Dah ada akaun? Masuk' : 'Admin baru? Daftar di sini'}
+        </button>
       </div>
-      <div className="space-y-1">
-        <label htmlFor="password" className="block text-xs font-semibold text-slate-400">Kata laluan</label>
-        <input
-          id="password"
-          type="password"
-          autoComplete={mode === 'signup' ? 'new-password' : 'current-password'}
-          value={password}
-          onChange={(e) => setPassword(e.target.value)}
-          className="w-full rounded-2xl bg-slate-800 px-4 py-3 text-base outline-none focus:ring-2 focus:ring-emerald-400"
-        />
-      </div>
-      <button
-        type="button"
-        disabled={busy}
-        onClick={() => void submit()}
-        className="w-full rounded-2xl bg-emerald-500 px-4 py-3 text-sm font-bold text-slate-950 disabled:opacity-60"
-      >
-        {mode === 'signup' ? 'Daftar' : 'Masuk'}
-      </button>
-      <button
-        type="button"
-        onClick={() => setMode(mode === 'signup' ? 'signin' : 'signup')}
-        className="w-full text-center text-xs text-slate-400 underline"
-      >
-        {mode === 'signup' ? 'Dah ada akaun? Masuk' : 'Admin baru? Daftar di sini'}
-      </button>
     </div>
   )
 }
@@ -102,16 +101,14 @@ function LoginForm() {
  *  nothing on its own under the allowlist model. */
 function NotAllowlisted() {
   return (
-    <div className="mx-auto max-w-sm space-y-3 p-6 text-center">
-      <h1 className="text-xl font-bold">Admin</h1>
-      <p className="text-sm text-slate-300">Akaun ini bukan admin. Minta admin utama tambah e-mel anda.</p>
-      <button
-        type="button"
-        onClick={() => void signOut()}
-        className="text-sm text-slate-400 underline"
-      >
-        Keluar
-      </button>
+    <div className="flex min-h-dvh items-center justify-center p-6">
+      <div className="w-full max-w-sm space-y-3 rounded-lg border border-white/10 bg-night-2 p-6 text-center">
+        <h1 className="font-kit text-2xl font-semibold text-white">Admin</h1>
+        <p className="font-sans text-[15px] text-white/70">Akaun ini bukan admin. Minta admin utama tambah e-mel anda.</p>
+        <Button variant="secondary" onClick={() => void signOut()} className="w-full">
+          Keluar
+        </Button>
+      </div>
     </div>
   )
 }
@@ -264,74 +261,71 @@ export default function Admin() {
     }
   }
 
-  if (loading) return <p className="p-6 text-slate-400">Memuatkan…</p>
+  if (loading) return <p className="p-6 font-sans text-white/45">Memuatkan…</p>
   if (email === null) return <LoginForm />
   if (role === null) return <NotAllowlisted />
 
   return (
-    <div className="mx-auto max-w-md space-y-4 p-4 pb-24">
+    <div className="mx-auto max-w-4xl space-y-4 p-4 pb-24 md:p-8">
       <div className="flex items-center justify-between">
-        <h1 className="text-xl font-bold">Admin</h1>
-        <button type="button" onClick={() => void signOut()} className="text-sm text-slate-400 underline">
+        <h1 className="font-kit text-3xl font-semibold text-white">Admin</h1>
+        <Button variant="secondary" onClick={() => void signOut()}>
           Keluar
-        </button>
+        </Button>
       </div>
 
-      <div className="grid grid-cols-2 gap-2">
-        <button
-          type="button"
-          onClick={() => void openNew()}
-          className="rounded-2xl bg-emerald-500 px-4 py-3 text-sm font-bold text-slate-950"
-        >
-          Sesi baru
-        </button>
-        <button
-          type="button"
-          onClick={() => void openDuplicate()}
-          className="rounded-2xl bg-slate-800 px-4 py-3 text-sm font-semibold"
-        >
-          Duplikasi sesi lepas
-        </button>
-      </div>
+      <div className={role === 'super' ? 'lg:grid lg:grid-cols-[1fr_360px] lg:items-start lg:gap-6' : ''}>
+        <div className="space-y-4">
+          <div className="flex gap-2">
+            <Button variant="primary" onClick={() => void openNew()}>
+              Sesi baru
+            </Button>
+            <Button variant="secondary" onClick={() => void openDuplicate()}>
+              Duplikasi sesi lepas
+            </Button>
+          </div>
 
-      <ul className="space-y-3">
-        {sessions.map((session) => (
-          <li key={session.id} className="space-y-2 rounded-3xl bg-slate-900/70 p-4">
-            <p className="font-semibold">
-              {`Sesi ${String(session.sessionNo).padStart(3, '0')} ${session.title}`}
-            </p>
-            <p className="text-sm text-slate-400">
-              {`${formatPlayDate(session.playDate)} · ${formatStartTime(session.startTime)} · ${session.venue}`}
-            </p>
-            <div className="flex flex-wrap gap-2">
-              <Link to={`/s/${session.id}`} className="rounded-xl bg-slate-800 px-3 py-2 text-xs font-semibold">
-                Buka
-              </Link>
-              <button
-                type="button"
-                onClick={() => void toggleStatus(session)}
-                className="rounded-xl bg-slate-800 px-3 py-2 text-xs font-semibold"
-              >
-                {session.status === 'open' ? 'Tutup sesi' : 'Buka semula'}
-              </button>
-              <button
-                type="button"
-                onClick={() => openEdit(session)}
-                className="rounded-xl bg-slate-800 px-3 py-2 text-xs font-semibold"
-              >
-                Sunting
-              </button>
-              <button
-                type="button"
-                onClick={() => setConfirmDelete(session)}
-                className="rounded-xl bg-red-500/20 px-3 py-2 text-xs font-semibold text-red-300"
-              >
-                Hapus
-              </button>
-            </div>
-          </li>
-        ))}
-      </ul>
+          <div className="divide-y divide-white/10 rounded-lg bg-night-2">
+            {sessions.map((session) => (
+              <div key={session.id} className="space-y-3 p-4 md:flex md:items-center md:justify-between md:gap-4 md:space-y-0">
+                <div className="md:min-w-0 md:flex-1">
+                  <p className="font-kit text-lg font-semibold text-white">
+                    {`Sesi ${String(session.sessionNo).padStart(3, '0')} ${session.title}`}
+                  </p>
+                  <div className="mt-1 space-y-0.5 font-sans text-[13px] text-white/45">
+                    <p>{formatPlayDate(session.playDate)}</p>
+                    <p>{formatStartTime(session.startTime)}</p>
+                    <p>{session.venue}</p>
+                  </div>
+                </div>
+                <div className="flex flex-wrap gap-2 md:w-[190px] md:shrink-0 md:justify-end">
+                  <Link
+                    to={`/s/${session.id}`}
+                    className="rounded-lg border border-white/15 bg-white/5 px-3 py-2 font-kit text-xs font-semibold tracking-wide text-white transition active:brightness-110"
+                  >
+                    Buka
+                  </Link>
+                  <Button variant="secondary" className="px-3 py-2 text-xs" onClick={() => void toggleStatus(session)}>
+                    {session.status === 'open' ? 'Tutup sesi' : 'Buka semula'}
+                  </Button>
+                  <Button variant="secondary" className="px-3 py-2 text-xs" onClick={() => openEdit(session)}>
+                    Sunting
+                  </Button>
+                  <Button variant="destructive" className="px-3 py-2 text-xs" onClick={() => setConfirmDelete(session)}>
+                    Hapus
+                  </Button>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {role === 'super' && (
+          <div className="mt-4 lg:mt-0">
+            <AdminList currentEmail={email} />
+          </div>
+        )}
+      </div>
 
       {formValues !== null && (
         <Sheet
@@ -339,34 +333,26 @@ export default function Admin() {
           title={editing !== null ? 'Sunting sesi' : 'Sesi baru'}
           onClose={() => { setFormValues(null); setEditing(null) }}
         >
-          <div className="max-h-[70vh] overflow-y-auto">
-            <SessionForm
-              key={formKey}
-              initial={formValues}
-              submitLabel={editing !== null ? 'Simpan perubahan' : 'Cipta sesi'}
-              busy={busy}
-              onSubmit={(v) => void submit(v)}
-            />
-          </div>
+          <SessionForm
+            key={formKey}
+            initial={formValues}
+            submitLabel={editing !== null ? 'Simpan perubahan' : 'Cipta sesi'}
+            busy={busy}
+            onSubmit={(v) => void submit(v)}
+          />
         </Sheet>
       )}
 
       {confirmDelete !== null && (
         <Sheet open title="Hapus sesi?" onClose={() => setConfirmDelete(null)}>
-          <p className="mb-4 text-sm text-slate-300">
+          <p className="mb-4 font-sans text-[15px] text-white/70">
             {`Sesi ${String(confirmDelete.sessionNo).padStart(3, '0')} dan semua slotnya akan hilang.`}
           </p>
-          <button
-            type="button"
-            onClick={() => void remove(confirmDelete)}
-            className="w-full rounded-2xl bg-red-500 px-4 py-3 text-sm font-bold text-white"
-          >
+          <Button variant="destructive" onClick={() => void remove(confirmDelete)} className="w-full">
             Ya, hapus
-          </button>
+          </Button>
         </Sheet>
       )}
-
-      {role === 'super' && <AdminList currentEmail={email} />}
     </div>
   )
 }
