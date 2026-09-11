@@ -25,11 +25,19 @@ export function positionLabel(position: Position): string {
 }
 
 /** Back to front, so the rendered pitch matches where players stand. */
+/** A 4-2-1-3, in screen order top to bottom: the team attacks upwards with
+ *  their own goal at the bottom, which is how every lineup graphic is drawn
+ *  and what puts the left-back on the left.
+ *
+ *  The front three are LWF-ST-RWF — the striker is central, between the
+ *  wingers. DM and MC are the double pivot, side by side in front of the back
+ *  four, with AM the lone playmaker ahead of them. */
 export const PITCH_ROWS = [
-  ['GK'],
+  ['LWF', 'ST', 'RWF'],
+  ['AM'],
+  ['DM', 'MC'],
   ['LB', 'CB1', 'CB2', 'RB'],
-  ['DM', 'MC', 'AM'],
-  ['LWF', 'RWF', 'ST'],
+  ['GK'],
 ] as const satisfies readonly (readonly Position[])[]
 
 export function isPosition(value: string): value is Position {

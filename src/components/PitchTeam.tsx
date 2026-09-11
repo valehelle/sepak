@@ -74,9 +74,10 @@ export function PitchTeam({
               className="mx-auto grid gap-1"
               style={{
                 gridTemplateColumns: `repeat(${row.length}, minmax(0, 1fr))`,
-                // The keeper alone in the goal, the rest spread wider as they
-                // move up the pitch.
-                maxWidth: row.length === 1 ? '30%' : row.length === 3 ? '86%' : '100%',
+                // A lone player is central — the keeper in his goal, and AM
+                // as the No. 10. The back four spread the full width; the
+                // pivot and the front three sit inside them.
+                maxWidth: row.length === 1 ? '32%' : row.length === 2 ? '58%' : row.length === 3 ? '84%' : '100%',
               }}
             >
               {row.map((position) => (

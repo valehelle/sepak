@@ -60,38 +60,40 @@ summary {
   opacity: 0.4;
 }
 
-/* Boxes open at the top, because the goal line IS the top edge. */
+/* The team's own goal is the BOTTOM edge and they attack upwards, matching
+   every lineup graphic — so the boxes open downwards and the halfway line is
+   the top edge. */
 .mark-box {
-  border-top: none;
+  border-bottom: none;
   left: 50%;
   transform: translateX(-50%);
-  top: -1px;
+  bottom: -1px;
 }
 
 .mark-goal {
   left: 50%;
   transform: translateX(-50%);
-  top: -1px;
+  bottom: -1px;
   width: 26%;
   height: 9px;
-  border-top: none;
+  border-bottom: none;
   border-width: 2.5px;
   opacity: 0.85;
 }
 
 .mark-circle {
   left: 50%;
-  bottom: 0;
+  top: 0;
   width: 42%;
   aspect-ratio: 1;
-  transform: translate(-50%, 50%);
+  transform: translate(-50%, -50%);
   border-radius: 50%;
 }
 
 .mark-halfway {
   left: 0;
   right: 0;
-  bottom: 0;
+  top: 0;
   height: 0;
   border-width: 1.5px 0 0 0;
 }

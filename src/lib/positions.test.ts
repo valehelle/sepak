@@ -26,14 +26,38 @@ describe('positions', () => {
     expect(positionLabel('LWF')).toBe('LWF')
   })
 
-  it('arranges the pitch back to front, covering every position exactly once', () => {
+  it('arranges a 4-2-1-3 attacking upwards, covering every position exactly once', () => {
     expect(PITCH_ROWS).toEqual([
-      ['GK'],
+      ['LWF', 'ST', 'RWF'],
+      ['AM'],
+      ['DM', 'MC'],
       ['LB', 'CB1', 'CB2', 'RB'],
-      ['DM', 'MC', 'AM'],
-      ['LWF', 'RWF', 'ST'],
+      ['GK'],
     ])
     expect(PITCH_ROWS.flat().slice().sort()).toEqual(POSITIONS.slice().sort())
+  })
+
+  it('puts the striker between the wingers, not out wide', () => {
+    const front = PITCH_ROWS[0]
+    expect(front).toEqual(['LWF', 'ST', 'RWF'])
+    expect(front?.indexOf('ST')).toBe(1)
+  })
+
+  it('pairs DM with MC as the pivot and leaves AM alone ahead of them', () => {
+    const rowOf = (position: string) =>
+      PITCH_ROWS.findIndex((row) => (row as readonly string[]).includes(position))
+
+    expect(PITCH_ROWS[rowOf('DM')]).toEqual(['DM', 'MC'])
+    expect(PITCH_ROWS[rowOf('AM')]).toEqual(['AM'])
+    // Rows run attack-first, so a lower index is further up the pitch: AM must
+    // sit ahead of the pivot, and the pivot ahead of the back four.
+    expect(rowOf('AM')).toBeLessThan(rowOf('DM'))
+    expect(rowOf('DM')).toBeLessThan(rowOf('LB'))
+  })
+
+  it('keeps the keeper nearest their own goal and the forwards furthest', () => {
+    // Rows run top (attack) to bottom (own goal), so the keeper is last.
+    expect(PITCH_ROWS[PITCH_ROWS.length - 1]).toEqual(['GK'])
   })
 
   it('has three teams', () => {
