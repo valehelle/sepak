@@ -1,0 +1,126 @@
+name: Deploy
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+jobs:
+  # `pages-${{ github.ref }}` (not the old bare `pages`): this job now also
+  # runs on pull_request, and a flat, unscoped group would mean two open
+  # PRs -- or a PR push and an in-flight main deploy -- share one
+  # concurrency slot and cancel each other. Scoping by ref keeps the
+  # original intent (a newer push to the *same* ref supersedes an
+  # in-progress build/deploy for it) without cross-ref collisions.
+  build:
+    runs-on: ubuntu-latest
+    concurrency:
+      group: pages-${{ github.ref }}
+      cancel-in-progress: true
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm typecheck
+      - run: pnpm test
+
+      - run: pnpm build
+        env:
+          # Public by design: both values ship inside the bundle, so they are
+          # repository variables rather than secrets. The service_role key is
+          # never referenced here.
+          VITE_SUPABASE_URL: ${{ vars.VITE_SUPABASE_URL }}
+          VITE_SUPABASE_ANON_KEY: ${{ vars.VITE_SUPABASE_ANON_KEY }}
+
+      # `vite preview` (and therefore the e2e deep-link suite) SPA-falls-back
+      # for every path, but GitHub Pages does not -- it serves 404.html
+      # verbatim. This is the only thing that actually asserts postbuild.mjs
+      # ran, so a dropped or broken postbuild step fails the build instead
+      # of shipping a site where every pasted session link 404s.
+      - run: pnpm verify:pages
+
+      # Only needed to feed `deploy`, which itself only runs on push to
+      # main -- skipped on pull_request so a fork PR isn't tripped up by
+      # Pages/OIDC permissions it was never going to use.
+      - if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        uses: actions/configure-pages@v5
+      - if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: dist
+
+  # Runs the SQL/RLS and integration suites against a real local Supabase
+  # stack -- the one class of bug this project has actually shipped (a
+  # migration granting `anon` more than intended) is exactly what `pnpm
+  # test`/`pnpm typecheck` above cannot see. Deliberately its own job with no
+  # `needs`/dependents: nothing here gates `deploy`, so a flaky container
+  # start can never block a Pages deploy that would otherwise have shipped.
+  db-tests:
+    if: github.event_name == 'pull_request' || (github.event_name == 'push' && github.ref == 'refs/heads/main')
+    runs-on: ubuntu-latest
+    # Its own group, separate from the Pages build/deploy group above: a
+    # newer push on the same PR/branch should cancel its own stale db-tests
+    # run, but this must never contend with, or be cancelled by, `build`/
+    # `deploy` on a different ref.
+    concurrency:
+      group: db-tests-${{ github.ref }}
+      cancel-in-progress: true
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      - uses: supabase/setup-cli@v1
+        with:
+          version: latest
+
+      - run: supabase start
+
+      # `pnpm test:int` imports src/lib/supabase, which throws at module
+      # load without these -- and they must be the *local* stack's values,
+      # not the production `vars.VITE_SUPABASE_*` the build job uses above,
+      # or adminClient() and the app's own client would point at different
+      # databases and the suite would be meaningless.
+      - run: |
+          echo "VITE_SUPABASE_URL=$(supabase status -o json | jq -r .API_URL)" >> "$GITHUB_ENV"
+          echo "VITE_SUPABASE_ANON_KEY=$(supabase status -o json | jq -r .ANON_KEY)" >> "$GITHUB_ENV"
+
+      - run: pnpm test:db && pnpm test:int
+
+  deploy:
+    needs: build
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    concurrency:
+      group: pages-${{ github.ref }}
+      cancel-in-progress: true
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4
