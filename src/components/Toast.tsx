@@ -36,8 +36,8 @@ export function ToastProvider({ children }: { children: ReactNode }) {
           role="status"
           aria-live="polite"
           className={[
-            'fixed inset-x-4 bottom-6 z-50 rounded-2xl px-4 py-3 text-center text-sm font-medium shadow-lg',
-            current.tone === 'error' ? 'bg-red-500 text-white' : 'bg-slate-100 text-slate-900',
+            'fixed inset-x-4 bottom-6 z-50 rounded-lg px-4 py-3 text-center font-kit text-[15px] font-medium shadow-lg md:inset-x-auto md:left-1/2 md:w-full md:max-w-sm md:-translate-x-1/2',
+            current.tone === 'error' ? 'bg-merah text-white' : 'bg-putih text-night',
           ].join(' ')}
         >
           {current.message}

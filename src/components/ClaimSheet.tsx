@@ -1,6 +1,8 @@
 import { useEffect, useState } from 'react'
 import { positionLabel } from '../lib/positions'
 import type { SlotView } from './SlotChip'
+import { Button } from './Button'
+import { inputClass } from './Input'
 import { Sheet } from './Sheet'
 
 type ClaimSheetProps = {
@@ -45,29 +47,24 @@ export function ClaimSheet({
   if (view.mine || occupiedByOther) {
     return (
       <Sheet open title={title} onClose={onClose}>
-        <p className="mb-4 text-sm text-slate-300">
+        <p className="mb-4 font-sans text-[15px] text-white/70">
           {view.mine ? `Slot anda: ${view.slot?.playerName ?? ''}` : view.slot?.playerName ?? ''}
         </p>
         <div className="space-y-2">
           {view.mine && (
-            <button
-              type="button"
-              disabled={busy}
-              onClick={onRelease}
-              className="w-full rounded-2xl bg-red-500/90 px-4 py-3 text-sm font-semibold text-white active:bg-red-500"
-            >
+            <Button variant="destructive" disabled={busy} onClick={onRelease} className="w-full">
               Lepaskan slot
-            </button>
+            </Button>
           )}
           {isAdmin && (
-            <button
-              type="button"
+            <Button
+              variant="secondary"
               disabled={busy}
               onClick={onAdminClear}
-              className="w-full rounded-2xl bg-amber-500/20 px-4 py-3 text-sm font-semibold text-amber-200"
+              className="w-full text-kuning"
             >
               Kosongkan slot (admin)
-            </button>
+            </Button>
           )}
         </div>
       </Sheet>
@@ -89,7 +86,7 @@ export function ClaimSheet({
 
   return (
     <Sheet open title={title} onClose={onClose}>
-      <label htmlFor="player-name" className="mb-1 block text-sm text-slate-300">Nama</label>
+      <label htmlFor="player-name" className="mb-1 block font-kit text-[13px] text-white/45">Nama</label>
       <input
         id="player-name"
         value={name}
@@ -101,22 +98,17 @@ export function ClaimSheet({
         onKeyDown={(event) => { if (event.key === 'Enter') submit() }}
         maxLength={40}
         autoComplete="name"
-        className="mb-2 w-full rounded-2xl bg-slate-800 px-4 py-3 text-base outline-none ring-emerald-400 focus:ring-2"
+        className={`mb-2 ${inputClass}`}
       />
-      {problem !== null && <p className="mb-2 text-xs text-red-400">{problem}</p>}
+      {problem !== null && <p className="mb-2 font-sans text-xs text-merah-soft">{problem}</p>}
       {duplicateName && (
-        <p className="mb-2 text-xs text-amber-300">
+        <p className="mb-2 font-sans text-xs text-kuning">
           Nama ini dah ada dalam sesi. Teruskan jika memang anda.
         </p>
       )}
-      <button
-        type="button"
-        disabled={busy}
-        onClick={submit}
-        className="w-full rounded-2xl bg-emerald-500 px-4 py-3 text-sm font-bold text-slate-950 active:bg-emerald-400 disabled:opacity-60"
-      >
+      <Button variant="primary" disabled={busy} onClick={submit} className="w-full">
         Ambil slot
-      </button>
+      </Button>
     </Sheet>
   )
 }

@@ -1,5 +1,7 @@
 import { useEffect, useState } from 'react'
 import { ALL_POSITIONS, ALL_POSITIONS_EXCEPT_GK, POSITIONS, formatPositions, positionLabel, type Position } from '../lib/positions'
+import { Button } from './Button'
+import { inputClass } from './Input'
 import { Sheet } from './Sheet'
 
 type WaitlistSheetProps = {
@@ -49,7 +51,7 @@ export function WaitlistSheet({ open, busy, onClose, onJoin }: WaitlistSheetProp
 
   return (
     <Sheet open={open} title="Sertai senarai tunggu" onClose={onClose}>
-      <label htmlFor="waitlist-name" className="mb-1 block font-kit text-[13px] text-white/60">
+      <label htmlFor="waitlist-name" className="mb-1 block font-kit text-[13px] text-white/45">
         Nama
       </label>
       <input
@@ -64,31 +66,31 @@ export function WaitlistSheet({ open, busy, onClose, onJoin }: WaitlistSheetProp
         }}
         maxLength={40}
         autoComplete="name"
-        className="mb-3 w-full rounded-lg border border-white/10 bg-night-2 px-4 py-3 font-sans text-base text-white outline-none focus:ring-2 focus:ring-turf-lit"
+        className={`mb-3 ${inputClass}`}
       />
 
-      <p className="mb-2 font-kit text-[13px] text-white/60">Posisi</p>
+      <p className="mb-2 font-kit text-[13px] text-white/45">Posisi</p>
       <div className="mb-3 flex gap-2">
-        <button
-          type="button"
+        <Button
+          variant="secondary"
+          className="flex-1"
           onClick={() => {
             setSelected([...ALL_POSITIONS])
             setProblem(null)
           }}
-          className="flex-1 rounded-lg border border-white/10 bg-night-2 px-3 py-2 font-kit text-[13px] font-semibold text-white active:bg-white/10"
         >
           Semua posisi
-        </button>
-        <button
-          type="button"
+        </Button>
+        <Button
+          variant="secondary"
+          className="flex-1"
           onClick={() => {
             setSelected([...ALL_POSITIONS_EXCEPT_GK])
             setProblem(null)
           }}
-          className="flex-1 rounded-lg border border-white/10 bg-night-2 px-3 py-2 font-kit text-[13px] font-semibold text-white active:bg-white/10"
         >
           Semua kecuali GK
-        </button>
+        </Button>
       </div>
 
       <div className="mb-3 grid grid-cols-4 gap-2">
@@ -101,8 +103,8 @@ export function WaitlistSheet({ open, busy, onClose, onJoin }: WaitlistSheetProp
               onClick={() => toggle(position)}
               aria-pressed={on}
               className={[
-                'rounded-lg border px-2 py-2 font-kit text-[13px] font-bold transition',
-                on ? 'border-turf-lit bg-turf-lit/25 text-white' : 'border-white/10 bg-night-2 text-white/70 active:bg-white/10',
+                'rounded-lg px-2 py-2 font-kit text-[13px] font-bold transition',
+                on ? 'bg-turf-lit text-white' : 'border border-white/15 bg-white/5 text-white/70',
               ].join(' ')}
             >
               {positionLabel(position)}
@@ -112,19 +114,14 @@ export function WaitlistSheet({ open, busy, onClose, onJoin }: WaitlistSheetProp
       </div>
 
       {selected.length > 0 && (
-        <p className="mb-3 font-sans text-[13px] text-white/60">{formatPositions(selected)}</p>
+        <p className="mb-3 font-sans text-[13px] text-white/45">{formatPositions(selected)}</p>
       )}
 
-      {problem !== null && <p className="mb-2 font-sans text-xs text-merah">{problem}</p>}
+      {problem !== null && <p className="mb-2 font-sans text-xs text-merah-soft">{problem}</p>}
 
-      <button
-        type="button"
-        disabled={busy}
-        onClick={submit}
-        className="w-full rounded-lg bg-turf-lit px-4 py-3 font-kit text-[15px] font-bold text-white active:opacity-80 disabled:opacity-60"
-      >
+      <Button variant="primary" disabled={busy} onClick={submit} className="w-full">
         Sertai
-      </button>
+      </Button>
     </Sheet>
   )
 }
