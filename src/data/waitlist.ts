@@ -3,7 +3,7 @@ import { isPosition, type Position } from '../lib/positions'
 import { supabase } from '../lib/supabase'
 import { FALLBACK_ERROR_MESSAGE, RPC_MESSAGES, rpcErrorCode } from './types'
 
-/** Columns `anon` actually holds a select grant for on `public.waitlist`
+/** Columns `anon` actually holds a select grant for on `sepak.waitlist`
  *  (see migration 0007): `claim_token` is deliberately excluded, mirroring
  *  `SLOT_COLUMNS` in ../data/sessions.ts. */
 export const WAITLIST_COLUMNS = 'id, session_id, player_name, positions, created_at'

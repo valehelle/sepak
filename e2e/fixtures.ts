@@ -27,9 +27,10 @@ const { url, serviceKey } = status()
 
 /** Service-role client used only by e2e fixtures to seed and tear down
  *  sessions. Read from the running local stack at import time, never
- *  written to disk and never referenced from `src/`. */
-export function admin(): SupabaseClient {
-  return createClient(url, serviceKey, { auth: { persistSession: false } })
+ *  written to disk and never referenced from `src/`. Targets `sepak`, same
+ *  as the app's own client in src/lib/supabase.ts. */
+export function admin(): SupabaseClient<any, 'sepak'> {
+  return createClient(url, serviceKey, { db: { schema: 'sepak' }, auth: { persistSession: false } })
 }
 
 export async function createTestSession(sessionNo: number): Promise<string> {

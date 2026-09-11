@@ -160,7 +160,7 @@ export function useSessionRealtime(sessionId: string | undefined): SessionRealti
       .channel(`session:${sessionId}`)
       .on(
         'postgres_changes',
-        { event: '*', schema: 'public', table: 'slots', filter: `session_id=eq.${sessionId}` },
+        { event: '*', schema: 'sepak', table: 'slots', filter: `session_id=eq.${sessionId}` },
         (payload: { new: unknown }) => {
           // A malformed payload must never take the page down; parseSlot throws
           // on anything unexpected and the event is simply dropped.
@@ -174,7 +174,7 @@ export function useSessionRealtime(sessionId: string | undefined): SessionRealti
       )
       .on(
         'postgres_changes',
-        { event: '*', schema: 'public', table: 'waitlist', filter: `session_id=eq.${sessionId}` },
+        { event: '*', schema: 'sepak', table: 'waitlist', filter: `session_id=eq.${sessionId}` },
         (payload: { eventType: string; new: unknown; old: unknown }) => {
           // Auto-fill deletes the placed entry's row in the same transaction
           // as the slot update, so this and the slots handler above are what

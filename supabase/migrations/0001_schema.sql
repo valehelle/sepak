@@ -1,4 +1,14 @@
-create table public.sessions (
+-- This app's dedicated schema: the project's `public` schema belongs to an
+-- unrelated app sharing this Supabase project, so every object this app owns
+-- lives in `sepak` instead. Nothing below may ever reference `public.`.
+create schema sepak;
+
+-- Without USAGE on the schema, PostgREST cannot see anything inside it --
+-- table-level and column-level grants alone are not enough. This is the
+-- single most likely thing to be missed when moving out of `public`.
+grant usage on schema sepak to anon, authenticated, service_role;
+
+create table sepak.sessions (
   id            uuid primary key default gen_random_uuid(),
   session_no    int  not null,
   title         text not null,
@@ -16,12 +26,12 @@ create table public.sessions (
   constraint sessions_venue_not_blank check (btrim(venue) <> '')
 );
 
-comment on column public.sessions.fee_myr is
+comment on column sepak.sessions.fee_myr is
   'Null or 0 means free; the Yuran line is then omitted from the UI and WhatsApp text.';
 
-create table public.slots (
+create table sepak.slots (
   id           uuid primary key default gen_random_uuid(),
-  session_id   uuid not null references public.sessions (id) on delete cascade,
+  session_id   uuid not null references sepak.sessions (id) on delete cascade,
   team         text not null check (team in ('A', 'B', 'C')),
   position     text not null check (position in
                  ('GK','LB','CB1','CB2','RB','DM','MC','AM','LWF','RWF','ST')),
@@ -37,13 +47,13 @@ create table public.slots (
   )
 );
 
-comment on column public.slots.position is
+comment on column sepak.slots.position is
   'CB1 and CB2 are distinct keys so the unique constraint can hold two centre-backs; both display as CB.';
-comment on column public.slots.claim_token is
+comment on column sepak.slots.claim_token is
   'The claiming device''s localStorage UUID. Presenting it is what authorises release or move.';
 
-create index slots_session_idx on public.slots (session_id);
-create index sessions_play_date_idx on public.sessions (play_date desc);
+create index slots_session_idx on sepak.slots (session_id);
+create index sessions_play_date_idx on sepak.sessions (play_date desc);
 
 -- Realtime pushes slot changes to every open session page.
-alter publication supabase_realtime add table public.slots;
+alter publication supabase_realtime add table sepak.slots;

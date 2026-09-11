@@ -98,7 +98,7 @@ function LoginForm() {
 }
 
 /** Shown when a session resolved (there is an email) but the account holds
- *  no row in public.admins -- signing up creates an account, but it grants
+ *  no row in sepak.admins -- signing up creates an account, but it grants
  *  nothing on its own under the allowlist model. */
 function NotAllowlisted() {
   return (

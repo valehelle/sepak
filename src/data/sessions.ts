@@ -16,7 +16,7 @@ export type NewSessionInput = {
 
 export type SessionPatch = Partial<Omit<NewSessionInput, 'sessionNo'>> & { sessionNo?: number }
 
-/** Columns `anon` actually holds a select grant for on `public.slots` (see
+/** Columns `anon` actually holds a select grant for on `sepak.slots` (see
  *  migration 0002): `claim_token` is deliberately excluded, so every read of
  *  `slots` — here and in tests — must name columns explicitly rather than
  *  use `select('*')`, which 401s for anon. Reads of `sessions` may keep

@@ -59,7 +59,7 @@ export default function SessionPage() {
   const { show } = useToast()
   const { role } = useAuthUser()
   // Being signed in is not enough any more -- a signed-in non-admin must not
-  // get the organiser override, only someone with a row in public.admins.
+  // get the organiser override, only someone with a row in sepak.admins.
   const isAdmin = role !== null
 
   const [selected, setSelected] = useState<SlotView | null>(null)

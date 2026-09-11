@@ -41,17 +41,20 @@ function readStatus(): Status {
 
 export const localStatus = readStatus()
 
-/** The anon client — the same privileges a real visitor has. */
-export function anonClient(): SupabaseClient {
+/** The anon client — the same privileges a real visitor has. Targets `sepak`,
+ *  same as the app's own client in src/lib/supabase.ts. */
+export function anonClient(): SupabaseClient<any, 'sepak'> {
   return createClient(localStatus.API_URL, localStatus.ANON_KEY, {
+    db: { schema: 'sepak' },
     auth: { persistSession: false, autoRefreshToken: false },
   })
 }
 
 /** Service role, used only to seed and tear down fixtures. Local-only, read
  *  from the running stack, never written to disk. */
-export function adminClient(): SupabaseClient {
+export function adminClient(): SupabaseClient<any, 'sepak'> {
   return createClient(localStatus.API_URL, localStatus.SERVICE_ROLE_KEY, {
+    db: { schema: 'sepak' },
     auth: { persistSession: false, autoRefreshToken: false },
   })
 }

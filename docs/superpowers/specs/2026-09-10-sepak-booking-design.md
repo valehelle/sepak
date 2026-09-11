@@ -40,13 +40,18 @@ application server.
 Browser (React SPA, static files)
   |
   |-- anon key ---> Supabase
-  |                   |- Postgres (sessions, slots)
+  |                   |- Postgres (sepak.sessions, sepak.slots)
   |                   |- Realtime (slot changes broadcast)
   |                   |- Auth (admin only)
   |                   `- RLS + RPCs (the security boundary)
   |
   `-- served from GitHub Pages
 ```
+
+This app owns nothing in `public`: the project's `public` schema belongs to
+an unrelated app that shares the same Supabase project (Supabase's Free plan
+caps active projects at two), so every table, function, trigger and policy
+below lives in a dedicated `sepak` schema instead.
 
 **Stack:** Vite + React + TypeScript, Tailwind CSS, `@supabase/supabase-js`.
 **Host:** GitHub Pages, public repo, deployed by GitHub Actions.
@@ -150,7 +155,7 @@ RLS is enabled on both tables and is the whole enforcement story.
 > ownership — defeating the whole "presenting the token authorises you"
 > model. What shipped instead is a column-level grant
 > (`grant select (id, session_id, team, position, player_name, claimed_at)
-> on public.slots to anon`, see `supabase/migrations/0002_rls.sql`) that
+> on sepak.slots to anon`, see `supabase/migrations/0002_rls.sql`) that
 > excludes `claim_token` entirely.
 
 `anon` has **no** direct write access, and cannot read `claim_token` off

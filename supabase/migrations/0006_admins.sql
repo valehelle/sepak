@@ -4,7 +4,13 @@
 -- therefore be safely opened (supabase/config.toml, [auth] enable_signup)
 -- in this same migration: a freshly-registered account still starts with no
 -- row here, hence no write access to anything.
-create table public.admins (
+--
+-- On a shared Supabase project, supabase/config.toml sets enable_signup to
+-- false anyway -- that decision is not about this app's own privileges (a
+-- fresh sign-up still starts with zero rows here, same as before), but about
+-- the *other* app's auth.users, which this project's auth.users is shared
+-- with. See the comment on [auth] enable_signup in config.toml.
+create table sepak.admins (
   email      text primary key,
   role       text not null check (role in ('super', 'admin')),
   added_by   text,
@@ -16,7 +22,7 @@ create table public.admins (
   constraint admins_email_lowercase check (email = lower(email))
 );
 
-comment on table public.admins is
+comment on table sepak.admins is
   'The allowlist: the only source of write authorisation for sessions/slots.
    A row''s mere existence grants admin; role = ''super'' additionally grants
    admin management.';
@@ -30,54 +36,54 @@ comment on table public.admins is
 -- Postgres does not fold it -- so every comparison below normalises with
 -- lower() against the already-lowercased `admins.email`.
 ---------------------------------------------------------------------------
-create or replace function public.is_admin()
+create or replace function sepak.is_admin()
 returns boolean
 language sql
 stable
 security definer
-set search_path = public, pg_temp
+set search_path = sepak, pg_temp
 as $$
   select exists (
-    select 1 from public.admins
+    select 1 from sepak.admins
      where email = lower(coalesce(auth.jwt() ->> 'email', ''))
   );
 $$;
 
-create or replace function public.is_super_admin()
+create or replace function sepak.is_super_admin()
 returns boolean
 language sql
 stable
 security definer
-set search_path = public, pg_temp
+set search_path = sepak, pg_temp
 as $$
   select exists (
-    select 1 from public.admins
+    select 1 from sepak.admins
      where email = lower(coalesce(auth.jwt() ->> 'email', ''))
        and role = 'super'
   );
 $$;
 
-revoke all on function public.is_admin()       from public;
-revoke all on function public.is_super_admin() from public;
+revoke all on function sepak.is_admin()       from public;
+revoke all on function sepak.is_super_admin() from public;
 -- Needed by the callers below: RLS policies evaluate under the querying
 -- role's own privileges even though these functions run SECURITY DEFINER,
 -- so `authenticated` needs EXECUTE to use them inside a USING/WITH CHECK.
-grant execute on function public.is_admin()       to authenticated;
-grant execute on function public.is_super_admin() to authenticated;
+grant execute on function sepak.is_admin()       to authenticated;
+grant execute on function sepak.is_super_admin() to authenticated;
 
 ---------------------------------------------------------------------------
 -- sessions_write / slots_write: replace "is authenticated" with
 -- "is on the allowlist". sessions_read/slots_read are untouched -- players
 -- still read without logging in.
 ---------------------------------------------------------------------------
-drop policy sessions_write on public.sessions;
-drop policy slots_write    on public.slots;
+drop policy sessions_write on sepak.sessions;
+drop policy slots_write    on sepak.slots;
 
-create policy sessions_write on public.sessions
-  for all to authenticated using (public.is_admin()) with check (public.is_admin());
+create policy sessions_write on sepak.sessions
+  for all to authenticated using (sepak.is_admin()) with check (sepak.is_admin());
 
-create policy slots_write on public.slots
-  for all to authenticated using (public.is_admin()) with check (public.is_admin());
+create policy slots_write on sepak.slots
+  for all to authenticated using (sepak.is_admin()) with check (sepak.is_admin());
 
 ---------------------------------------------------------------------------
 -- RLS on admins itself.
@@ -85,19 +91,19 @@ create policy slots_write on public.slots
 -- super admin may add, edit or remove rows -- a plain admin cannot promote
 -- itself or anyone else.
 ---------------------------------------------------------------------------
-alter table public.admins enable row level security;
+alter table sepak.admins enable row level security;
 
-create policy admins_select on public.admins
-  for select to authenticated using (public.is_admin());
+create policy admins_select on sepak.admins
+  for select to authenticated using (sepak.is_admin());
 
-create policy admins_insert on public.admins
-  for insert to authenticated with check (public.is_super_admin());
+create policy admins_insert on sepak.admins
+  for insert to authenticated with check (sepak.is_super_admin());
 
-create policy admins_update on public.admins
-  for update to authenticated using (public.is_super_admin()) with check (public.is_super_admin());
+create policy admins_update on sepak.admins
+  for update to authenticated using (sepak.is_super_admin()) with check (sepak.is_super_admin());
 
-create policy admins_delete on public.admins
-  for delete to authenticated using (public.is_super_admin());
+create policy admins_delete on sepak.admins
+  for delete to authenticated using (sepak.is_super_admin());
 
 -- Same discipline as 0002_rls.sql: revoke-all-then-regrant, because
 -- Supabase's default ACL hands anon (and authenticated) more than SELECT --
@@ -105,14 +111,14 @@ create policy admins_delete on public.admins
 -- TRUNCATE policy form to close that gap. admins is a list of the
 -- organisers' own email addresses, so anon gets nothing at all here, not
 -- even read: no grant is issued to it below.
-revoke all on public.admins from anon;
-revoke all on public.admins from authenticated;
+revoke all on sepak.admins from anon;
+revoke all on sepak.admins from authenticated;
 
-grant select, insert, update, delete on public.admins to authenticated;
+grant select, insert, update, delete on sepak.admins to authenticated;
 -- service_role: used by test fixtures/seeding, same as sessions/slots in
 -- 0005. It holds rolbypassrls, so these table grants are what it actually
 -- needs; RLS above never applies to it.
-grant select, insert, update, delete on public.admins to service_role;
+grant select, insert, update, delete on sepak.admins to service_role;
 
 ---------------------------------------------------------------------------
 -- Last-super protection: a BEFORE UPDATE OR DELETE FOR EACH ROW trigger.
@@ -122,10 +128,10 @@ grant select, insert, update, delete on public.admins to service_role;
 -- so a super admin can never delete or demote themselves (or be
 -- deleted/demoted) once they are the only one left.
 ---------------------------------------------------------------------------
-create or replace function public.prevent_last_super_removal()
+create or replace function sepak.prevent_last_super_removal()
 returns trigger
 language plpgsql
-set search_path = public, pg_temp
+set search_path = sepak, pg_temp
 as $$
 declare
   v_other_supers int;
@@ -142,7 +148,7 @@ begin
   end if;
 
   select count(*) into v_other_supers
-    from public.admins
+    from sepak.admins
    where role = 'super' and email <> OLD.email;
 
   if v_other_supers = 0 then
@@ -155,19 +161,19 @@ end;
 $$;
 
 create trigger admins_protect_last_super
-  before update or delete on public.admins
-  for each row execute function public.prevent_last_super_removal();
+  before update or delete on sepak.admins
+  for each row execute function sepak.prevent_last_super_removal();
 
 ---------------------------------------------------------------------------
 -- Seed. Idempotent so re-running this migration (or a future `db reset`)
 -- never duplicates or errors on an already-seeded allowlist.
 ---------------------------------------------------------------------------
-insert into public.admins (email, role)
+insert into sepak.admins (email, role)
 values ('hazmiirfan92@gmail.com', 'super')
 on conflict (email) do nothing;
 
 -- Keeps the pre-existing local login (used by tests/manual QA) working
 -- under the new allowlist model, as a plain admin rather than super.
-insert into public.admins (email, role, added_by)
+insert into sepak.admins (email, role, added_by)
 values ('admin@sepak.local', 'admin', 'hazmiirfan92@gmail.com')
 on conflict (email) do nothing;

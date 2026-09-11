@@ -33,7 +33,7 @@ async function fetchOwnRole(email: string): Promise<AdminRole | null> {
 }
 
 /** Sign-ups are now open (supabase/config.toml, [auth] enable_signup): the
- *  allowlist in public.admins, not account existence, is what authorises
+ *  allowlist in sepak.admins, not account existence, is what authorises
  *  anything. `role` is therefore fetched separately from the session -- it
  *  is null both when signed out and when signed in but not on the
  *  allowlist, and callers that need to tell those two apart also check

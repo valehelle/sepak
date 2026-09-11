@@ -10,7 +10,11 @@ enabled = true
 port = 54321
 # Schemas to expose in your API. Tables, views and stored procedures in this schema will get API
 # endpoints. `public` and `graphql_public` schemas are included by default.
-schemas = ["public", "graphql_public"]
+# `sepak` is this app's own dedicated schema -- this project's `public` belongs
+# to an unrelated app sharing it, so every object this app owns lives in
+# `sepak` instead, and it must be listed here or PostgREST will not expose any
+# of it.
+schemas = ["public", "graphql_public", "sepak"]
 # Extra schemas to add to the search_path of every request.
 extra_search_path = ["public", "extensions"]
 # The maximum number of rows returns from a view, table, or stored procedure. Limits payload size
@@ -173,13 +177,19 @@ enable_refresh_token_rotation = true
 # Requires enable_refresh_token_rotation = true.
 refresh_token_reuse_interval = 10
 # Allow/disallow new user signups to your project.
-# Now safe to leave open: `authenticated` no longer holds unrestricted
-# access to sessions/slots (migration 0006_admins.sql) -- write access comes
-# only from a row in public.admins, so a fresh sign-up starts with zero
-# privileges. Adding a second admin therefore no longer needs the
-# service_role-only admin API: the organiser adds the email to public.admins
-# and the new user just registers a password for it via Daftar.
-enable_signup = true
+# Was safe to leave open on a dedicated project: `authenticated` no longer
+# holds unrestricted access to sessions/slots (migration 0006_admins.sql) --
+# write access comes only from a row in sepak.admins, so a fresh sign-up
+# started with zero privileges here.
+#
+# Now false because this project's `auth.users` is SHARED with an unrelated
+# app that owns `public` -- a fresh sign-up becomes an `authenticated` user
+# there too, and sepak.admins gates only this app's own tables, not that
+# app's. The risk an open sign-up would create is no longer to this app, it
+# is to the other one, so it must stay closed here regardless of this app's
+# own allowlist. Admin logins are created from the dashboard instead (see
+# README.md's deploy instructions).
+enable_signup = false
 # Allow/disallow anonymous sign-ins to your project.
 enable_anonymous_sign_ins = false
 # Allow/disallow testing manual linking of accounts

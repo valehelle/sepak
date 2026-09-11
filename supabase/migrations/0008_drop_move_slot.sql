@@ -5,10 +5,10 @@
 -- actions; there is no combined move.
 --
 -- fill_from_waitlist (0007_waitlist.sql) fires on any player_name
--- non-null -> null transition on public.slots, so it needed no change here:
+-- non-null -> null transition on sepak.slots, so it needed no change here:
 -- move_slot was never itself the source of that path-independence, it was
 -- simply one of the three ways a slot could vacate. With move gone there
 -- are two -- release_slot, and the organiser's direct admin-clear update --
 -- and the trigger's WHEN clause covers both exactly as it always did.
 ---------------------------------------------------------------------------
-drop function if exists public.move_slot(uuid, uuid, uuid);
+drop function if exists sepak.move_slot(uuid, uuid, uuid);
