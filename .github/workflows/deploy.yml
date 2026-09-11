@@ -21,6 +21,10 @@ jobs:
   # concurrency slot and cancel each other. Scoping by ref keeps the
   # original intent (a newer push to the *same* ref supersedes an
   # in-progress build/deploy for it) without cross-ref collisions.
+  # Branch comparisons below use github.event.repository.default_branch
+  # rather than a hardcoded name: this repo's default is `master`, and
+  # hardcoding `main` skipped the deploy job silently -- a green run that
+  # published nothing.
   build:
     runs-on: ubuntu-latest
     concurrency:
@@ -61,9 +65,9 @@ jobs:
       # Only needed to feed `deploy`, which itself only runs on push to
       # main -- skipped on pull_request so a fork PR isn't tripped up by
       # Pages/OIDC permissions it was never going to use.
-      - if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+      - if: github.event_name == 'push' && github.ref_name == github.event.repository.default_branch
         uses: actions/configure-pages@v5
-      - if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+      - if: github.event_name == 'push' && github.ref_name == github.event.repository.default_branch
         uses: actions/upload-pages-artifact@v3
         with:
           path: dist
@@ -75,7 +79,7 @@ jobs:
   # `needs`/dependents: nothing here gates `deploy`, so a flaky container
   # start can never block a Pages deploy that would otherwise have shipped.
   db-tests:
-    if: github.event_name == 'pull_request' || (github.event_name == 'push' && github.ref == 'refs/heads/main')
+    if: github.event_name == 'pull_request' || (github.event_name == 'push' && github.ref_name == github.event.repository.default_branch)
     runs-on: ubuntu-latest
     # Its own group, separate from the Pages build/deploy group above: a
     # newer push on the same PR/branch should cancel its own stale db-tests
@@ -118,7 +122,7 @@ jobs:
 
   deploy:
     needs: build
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    if: github.event_name == 'push' && github.ref_name == github.event.repository.default_branch
     runs-on: ubuntu-latest
     concurrency:
       group: pages-${{ github.ref }}
