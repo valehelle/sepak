@@ -26,26 +26,39 @@ pnpm dev
 
 ## Deploying
 
-Sepak lives in its own `sepak` schema so it can share one Supabase project
-with an unrelated app that already owns `public` (Supabase's Free plan caps
-active projects at two). This app owns nothing in `public` and must never be
-given anything there.
+Sepak needs **its own Supabase project**, not a schema inside someone else's.
+
+It lives in a dedicated `sepak` schema rather than `public`, which keeps its
+objects clearly delineated — but a schema is not an isolation boundary. One
+Supabase project has **one anon key and one `auth.users` pool**, and the anon
+key necessarily ships inside this app's public JavaScript bundle. So anyone
+who opens devtools on the booking page can call `GET /rest/v1/` with that key
+and enumerate every table and column in the whole project, and anyone given
+an organiser login becomes an `authenticated` user of that project — which is
+enough to read any other app there whose policies trust `authenticated`
+(the common default). Both were demonstrated, not assumed.
+
+Share a project only if every app in it is yours *and* you accept that its
+users can reach the others.
 
 1. Create (or reuse) a Supabase project. Apply migrations: `supabase link`
    then `supabase db push` — the first migration creates the `sepak` schema
    itself, so no manual schema-creation step is needed first.
 2. In the dashboard, go to **Settings → API → Exposed schemas** and add
-   `sepak` alongside whatever the other app already exposes. Without this,
-   PostgREST will not serve any of this app's tables or functions, even
-   though the migrations applied cleanly.
-3. **Keep sign-ups disabled** (Authentication → Providers → Email, or
-   `[auth] enable_signup` if you manage this project's config in code). This
-   matters more than it would for a dedicated project: `auth.users` here is
-   **shared with the other app**, so an open sign-up would let a stranger
-   register themselves as an `authenticated` user against that app too, not
-   just this one. Create the organiser account(s) from the dashboard
-   instead, then add their email to `sepak.admins` (see
-   `supabase/migrations/0006_admins.sql`).
+   `sepak`. **Do not skip this.** Without it PostgREST serves none of this
+   app's tables or functions even though the migrations applied cleanly — the
+   site loads and then every request 404s, which looks like a broken app
+   rather than a missing setting.
+3. **Sign-ups are disabled in the committed config**, and each organiser's
+   login is created from the dashboard (Authentication → Users), then their
+   email added to `sepak.admins` (see
+   `supabase/migrations/0006_admins.sql`). Authorisation comes from that
+   allowlist, so a login on its own grants nothing.
+
+   You *may* enable sign-ups on a dedicated project if you would rather
+   admins set their own passwords — the allowlist still gates everything, and
+   a stranger who registers gets no access. Do not enable them on a project
+   shared with another app, for the reason above.
 4. Add repository *variables* (not secrets) `VITE_SUPABASE_URL` and
    `VITE_SUPABASE_ANON_KEY`. They ship inside the public bundle by design.
 5. Enable Pages with the GitHub Actions source. Push to `main`.
