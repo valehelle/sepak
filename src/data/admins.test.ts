@@ -1,4 +1,11 @@
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
+
+// `./admins` pulls in the Supabase client, which throws at module load when
+// VITE_SUPABASE_URL is absent. These cases exercise the pure parser only, so
+// the client is stubbed -- otherwise the suite fails to load anywhere without
+// a .env.local, which is exactly what happened in CI.
+vi.mock('../lib/supabase', () => ({ supabase: {} }))
+
 import { parseAdmin } from './admins'
 
 const ADMIN_ROW = {
