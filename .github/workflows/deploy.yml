@@ -2,7 +2,10 @@ name: Deploy
 
 on:
   push:
-    branches: [main]
+    # Both names on purpose: this repo's default branch is `master`, and a
+    # workflow watching only `main` never fires on a merge, silently. Listing
+    # both also survives a later rename.
+    branches: [main, master]
   pull_request:
   workflow_dispatch:
 
