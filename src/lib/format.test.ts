@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { formatFee, formatPlayDate, formatStartTime } from './format'
+import { formatEventTime, formatFee, formatPlayDate, formatStartTime } from './format'
 
 describe('formatPlayDate', () => {
   it('formats with the Malay day name', () => {
@@ -54,5 +54,23 @@ describe('formatFee', () => {
   it('treats zero and null as free', () => {
     expect(formatFee(0)).toBeNull()
     expect(formatFee(null)).toBeNull()
+  })
+})
+
+describe('formatEventTime', () => {
+  // Built with the local-time constructor on both sides, so the assertion
+  // holds wherever the test runs -- the formatter is deliberately local.
+  it('reads as a date and a wall-clock time', () => {
+    const evening = new Date(2026, 8, 17, 20, 14)
+    expect(formatEventTime(evening.toISOString())).toBe('17 Sep, 8:14 PM')
+  })
+
+  it('handles midnight and noon the way people say them', () => {
+    expect(formatEventTime(new Date(2026, 0, 1, 0, 5).toISOString())).toBe('1 Jan, 12:05 AM')
+    expect(formatEventTime(new Date(2026, 11, 31, 12, 0).toISOString())).toBe('31 Dis, 12:00 PM')
+  })
+
+  it('throws on a timestamp it cannot read', () => {
+    expect(() => formatEventTime('not a date')).toThrow(/invalid timestamp/)
   })
 })

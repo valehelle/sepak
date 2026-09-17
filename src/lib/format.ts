@@ -36,3 +36,20 @@ export function formatFee(fee: number | null): string | null {
   const amount = Number.isInteger(fee) ? String(fee) : fee.toFixed(2)
   return `RM ${amount}/pax`
 }
+
+/** Malay month abbreviations, matching scripts/sessionPages.mjs. */
+const MONTHS = ['Jan', 'Feb', 'Mac', 'Apr', 'Mei', 'Jun', 'Jul', 'Ogo', 'Sep', 'Okt', 'Nov', 'Dis'] as const
+
+/** A log line's timestamp, in the reader's own timezone: "17 Sep, 8:14 PM".
+ *  Local rather than UTC on purpose -- the organiser reads this against the
+ *  evening they remember, not against Greenwich. */
+export function formatEventTime(iso: string): string {
+  const at = new Date(iso)
+  if (Number.isNaN(at.getTime())) throw new Error(`invalid timestamp: ${iso}`)
+
+  const month = MONTHS[at.getMonth()]
+  if (month === undefined) throw new Error(`invalid timestamp: ${iso}`)
+
+  const minute = String(at.getMinutes()).padStart(2, '0')
+  return `${at.getDate()} ${month}, ${formatStartTime(`${at.getHours()}:${minute}`)}`
+}
