@@ -128,4 +128,16 @@ describe('buildWhatsAppMessage', () => {
     )
     expect(message.endsWith('\n\nSenarai Tunggu\n1. Faiz (Semua kecuali GK)\n2. Nabil (MC, AM)')).toBe(true)
   })
+
+  describe('shareUrl', () => {
+    it('ends the message with the session link when one is given', () => {
+      const message = buildWhatsAppMessage(input({ shareUrl: 'https://valehelle.github.io/sepak/s/abc' }))
+      expect(message.endsWith('\n\nhttps://valehelle.github.io/sepak/s/abc')).toBe(true)
+    })
+
+    it('changes nothing when no link is given', () => {
+      expect(buildWhatsAppMessage(input())).toBe(EXPECTED)
+      expect(buildWhatsAppMessage(input({ shareUrl: '' }))).toBe(EXPECTED)
+    })
+  })
 })

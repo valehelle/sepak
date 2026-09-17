@@ -20,7 +20,7 @@ test('auto-fill reaches a second browser over realtime, without a reload', async
   const pageOne = await one.newPage()
   const pageTwo = await two.newPage()
 
-  await pageOne.goto(`s/${sessionId}`)
+  await pageOne.goto(`#/s/${sessionId}`)
   await pageOne.getByRole('button', { name: /^GK/ }).first().click()
   await pageOne.getByLabel('Nama').fill('Hazmi')
   await pageOne.getByLabel('Nombor telefon').fill('012-345 6789')
@@ -28,7 +28,7 @@ test('auto-fill reaches a second browser over realtime, without a reload', async
   await expect(pageOne.getByText('33/33 penuh')).toBeVisible()
 
   // The session is now completely full -- the second browser has to queue.
-  await pageTwo.goto(`s/${sessionId}`)
+  await pageTwo.goto(`#/s/${sessionId}`)
   await expect(pageTwo.getByText('33/33 penuh')).toBeVisible()
   await pageTwo.getByRole('button', { name: 'Sertai senarai tunggu' }).click()
   await pageTwo.getByLabel('Nama').fill('Isaac')

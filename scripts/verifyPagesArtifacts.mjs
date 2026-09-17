@@ -1,8 +1,10 @@
-// Verifies the two things GitHub Pages needs that `vite preview` never
-// exercises: `dist/404.html` (Pages has no SPA rewrite rule, so this is what
-// makes a pasted session link survive a cold load or a refresh) and
-// `dist/.nojekyll` (without it, Pages' Jekyll processing can mangle or drop
-// files under `_`-prefixed paths). Run after `pnpm build`.
+// Verifies the things GitHub Pages needs that `vite preview` never
+// exercises: `dist/404.html` (Pages has no SPA rewrite rule; since routing
+// moved into the URL fragment this file is the shim that keeps links shared
+// before that change working), `dist/.nojekyll` (without it, Pages' Jekyll
+// processing can mangle or drop files under `_`-prefixed paths), and the
+// Open Graph tags plus the image they name, which are what make a shared
+// link render as a card rather than a bare URL. Run after `pnpm build`.
 //
 // Invoked both from CI (.github/workflows/deploy.yml, right after the build
 // step) and locally via `pnpm verify:pages`, so a broken or dropped
@@ -36,10 +38,27 @@ if (!(await exists(indexPath))) {
 } else if (!(await exists(notFoundPath))) {
   failures.push(`missing ${notFoundPath}`)
 } else {
-  const [index, notFound] = await Promise.all([readFile(indexPath, 'utf8'), readFile(notFoundPath, 'utf8')])
-  if (index !== notFound) {
-    failures.push(`${notFoundPath} does not match ${indexPath} -- postbuild's 404.html copy is stale or was skipped`)
+  const notFound = await readFile(notFoundPath, 'utf8')
+  // The shim's whole job: turn a pre-hash path into the fragment form.
+  if (!notFound.includes("location.replace(base + '#/' + rest")) {
+    failures.push(`${notFoundPath} is not the hash redirect shim -- postbuild was skipped or changed`)
   }
+}
+
+// The share card: tags without the image, or an image the tags do not name,
+// both render as a bare link in WhatsApp.
+if (await exists(indexPath)) {
+  const index = await readFile(indexPath, 'utf8')
+  const image = index.match(/<meta property="og:image" content="([^"]+)"/)
+  if (image === null) {
+    failures.push(`${indexPath} has no og:image tag`)
+  } else {
+    const file = image[1].split('/').pop()
+    if (!(await exists(resolve(dist, file)))) {
+      failures.push(`og:image names ${file}, which is missing from ${dist}`)
+    }
+  }
+  if (!index.includes('twitter:card')) failures.push(`${indexPath} has no twitter:card tag`)
 }
 
 if (failures.length > 0) {
@@ -48,4 +67,4 @@ if (failures.length > 0) {
   process.exit(1)
 }
 
-console.log('verify:pages: dist/.nojekyll present, dist/404.html matches dist/index.html')
+console.log('verify:pages: .nojekyll present, 404.html is the hash redirect shim, og:image present and shipped')

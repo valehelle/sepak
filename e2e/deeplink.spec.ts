@@ -13,12 +13,15 @@ test.afterEach(async () => {
 
 test('a pasted session link opens directly', async ({ page }) => {
   // This is the WhatsApp case: a cold navigation straight to a nested route.
-  await page.goto(`s/${sessionId}`)
+  // The route lives in the fragment so the shared link is really the site
+  // root, which GitHub Pages answers with a 200 and the Open Graph tags --
+  // a 404 would render as a bare URL in the chat (see src/main.tsx).
+  await page.goto(`#/s/${sessionId}`)
   await expect(page.getByText('E2E Geng')).toBeVisible()
 })
 
 test('refreshing a session page keeps it working', async ({ page }) => {
-  await page.goto(`s/${sessionId}`)
+  await page.goto(`#/s/${sessionId}`)
   await expect(page.getByText('E2E Geng')).toBeVisible()
   await page.reload()
   await expect(page.getByText('E2E Geng')).toBeVisible()
@@ -26,6 +29,6 @@ test('refreshing a session page keeps it working', async ({ page }) => {
 })
 
 test('an unknown session id says so instead of breaking', async ({ page }) => {
-  await page.goto('s/11111111-1111-4111-8111-999999999999')
+  await page.goto('#/s/11111111-1111-4111-8111-999999999999')
   await expect(page.getByText('Sesi tak dijumpai.')).toBeVisible()
 })

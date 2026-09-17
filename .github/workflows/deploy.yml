@@ -8,6 +8,12 @@ on:
     branches: [main, master]
   pull_request:
   workflow_dispatch:
+  # Sessions are created in the app, not in git, so a new one has no share
+  # preview until a build writes its page (scripts/sessionPages.mjs). This
+  # rebuild keeps that gap to about half an hour without anyone pushing.
+  # Free on a public repository, and the build is under a minute.
+  schedule:
+    - cron: '*/30 * * * *'
 
 permissions:
   contents: read
@@ -62,12 +68,13 @@ jobs:
       # of shipping a site where every pasted session link 404s.
       - run: pnpm verify:pages
 
-      # Only needed to feed `deploy`, which itself only runs on push to
-      # main -- skipped on pull_request so a fork PR isn't tripped up by
-      # Pages/OIDC permissions it was never going to use.
-      - if: github.event_name == 'push' && github.ref_name == github.event.repository.default_branch
+      # Only needed to feed `deploy` -- skipped on pull_request so a fork PR
+      # isn't tripped up by Pages/OIDC permissions it was never going to use.
+      # Schedule and manual runs always sit on the default branch, so they
+      # need no ref check of their own.
+      - if: ${{ github.event_name == 'schedule' || github.event_name == 'workflow_dispatch' || (github.event_name == 'push' && github.ref_name == github.event.repository.default_branch) }}
         uses: actions/configure-pages@v5
-      - if: github.event_name == 'push' && github.ref_name == github.event.repository.default_branch
+      - if: ${{ github.event_name == 'schedule' || github.event_name == 'workflow_dispatch' || (github.event_name == 'push' && github.ref_name == github.event.repository.default_branch) }}
         uses: actions/upload-pages-artifact@v3
         with:
           path: dist
@@ -122,7 +129,7 @@ jobs:
 
   deploy:
     needs: build
-    if: github.event_name == 'push' && github.ref_name == github.event.repository.default_branch
+    if: ${{ github.event_name == 'schedule' || github.event_name == 'workflow_dispatch' || (github.event_name == 'push' && github.ref_name == github.event.repository.default_branch) }}
     runs-on: ubuntu-latest
     concurrency:
       group: pages-${{ github.ref }}

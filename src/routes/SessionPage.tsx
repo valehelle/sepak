@@ -96,6 +96,9 @@ export default function SessionPage() {
       teamNames: session.teamNames,
       slots: slots.map(({ team, position, playerName }) => ({ team, position, playerName })),
       waitlist: waitlist.map(({ playerName, positions }) => ({ playerName, positions })),
+      // The path form, not the fragment one in the address bar: only the
+      // path has a page of its own carrying this session's Open Graph tags.
+      shareUrl: `${window.location.origin}${import.meta.env.BASE_URL}s/${session.id}`,
     })
   }, [session, slots, waitlist])
 
@@ -230,7 +233,7 @@ export default function SessionPage() {
     return (
       <div className="space-y-3 p-6">
         <p className="font-sans text-[15px] text-white/70">Sesi tak dijumpai.</p>
-        <Link to="/" className="text-turf-lit underline">Balik ke senarai sesi</Link>
+        <Link to="/" className="text-turf-lit underline">Balik ke laman utama</Link>
       </div>
     )
   }

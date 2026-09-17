@@ -96,6 +96,17 @@ device check alone was not enough -- a second browser mints a fresh token --
 so the number is the real guard. Duplicate names stay allowed, since two
 players really are sometimes both called Amir.
 
+Links are shared as `…/sepak/s/<id>`, a real page written at build time by
+`scripts/sessionPages.mjs` carrying that session's own Open Graph title and
+a description led by the date. WhatsApp and the rest never run the app's
+JavaScript, so a single-page app otherwise has exactly one preview for every
+session. The page hands a person straight to the app, which routes on the
+URL fragment: GitHub Pages answers an unknown path with a 404 status, and a
+404 renders as a bare link in a chat, so the app's own routes live after a
+`#` where the served page is always the site root. A session created since
+the last build has no page yet and falls back to the site-wide card; the
+deploy workflow rebuilds every half hour to close that gap.
+
 The index page lists nothing. Sessions are reached by their own link, shared
 in the group chat; organisers see the full list on `/admin`. Note this is
 about the page, not the data: `sepak.sessions` is still world-readable

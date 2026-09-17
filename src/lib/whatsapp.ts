@@ -24,6 +24,12 @@ export type WhatsAppInput = {
   // Optional and defaulting to empty so every existing call site -- and the
   // message for a session with no queue -- stays byte-identical.
   waitlist?: readonly WhatsAppWaitlistEntry[]
+  /** The session's own path URL. This is the link the group should get:
+   *  it is a real page carrying that session's date and venue in its Open
+   *  Graph tags (scripts/sessionPages.mjs), so the chat renders a card for
+   *  this fixture rather than the site-wide one. Optional, so a caller
+   *  without an origin still produces the message unchanged. */
+  shareUrl?: string
 }
 
 type Roster = Map<string, string | null>
@@ -73,6 +79,7 @@ export function buildWhatsAppMessage(input: WhatsAppInput): string {
 
   const teams = TEAM_KEYS.map((team) => teamBlock(team, input.teamNames[team], roster))
   const waitlist = waitlistBlock(input.waitlist ?? [])
+  const link = input.shareUrl === undefined || input.shareUrl === '' ? [] : [input.shareUrl]
 
-  return [header, ...teams, ...(waitlist === null ? [] : [waitlist])].join('\n\n')
+  return [header, ...teams, ...(waitlist === null ? [] : [waitlist]), ...link].join('\n\n')
 }
