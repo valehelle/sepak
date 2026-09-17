@@ -177,19 +177,20 @@ enable_refresh_token_rotation = true
 # Requires enable_refresh_token_rotation = true.
 refresh_token_reuse_interval = 10
 # Allow/disallow new user signups to your project.
-# Was safe to leave open on a dedicated project: `authenticated` no longer
-# holds unrestricted access to sessions/slots (migration 0006_admins.sql) --
-# write access comes only from a row in sepak.admins, so a fresh sign-up
-# started with zero privileges here.
+# Open on purpose. This is a dedicated project (nothing else shares its
+# auth.users), and a fresh sign-up holds zero privileges: write access comes
+# only from a row in sepak.admins (migration 0006_admins.sql). New organisers
+# therefore register themselves at /admin after a super admin allowlists
+# their email -- no dashboard step per person.
 #
-# Now false because this project's `auth.users` is SHARED with an unrelated
-# app that owns `public` -- a fresh sign-up becomes an `authenticated` user
-# there too, and sepak.admins gates only this app's own tables, not that
-# app's. The risk an open sign-up would create is no longer to this app, it
-# is to the other one, so it must stay closed here regardless of this app's
-# own allowlist. Admin logins are created from the dashboard instead (see
-# README.md's deploy instructions).
-enable_signup = false
+# Pair with [auth.email].enable_confirmations = false below, and make sure
+# the HOSTED project matches (Authentication -> Sign In / Providers -> Email
+# -> "Confirm email" off). With confirmation on, sign-up creates an account
+# with no session, and the built-in mailer refuses to deliver the
+# confirmation to anyone outside the Supabase team, so the account is dead
+# on arrival. `supabase config push` would sync this but needs org-level
+# privileges the CLI login may lack.
+enable_signup = true
 # Allow/disallow anonymous sign-ins to your project.
 enable_anonymous_sign_ins = false
 # Allow/disallow testing manual linking of accounts
@@ -245,6 +246,7 @@ enable_signup = true
 # addresses. If disabled, only the new email is required to confirm.
 double_confirm_changes = true
 # If enabled, users need to confirm their email address before signing in.
+# Must be false, here and on the hosted project -- see [auth].enable_signup.
 enable_confirmations = false
 # If enabled, users will need to reauthenticate or have logged in recently to change their password.
 secure_password_change = false

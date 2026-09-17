@@ -24,6 +24,20 @@ const DEFAULTS: SessionFormValues = {
   teamCName: 'Kuning',
 }
 
+/** Supabase error strings the form can explain better than "Cuba lagi".
+ *  Matched by substring: GoTrue's messages are stable English prose, not
+ *  codes, at the supabase-js level. */
+function loginErrorMessage(message: string, mode: 'signin' | 'signup'): string {
+  if (message.includes('Invalid login credentials')) return 'E-mel atau kata laluan salah.'
+  if (message.includes('Email not confirmed')) {
+    return 'Akaun ini belum disahkan. Admin utama perlu matikan pengesahan e-mel dalam Supabase.'
+  }
+  if (message.includes('already registered')) return 'E-mel ini sudah berdaftar. Masuk sahaja.'
+  if (message.includes('Password should be at least')) return 'Kata laluan sekurang-kurangnya 6 aksara.'
+  if (message.includes('is invalid')) return 'E-mel tidak sah.'
+  return mode === 'signup' ? 'Gagal mendaftar. Cuba lagi.' : 'Gagal masuk. Cuba lagi.'
+}
+
 function LoginForm() {
   const { show } = useToast()
   const [mode, setMode] = useState<'signin' | 'signup'>('signin')
@@ -35,21 +49,22 @@ function LoginForm() {
     setBusy(true)
     try {
       if (mode === 'signup') {
-        await signUp(email, password)
-        show('Akaun dicipta. Anda akan dimasukkan secara automatik.')
+        const { signedIn } = await signUp(email, password)
+        if (signedIn) {
+          show('Akaun dicipta. Anda dimasukkan sekarang.')
+        } else {
+          // The account exists but is unusable until a confirmation email
+          // that will never arrive is clicked -- do not call that success.
+          show(
+            'Akaun dicipta tetapi belum aktif: pengesahan e-mel masih dihidupkan dalam Supabase. Admin utama perlu matikannya.',
+            'error',
+          )
+        }
       } else {
         await signIn(email, password)
       }
     } catch (cause: unknown) {
-      const message = cause instanceof Error ? cause.message : ''
-      show(
-        message.includes('Invalid login credentials')
-          ? 'E-mel atau kata laluan salah.'
-          : mode === 'signup'
-            ? 'Gagal mendaftar. Cuba lagi.'
-            : 'Gagal masuk. Cuba lagi.',
-        'error',
-      )
+      show(loginErrorMessage(cause instanceof Error ? cause.message : '', mode), 'error')
     } finally {
       setBusy(false)
     }

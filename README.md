@@ -49,16 +49,20 @@ users can reach the others.
    app's tables or functions even though the migrations applied cleanly — the
    site loads and then every request 404s, which looks like a broken app
    rather than a missing setting.
-3. **Sign-ups are disabled in the committed config**, and each organiser's
-   login is created from the dashboard (Authentication → Users), then their
-   email added to `sepak.admins` (see
-   `supabase/migrations/0006_admins.sql`). Authorisation comes from that
-   allowlist, so a login on its own grants nothing.
+3. In the dashboard, go to **Authentication → Sign In / Providers → Email**
+   and turn **Confirm email off**. Sign-ups are open: a new organiser
+   registers themselves at `/admin` ("Admin baru? Daftar di sini") once a
+   super admin has added their email on the admin page. Authorisation comes
+   from that allowlist (`sepak.admins`, migration `0006_admins.sql`), so a
+   stranger who registers gets no access.
 
-   You *may* enable sign-ups on a dedicated project if you would rather
-   admins set their own passwords — the allowlist still gates everything, and
-   a stranger who registers gets no access. Do not enable them on a project
-   shared with another app, for the reason above.
+   With Confirm email left on, registration silently breaks: the account is
+   created with no session, and Supabase's built-in mailer refuses to deliver
+   the confirmation to anyone outside the project's team. The form now says
+   so instead of claiming success, but the fix is the dashboard toggle.
+
+   Do not share the project with another app: an open sign-up would also
+   create a user in that app's `auth.users`.
 4. Add repository *variables* (not secrets) `VITE_SUPABASE_URL` and
    `VITE_SUPABASE_ANON_KEY`. They ship inside the public bundle by design.
 5. Enable Pages with the GitHub Actions source. Push to `main`.

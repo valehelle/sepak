@@ -102,14 +102,49 @@ describe('Admin', () => {
     await waitFor(() => expect(screen.getByRole('status').textContent).toContain('E-mel atau kata laluan salah.'))
   })
 
-  it('signs up through the Daftar toggle', async () => {
-    signUp.mockResolvedValue(undefined)
+  async function register(email = 'baru@example.com', password = 'rahsia123') {
     view()
     await userEvent.click(screen.getByRole('button', { name: /Daftar di sini/ }))
+    await userEvent.type(screen.getByLabelText('E-mel'), email)
+    await userEvent.type(screen.getByLabelText('Kata laluan'), password)
+    await userEvent.click(screen.getByRole('button', { name: 'Daftar' }))
+  }
+
+  it('signs up through the Daftar toggle', async () => {
+    signUp.mockResolvedValue({ signedIn: true })
+    await register()
+    expect(signUp).toHaveBeenCalledWith('baru@example.com', 'rahsia123')
+    await waitFor(() => expect(screen.getByRole('status').textContent).toContain('Akaun dicipta.'))
+  })
+
+  it('does not claim success when sign-up created an account it cannot sign in to', async () => {
+    // Hosted project with "Confirm email" still on: the account exists but
+    // there is no session and no email will ever arrive. Say so.
+    signUp.mockResolvedValue({ signedIn: false })
+    await register()
+    await waitFor(() => expect(screen.getByRole('status').textContent).toContain('pengesahan e-mel'))
+    expect(screen.getByRole('status').textContent).not.toContain('Akaun dicipta.')
+  })
+
+  it('explains an unconfirmed account on sign-in instead of a generic failure', async () => {
+    signIn.mockRejectedValue(new Error('Email not confirmed'))
+    view()
     await userEvent.type(screen.getByLabelText('E-mel'), 'baru@example.com')
     await userEvent.type(screen.getByLabelText('Kata laluan'), 'rahsia123')
-    await userEvent.click(screen.getByRole('button', { name: 'Daftar' }))
-    expect(signUp).toHaveBeenCalledWith('baru@example.com', 'rahsia123')
+    await userEvent.click(screen.getByRole('button', { name: 'Masuk' }))
+    await waitFor(() => expect(screen.getByRole('status').textContent).toContain('belum disahkan'))
+  })
+
+  it('tells a returning admin to sign in rather than register again', async () => {
+    signUp.mockRejectedValue(new Error('User already registered'))
+    await register()
+    await waitFor(() => expect(screen.getByRole('status').textContent).toContain('sudah berdaftar'))
+  })
+
+  it('surfaces a too-short password and an invalid email in plain words', async () => {
+    signUp.mockRejectedValue(new Error('Password should be at least 6 characters.'))
+    await register('baru@example.com', 'abc')
+    await waitFor(() => expect(screen.getByRole('status').textContent).toContain('6 aksara'))
   })
 
   it('tells a signed-in non-admin their account is not on the allowlist', () => {

@@ -7,9 +7,15 @@ export async function signIn(email: string, password: string): Promise<void> {
   if (error !== null) throw new Error(error.message)
 }
 
-export async function signUp(email: string, password: string): Promise<void> {
-  const { error } = await supabase.auth.signUp({ email, password })
+/** `signedIn` is whether the project handed back a session. It does with
+ *  "Confirm email" off (the configuration this app requires -- see
+ *  supabase/config.toml, [auth].enable_signup); with it on, sign-up creates
+ *  an account nobody can use, since the built-in mailer only delivers to the
+ *  Supabase team. The caller must not announce success on `false`. */
+export async function signUp(email: string, password: string): Promise<{ signedIn: boolean }> {
+  const { data, error } = await supabase.auth.signUp({ email, password })
   if (error !== null) throw new Error(error.message)
+  return { signedIn: data.session !== null }
 }
 
 export async function signOut(): Promise<void> {
