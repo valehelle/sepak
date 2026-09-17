@@ -7,6 +7,9 @@ declare
   v_st uuid;
   v_token uuid := gen_random_uuid();
   v_intruder uuid := gen_random_uuid();
+  -- A third device: since 0010_one_booking_per_person.sql a token may hold
+  -- only one slot per session, so the second claim below needs its own.
+  v_zul uuid := gen_random_uuid();
   v_count int;
   v_claimed sepak.slots;
 begin
@@ -90,7 +93,7 @@ begin
   assert v_claimed.claim_token = v_token, 'claim should store the token';
 
   begin
-    perform sepak.claim_slot(v_gk, 'Intruder', '60123456789', v_intruder);
+    perform sepak.claim_slot(v_gk, 'Intruder', '60122200002', v_intruder);
     raise exception 'claiming an occupied slot must fail';
   exception when others then
     assert sqlerrm = 'slot_taken', format('expected slot_taken, got %s', sqlerrm);
@@ -118,19 +121,21 @@ begin
   end;
 
   -- names are trimmed on the way in
-  perform sepak.claim_slot(v_st, '  Zulazhar  ', '60123456789', v_token);
+  perform sepak.claim_slot(v_st, '  Zulazhar  ', '60122200003', v_zul);
   assert (select player_name from sepak.slots where id = v_st) = 'Zulazhar', 'claim should trim the name';
 
   ---------------------------------------------------------------------------
   -- my_slot_ids: how a device discovers its own slots now that claim_token
   -- is no longer directly readable -- it must present the token, not read it.
   ---------------------------------------------------------------------------
-  assert (select count(*) from sepak.my_slot_ids(v_session_id, v_token)) = 2,
-    'my_slot_ids should return both slots claimed with this token';
+  assert (select count(*) from sepak.my_slot_ids(v_session_id, v_token)) = 1,
+    'one slot per device, so this token holds exactly one';
   assert v_gk in (select * from sepak.my_slot_ids(v_session_id, v_token)),
     'my_slot_ids should include the GK slot';
-  assert v_st in (select * from sepak.my_slot_ids(v_session_id, v_token)),
-    'my_slot_ids should include the ST slot';
+  assert (select count(*) from sepak.my_slot_ids(v_session_id, v_zul)) = 1,
+    'the other device holds its own single slot';
+  assert v_st in (select * from sepak.my_slot_ids(v_session_id, v_zul)),
+    'my_slot_ids should include the ST slot for the device that claimed it';
   assert (select count(*) from sepak.my_slot_ids(v_session_id, v_intruder)) = 0,
     'my_slot_ids should return nothing for a token that claimed nothing';
 

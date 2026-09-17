@@ -138,7 +138,7 @@ describe('waitlist wrappers against local postgres', () => {
     const first = await anonClient().rpc('join_waitlist', {
       p_session_id: sessionId,
       p_name: 'Faiz',
-      p_phone: '60123456789',
+      p_phone: '60133000002',
       p_positions: ['GK'],
       p_token: OTHER_TOKEN,
     })
@@ -147,7 +147,7 @@ describe('waitlist wrappers against local postgres', () => {
     // A short, real gap so created_at strictly orders the two rows even at
     // whatever timestamp precision the column stores.
     await new Promise((resolve) => setTimeout(resolve, 5))
-    await joinWaitlist(sessionId, 'Nabil', '60123456789', ['GK'])
+    await joinWaitlist(sessionId, 'Nabil', '60133000003', ['GK'])
 
     const list = await listWaitlist(sessionId)
     expect(list.map((e) => e.playerName)).toEqual(['Faiz', 'Nabil'])

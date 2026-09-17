@@ -9,6 +9,8 @@ export type TeamViewProps = {
   mySlotIds: ReadonlySet<string>
   disabled: boolean
   adminOverride?: boolean
+  /** True once this device holds a slot in the session — see SlotChip. */
+  lockEmpty?: boolean
   onSelect: (view: SlotView) => void
 }
 
@@ -42,6 +44,7 @@ export function PitchTeam({
   mySlotIds,
   disabled,
   adminOverride = false,
+  lockEmpty = false,
   onSelect,
 }: TeamViewProps) {
   const views = toViews(slots, mySlotIds)
@@ -87,6 +90,7 @@ export function PitchTeam({
                   team={team}
                   disabled={disabled}
                   adminOverride={adminOverride}
+                  lockEmpty={lockEmpty}
                   onSelect={onSelect}
                   view={views.get(position) ?? { slot: null, position, mine: false }}
                 />

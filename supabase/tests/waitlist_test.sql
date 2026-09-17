@@ -149,12 +149,12 @@ begin
   ---------------------------------------------------------------------------
   -- queueing, FIFO order, and narrower-but-later not jumping the queue
   ---------------------------------------------------------------------------
-  v_result := sepak.join_waitlist(v_session_id, 'Faiz', '60123456789', array['GK','ST','MC'], v_other);
+  v_result := sepak.join_waitlist(v_session_id, 'Faiz', '60133000002', array['GK','ST','MC'], v_other);
   assert (v_result ->> 'placed')::boolean = false, 'GK is taken -- Faiz should queue';
 
   -- a GK-specific, later entry
   perform pg_sleep(0.01);
-  v_result := sepak.join_waitlist(v_session_id, 'Nabil', '60123456789', array['GK'], v_nabil);
+  v_result := sepak.join_waitlist(v_session_id, 'Nabil', '60133000003', array['GK'], v_nabil);
   assert (v_result ->> 'placed')::boolean = false, 'GK is still taken -- Nabil should queue too';
 
   assert (select count(*) from sepak.waitlist where session_id = v_session_id) = 2,
@@ -233,10 +233,10 @@ begin
    where session_id = v_session_id and player_name is null;
   set local request.jwt.claims = '{}';
   set local role anon;
-  v_result := sepak.join_waitlist(v_session_id, 'Amir', '60123456789', array['GK'], v_amir);
+  v_result := sepak.join_waitlist(v_session_id, 'Amir', '60133000004', array['GK'], v_amir);
   assert (v_result ->> 'placed')::boolean = false, 'sanity: Amir should queue with everything filled';
   begin
-    perform sepak.join_waitlist(v_session_id, 'Amir Lagi', '60123456789', array['ST'], v_amir);
+    perform sepak.join_waitlist(v_session_id, 'Amir Lagi', '60133000004', array['ST'], v_amir);
     raise exception 'joining twice from one device must fail';
   exception when others then
     assert sqlerrm = 'already_waitlisted', format('expected already_waitlisted, got %s', sqlerrm);
@@ -385,14 +385,14 @@ begin
   set local role anon;
 
   -- Both devices queue for GK, which is taken -- Dev first, Other second.
-  perform sepak.join_waitlist(v_session_id, 'Dev', '60123456789', array['GK'], v_dev);
+  perform sepak.join_waitlist(v_session_id, 'Dev', '60133000005', array['GK'], v_dev);
   perform pg_sleep(0.01);
-  perform sepak.join_waitlist(v_session_id, 'Other', '60123456789', array['GK'], v_other);
+  perform sepak.join_waitlist(v_session_id, 'Other', '60133000006', array['GK'], v_other);
   assert (select count(*) from sepak.waitlist where session_id = v_session_id) = 2,
     'sanity: both Dev and Other should be queued';
 
   -- Dev sees ST open and taps it directly, bypassing auto-fill entirely.
-  select * into v_claimed from sepak.claim_slot(v_st, 'Dev', '60123456789', v_dev);
+  select * into v_claimed from sepak.claim_slot(v_st, 'Dev', '60133000005', v_dev);
   assert v_claimed.player_name = 'Dev', 'claim_slot should have claimed ST for Dev';
 
   -- The fix: claiming removes the queue row for that device.

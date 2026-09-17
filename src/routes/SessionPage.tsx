@@ -254,9 +254,17 @@ export default function SessionPage() {
         <SessionMeta session={session} filled={filled} total={33} />
 
         {mySlot !== null ? (
-          <p className="rounded-lg border border-white/20 bg-white/10 px-3 py-2 font-kit text-[15px]">
-            {`Slot anda: Team ${mySlot.team} ${session.teamNames[mySlot.team]} — ${positionLabel(mySlot.position)}`}
-          </p>
+          <div className="space-y-1 rounded-lg border border-white/20 bg-white/10 px-3 py-2">
+            <p className="font-kit text-[15px]">
+              {`Slot anda: Team ${mySlot.team} ${session.teamNames[mySlot.team]} — ${positionLabel(mySlot.position)}`}
+            </p>
+            {/* One slot per device (claim_slot raises already_in_slot), so
+                say so here rather than letting an empty slot look tappable
+                and fail. */}
+            <p className="font-sans text-[13px] text-white/60">
+              Satu slot untuk satu peranti. Lepaskan slot ini dulu kalau nak tukar posisi.
+            </p>
+          </div>
         ) : (
           // Without this, nothing on the page says what to do — every slot looks
           // like a label rather than a thing you can take.
@@ -302,6 +310,7 @@ export default function SessionPage() {
               mySlotIds={mySlotIds}
               disabled={closed || busy}
               adminOverride={isAdmin}
+              lockEmpty={mySlot !== null}
               onSelect={setSelected}
             />
           ))}

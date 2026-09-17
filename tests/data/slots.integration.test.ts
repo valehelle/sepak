@@ -5,8 +5,16 @@ import { SLOT_COLUMNS } from '../../src/data/sessions'
 const TOKEN_A = '44444444-4444-4444-8444-444444444444'
 const TOKEN_B = '55555555-5555-4555-8555-555555555555'
 
+/** One booking per phone per session (0010_one_booking_per_person.sql), so
+ *  every test "device" needs its own number. Derived from the token, which
+ *  is what the rule treats as the device, keeping the two consistent
+ *  without a lookup table to forget to update. */
+function phoneFor(token: string): string {
+  return `601${token.replace(/\D/g, '').padEnd(8, '0').slice(0, 8)}`
+}
+
 async function claim(client: ReturnType<typeof anonClient>, id: string, name: string, token: string) {
-  return client.rpc('claim_slot', { p_slot_id: id, p_name: name, p_phone: '60123456789', p_token: token })
+  return client.rpc('claim_slot', { p_slot_id: id, p_name: name, p_phone: phoneFor(token), p_token: token })
 }
 
 describe('slot RPCs against local postgres', () => {

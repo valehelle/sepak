@@ -89,9 +89,22 @@ checks the admin allowlist itself. Admins see a number by tapping a filled
 slot, or "Lihat nombor" on a queue entry. The device also remembers its
 last name and number in `localStorage` to prefill the next booking.
 
+One booking per person per session: `claim_slot` refuses a device that
+already holds a slot, and refuses a phone number already on a slot or in the
+queue anywhere in that session (`already_in_slot` / `phone_in_use`). The
+device check alone was not enough -- a second browser mints a fresh token --
+so the number is the real guard. Duplicate names stay allowed, since two
+players really are sometimes both called Amir.
+
+The index page lists nothing. Sessions are reached by their own link, shared
+in the group chat; organisers see the full list on `/admin`. Note this is
+about the page, not the data: `sepak.sessions` is still world-readable
+through the API, as the link-sharing model has always assumed.
+
 Known limitations, accepted deliberately:
 
-1. Anyone with the link can claim a slot, under any name.
+1. Anyone with the link can claim a slot, under any name and any phone
+   number they care to type -- numbers are not verified, only deduplicated.
 2. Clearing browser data orphans a slot until the admin clears it.
 3. Three teams of eleven is hard-coded; five-a-side needs a schema change.
 4. There is no audit trail of claims and releases.

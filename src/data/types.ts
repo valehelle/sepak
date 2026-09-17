@@ -138,6 +138,8 @@ export const RPC_ERROR_CODES = [
   // join_waitlist; not_admin comes from contact_phone.
   'invalid_phone',
   'not_admin',
+  // One booking per person (0010_one_booking_per_person.sql).
+  'phone_in_use',
 ] as const
 
 export type RpcErrorCode = (typeof RPC_ERROR_CODES)[number]
@@ -165,6 +167,7 @@ export const RPC_MESSAGES: Record<RpcErrorCode, string> = {
   not_waitlisted: 'Anda tak dalam senarai tunggu.',
   invalid_phone: 'Nombor telefon tak sah. Guna nombor mobile Malaysia, cth. 012-345 6789.',
   not_admin: 'Hanya admin boleh lihat nombor telefon.',
+  phone_in_use: 'Nombor ini dah daftar untuk sesi ini. Satu tempat untuk satu orang.',
 }
 
 export const FALLBACK_ERROR_MESSAGE = 'Ada masalah. Cuba lagi.'

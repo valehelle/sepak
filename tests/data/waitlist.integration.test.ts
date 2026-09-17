@@ -39,8 +39,17 @@ async function seedWaitlistEntry(sessionId: string, name: string, positions: str
   if (error !== null) throw new Error(`seedWaitlistEntry failed: ${error.message}`)
 }
 
+
+/** One booking per phone per session (0010_one_booking_per_person.sql), so
+ *  every test "device" needs its own number. Derived from the token, which
+ *  is what the rule treats as the device, keeping the two consistent
+ *  without a lookup table to forget to update. */
+function phoneFor(token: string): string {
+  return `601${token.replace(/\D/g, '').padEnd(8, '0').slice(0, 8)}`
+}
+
 function join(client: ReturnType<typeof anonClient>, sessionId: string, name: string, positions: string[], token: string) {
-  return client.rpc('join_waitlist', { p_session_id: sessionId, p_name: name, p_phone: '60123456789', p_positions: positions, p_token: token })
+  return client.rpc('join_waitlist', { p_session_id: sessionId, p_name: name, p_phone: phoneFor(token), p_positions: positions, p_token: token })
 }
 
 describe('waitlist RPCs against local postgres', () => {

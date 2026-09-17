@@ -209,19 +209,27 @@ describe('SessionPage', () => {
     expect(screen.getByText(/Isi nombor telefon/)).toBeTruthy()
   })
 
-  it('remembers name and phone after a claim and prefills them next time', async () => {
+  it('remembers name and phone after a claim', async () => {
     claimSlot.mockResolvedValue({ ...firstOf(state.slots), playerName: 'Hazmi', claimedAt: 'now' })
-    const first = view()
+    view()
     await userEvent.click(firstOf(screen.getAllByRole('button', { name: /^GK/ })))
     await userEvent.type(screen.getByLabelText('Nama'), 'Hazmi')
     await userEvent.type(screen.getByLabelText('Nombor telefon'), '0123456789')
     await userEvent.click(screen.getByRole('button', { name: 'Ambil slot' }))
-    await waitFor(() => expect(claimSlot).toHaveBeenCalled())
-    first.unmount()
 
+    await waitFor(() => expect(claimSlot).toHaveBeenCalled())
+    const { recallPlayer } = await import('../lib/playerMemory')
+    await waitFor(() => expect(recallPlayer()).toEqual({ name: 'Hazmi', phone: '60123456789' }))
+  })
+
+  it('prefills a remembered name and phone the next time a sheet opens', async () => {
+    const { rememberPlayer } = await import('../lib/playerMemory')
+    rememberPlayer({ name: 'Hazmi', phone: '60123456789' })
     view()
+
     await userEvent.click(firstOf(screen.getAllByRole('button', { name: /^LB/ })))
     expect(screen.getByLabelText<HTMLInputElement>('Nama').value).toBe('Hazmi')
+    // Shown in the readable national form, sent normalised.
     expect(screen.getByLabelText<HTMLInputElement>('Nombor telefon').value).toBe('012-345 6789')
   })
 
@@ -300,6 +308,26 @@ describe('SessionPage', () => {
     // the player's name is restored in the rendered DOM, not just requested.
     const stButtons = screen.getAllByRole('button', { name: /^ST/ })
     expect(firstOf(stButtons).getAttribute('aria-label')).toContain('Hazmi')
+  })
+
+  it('locks every empty slot once this device holds one, and says why', () => {
+    state.slots = withClaim(state.slots, 'B-MC')
+    state.mySlotIds = new Set(['B-MC'])
+    view()
+
+    expect(screen.getByText(/Satu slot untuk satu peranti/)).toBeTruthy()
+    // An empty slot must not even open the form: claim_slot would refuse it.
+    const emptyGk = firstOf(screen.getAllByRole('button', { name: /^GK — kosong/ }))
+    expect(emptyGk.hasAttribute('disabled')).toBe(true)
+    // The device's own slot stays tappable, so it can still be released.
+    expect(screen.getByRole('button', { name: /^MC.*slot anda/i }).hasAttribute('disabled')).toBe(false)
+  })
+
+  it('leaves empty slots tappable when this device holds none', () => {
+    view()
+    const emptyGk = firstOf(screen.getAllByRole('button', { name: /^GK — kosong/ }))
+    expect(emptyGk.hasAttribute('disabled')).toBe(false)
+    expect(screen.queryByText(/Satu slot untuk satu peranti/)).toBeNull()
   })
 
   it('summarises your slot at the top of the page', () => {

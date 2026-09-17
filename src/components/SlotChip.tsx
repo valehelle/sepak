@@ -18,6 +18,10 @@ type SlotChipProps = {
   team: TeamKey
   disabled: boolean
   adminOverride?: boolean
+  /** The device already holds a slot in this session, so it cannot take
+   *  another (claim_slot raises already_in_slot). Empty slots go inert
+   *  rather than opening a form that can only fail. */
+  lockEmpty?: boolean
   onSelect: (view: SlotView) => void
 }
 
@@ -27,13 +31,14 @@ export function SlotChip({
   team,
   disabled,
   adminOverride = false,
+  lockEmpty = false,
   onSelect,
 }: SlotChipProps) {
   const name = view.slot?.playerName ?? null
   const taken = name !== null
   // Someone else's slot is inert for players; the organiser can still open it
   // to clear an orphaned or joke entry.
-  const inert = disabled || (taken && !view.mine && !adminOverride)
+  const inert = disabled || (taken && !view.mine && !adminOverride) || (!taken && lockEmpty)
 
   const accessibleName = [label, name ?? 'kosong', view.mine ? 'slot anda' : null]
     .filter((part) => part !== null)

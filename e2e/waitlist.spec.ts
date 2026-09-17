@@ -32,7 +32,8 @@ test('auto-fill reaches a second browser over realtime, without a reload', async
   await expect(pageTwo.getByText('33/33 penuh')).toBeVisible()
   await pageTwo.getByRole('button', { name: 'Sertai senarai tunggu' }).click()
   await pageTwo.getByLabel('Nama').fill('Isaac')
-  await pageTwo.getByLabel('Nombor telefon').fill('012-345 6789')
+  // Isaac's own number: one booking per phone per session.
+  await pageTwo.getByLabel('Nombor telefon').fill('019-876 5432')
   await pageTwo.getByRole('button', { name: 'GK', exact: true }).click()
   await pageTwo.getByRole('button', { name: 'Sertai', exact: true }).click()
 

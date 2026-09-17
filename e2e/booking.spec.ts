@@ -60,10 +60,16 @@ test('two players racing one slot: one wins, the other is told', async ({ browse
   await pageOne.goto(`s/${sessionId}`)
   await pageTwo.goto(`s/${sessionId}`)
 
-  for (const [page, name] of [[pageOne, 'Isaac'], [pageTwo, 'Kimie']] as const) {
+  // Distinct numbers, because these are two different people: one booking
+  // per phone per session (0010_one_booking_per_person.sql). Sharing one
+  // would make the loser fail on the phone rule instead of losing the race.
+  for (const [page, name, phone] of [
+    [pageOne, 'Isaac', '012-345 6789'],
+    [pageTwo, 'Kimie', '019-876 5432'],
+  ] as const) {
     await page.getByRole('button', { name: /^MC/ }).first().click()
     await page.getByLabel('Nama').fill(name)
-    await page.getByLabel('Nombor telefon').fill('012-345 6789')
+    await page.getByLabel('Nombor telefon').fill(phone)
   }
 
   await Promise.all([
