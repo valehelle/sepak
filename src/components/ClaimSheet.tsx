@@ -1,8 +1,12 @@
 import { useEffect, useState } from 'react'
+import { formatPhone, normalisePhone } from '../lib/phone'
+import { recallPlayer } from '../lib/playerMemory'
 import { positionLabel } from '../lib/positions'
 import type { SlotView } from './SlotChip'
+import { AdminContact } from './AdminContact'
 import { Button } from './Button'
 import { inputClass } from './Input'
+import { PhoneField } from './PhoneField'
 import { Sheet } from './Sheet'
 
 type ClaimSheetProps = {
@@ -12,7 +16,8 @@ type ClaimSheetProps = {
   duplicateName: boolean
   isAdmin: boolean
   onClose: () => void
-  onClaim: (name: string) => void
+  /** `phone` arrives in stored form (60123456789), already validated. */
+  onClaim: (name: string, phone: string) => void
   onRelease: () => void
   onAdminClear: () => void
   onNameChange: (name: string) => void
@@ -31,11 +36,20 @@ export function ClaimSheet({
   onNameChange,
 }: ClaimSheetProps) {
   const [name, setName] = useState('')
+  const [phone, setPhone] = useState('')
   const [problem, setProblem] = useState<string | null>(null)
 
+  // Prefill from the device's last booking so a regular only confirms. The
+  // recalled name is reported upward too, or the duplicate-name warning
+  // would only ever react to typing.
   useEffect(() => {
-    setName('')
+    const remembered = recallPlayer()
+    setName(remembered.name)
+    setPhone(remembered.phone === '' ? '' : formatPhone(remembered.phone))
     setProblem(null)
+    if (remembered.name !== '') onNameChange(remembered.name)
+    // onNameChange is a stable setter from the page; view is the real trigger.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [view])
 
   if (view === null) return null
@@ -50,6 +64,11 @@ export function ClaimSheet({
         <p className="mb-4 font-sans text-[15px] text-white/70">
           {view.mine ? `Slot anda: ${view.slot?.playerName ?? ''}` : view.slot?.playerName ?? ''}
         </p>
+        {isAdmin && view.slot !== null && (
+          <div className="mb-4 rounded-lg border border-white/10 bg-white/5 p-3">
+            <AdminContact target={{ slotId: view.slot.id }} />
+          </div>
+        )}
         <div className="space-y-2">
           {view.mine && (
             <Button variant="destructive" disabled={busy} onClick={onRelease} className="w-full">
@@ -81,7 +100,16 @@ export function ClaimSheet({
       setProblem('Nama terlalu panjang (maksimum 40 aksara).')
       return
     }
-    onClaim(trimmed)
+    if (phone.trim() === '') {
+      setProblem('Isi nombor telefon anda.')
+      return
+    }
+    const stored = normalisePhone(phone)
+    if (stored === null) {
+      setProblem('Nombor telefon tak sah. Contoh: 012-345 6789.')
+      return
+    }
+    onClaim(trimmed, stored)
   }
 
   return (
@@ -98,7 +126,16 @@ export function ClaimSheet({
         onKeyDown={(event) => { if (event.key === 'Enter') submit() }}
         maxLength={40}
         autoComplete="name"
-        className={`mb-2 ${inputClass}`}
+        className={`mb-3 ${inputClass}`}
+      />
+      <PhoneField
+        id="player-phone"
+        value={phone}
+        onChange={(value) => {
+          setPhone(value)
+          setProblem(null)
+        }}
+        onEnter={submit}
       />
       {problem !== null && <p className="mb-2 font-sans text-xs text-merah-soft">{problem}</p>}
       {duplicateName && (

@@ -23,6 +23,7 @@ test('auto-fill reaches a second browser over realtime, without a reload', async
   await pageOne.goto(`s/${sessionId}`)
   await pageOne.getByRole('button', { name: /^GK/ }).first().click()
   await pageOne.getByLabel('Nama').fill('Hazmi')
+  await pageOne.getByLabel('Nombor telefon').fill('012-345 6789')
   await pageOne.getByRole('button', { name: 'Ambil slot' }).click()
   await expect(pageOne.getByText('33/33 penuh')).toBeVisible()
 
@@ -31,6 +32,7 @@ test('auto-fill reaches a second browser over realtime, without a reload', async
   await expect(pageTwo.getByText('33/33 penuh')).toBeVisible()
   await pageTwo.getByRole('button', { name: 'Sertai senarai tunggu' }).click()
   await pageTwo.getByLabel('Nama').fill('Isaac')
+  await pageTwo.getByLabel('Nombor telefon').fill('012-345 6789')
   await pageTwo.getByRole('button', { name: 'GK', exact: true }).click()
   await pageTwo.getByRole('button', { name: 'Sertai', exact: true }).click()
 

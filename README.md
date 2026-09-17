@@ -81,6 +81,14 @@ before deciding. Every device holds a UUID in `localStorage`; presenting it
 is what authorises releasing a slot, so a player can edit their own booking
 and nobody else's.
 
+Phone numbers are the one private thing collected. They live in
+`sepak.contacts`, a table with no grant to `anon` or `authenticated` and
+outside the Realtime publication, so they never appear in the public read
+or the live feed. The only way to read one is `contact_phone()`, which
+checks the admin allowlist itself. Admins see a number by tapping a filled
+slot, or "Lihat nombor" on a queue entry. The device also remembers its
+last name and number in `localStorage` to prefill the next booking.
+
 Known limitations, accepted deliberately:
 
 1. Anyone with the link can claim a slot, under any name.

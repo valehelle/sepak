@@ -85,40 +85,40 @@ begin
   -- claim_token comes back on the returned row (the API's own answer to "what
   -- did you just store"), never by reading the column back off the table --
   -- anon holds no select privilege on it, by design.
-  select * into v_claimed from sepak.claim_slot(v_gk, 'Hazmi', v_token);
+  select * into v_claimed from sepak.claim_slot(v_gk, 'Hazmi', '60123456789', v_token);
   assert v_claimed.player_name = 'Hazmi', 'claim should set the name';
   assert v_claimed.claim_token = v_token, 'claim should store the token';
 
   begin
-    perform sepak.claim_slot(v_gk, 'Intruder', v_intruder);
+    perform sepak.claim_slot(v_gk, 'Intruder', '60123456789', v_intruder);
     raise exception 'claiming an occupied slot must fail';
   exception when others then
     assert sqlerrm = 'slot_taken', format('expected slot_taken, got %s', sqlerrm);
   end;
 
   begin
-    perform sepak.claim_slot(v_st, '   ', v_token);
+    perform sepak.claim_slot(v_st, '   ', '60123456789', v_token);
     raise exception 'a blank name must be rejected';
   exception when others then
     assert sqlerrm = 'invalid_name', format('expected invalid_name, got %s', sqlerrm);
   end;
 
   begin
-    perform sepak.claim_slot(v_st, repeat('x', 41), v_token);
+    perform sepak.claim_slot(v_st, repeat('x', 41), '60123456789', v_token);
     raise exception 'an over-long name must be rejected';
   exception when others then
     assert sqlerrm = 'invalid_name', format('expected invalid_name, got %s', sqlerrm);
   end;
 
   begin
-    perform sepak.claim_slot(gen_random_uuid(), 'Ghost', v_token);
+    perform sepak.claim_slot(gen_random_uuid(), 'Ghost', '60123456789', v_token);
     raise exception 'claiming a nonexistent slot must fail';
   exception when others then
     assert sqlerrm = 'slot_not_found', format('expected slot_not_found, got %s', sqlerrm);
   end;
 
   -- names are trimmed on the way in
-  perform sepak.claim_slot(v_st, '  Zulazhar  ', v_token);
+  perform sepak.claim_slot(v_st, '  Zulazhar  ', '60123456789', v_token);
   assert (select player_name from sepak.slots where id = v_st) = 'Zulazhar', 'claim should trim the name';
 
   ---------------------------------------------------------------------------
@@ -166,7 +166,7 @@ begin
   set local role anon;
 
   begin
-    perform sepak.claim_slot(v_st, 'Latecomer', v_intruder);
+    perform sepak.claim_slot(v_st, 'Latecomer', '60123456789', v_intruder);
     raise exception 'claiming in a closed session must fail';
   exception when others then
     assert sqlerrm = 'session_closed', format('expected session_closed, got %s', sqlerrm);

@@ -14,10 +14,13 @@ function fail(error: unknown): never {
   throw new SlotActionError(code === null ? FALLBACK_ERROR_MESSAGE : RPC_MESSAGES[code], code)
 }
 
-export async function claimSlot(slotId: string, playerName: string): Promise<Slot> {
+/** `phone` in stored form (see normalisePhone in src/lib/phone.ts); the
+ *  database rejects anything else with invalid_phone. */
+export async function claimSlot(slotId: string, playerName: string, phone: string): Promise<Slot> {
   const { data, error } = await supabase.rpc('claim_slot', {
     p_slot_id: slotId,
     p_name: playerName,
+    p_phone: phone,
     p_token: getClaimToken(),
   })
   if (error !== null) fail(error)

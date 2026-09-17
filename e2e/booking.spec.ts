@@ -18,6 +18,7 @@ test('a player claims, sees, and releases a slot', async ({ page }) => {
 
   await page.getByRole('button', { name: /^GK/ }).first().click()
   await page.getByLabel('Nama').fill('Hazmi')
+  await page.getByLabel('Nombor telefon').fill('012-345 6789')
   await page.getByRole('button', { name: 'Ambil slot' }).click()
 
   await expect(page.getByText('Hazmi')).toBeVisible()
@@ -40,6 +41,7 @@ test('a claim appears live in another browser', async ({ browser }) => {
 
   await pageOne.getByRole('button', { name: /^ST/ }).first().click()
   await pageOne.getByLabel('Nama').fill('Zulazhar')
+  await pageOne.getByLabel('Nombor telefon').fill('012-345 6789')
   await pageOne.getByRole('button', { name: 'Ambil slot' }).click()
 
   // No reload: realtime must deliver it.
@@ -61,6 +63,7 @@ test('two players racing one slot: one wins, the other is told', async ({ browse
   for (const [page, name] of [[pageOne, 'Isaac'], [pageTwo, 'Kimie']] as const) {
     await page.getByRole('button', { name: /^MC/ }).first().click()
     await page.getByLabel('Nama').fill(name)
+    await page.getByLabel('Nombor telefon').fill('012-345 6789')
   }
 
   await Promise.all([

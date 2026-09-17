@@ -1,24 +1,31 @@
 import { useEffect, useState } from 'react'
+import { formatPhone, normalisePhone } from '../lib/phone'
+import { recallPlayer } from '../lib/playerMemory'
 import { ALL_POSITIONS, ALL_POSITIONS_EXCEPT_GK, POSITIONS, formatPositions, positionLabel, type Position } from '../lib/positions'
 import { Button } from './Button'
 import { inputClass } from './Input'
+import { PhoneField } from './PhoneField'
 import { Sheet } from './Sheet'
 
 type WaitlistSheetProps = {
   open: boolean
   busy: boolean
   onClose: () => void
-  onJoin: (name: string, positions: Position[]) => void
+  /** `phone` arrives in stored form (60123456789), already validated. */
+  onJoin: (name: string, phone: string, positions: Position[]) => void
 }
 
 export function WaitlistSheet({ open, busy, onClose, onJoin }: WaitlistSheetProps) {
   const [name, setName] = useState('')
+  const [phone, setPhone] = useState('')
   const [selected, setSelected] = useState<Position[]>([])
   const [problem, setProblem] = useState<string | null>(null)
 
   useEffect(() => {
     if (!open) return
-    setName('')
+    const remembered = recallPlayer()
+    setName(remembered.name)
+    setPhone(remembered.phone === '' ? '' : formatPhone(remembered.phone))
     setSelected([])
     setProblem(null)
   }, [open])
@@ -42,11 +49,20 @@ export function WaitlistSheet({ open, busy, onClose, onJoin }: WaitlistSheetProp
       setProblem('Nama terlalu panjang (maksimum 40 aksara).')
       return
     }
+    if (phone.trim() === '') {
+      setProblem('Isi nombor telefon anda.')
+      return
+    }
+    const stored = normalisePhone(phone)
+    if (stored === null) {
+      setProblem('Nombor telefon tak sah. Contoh: 012-345 6789.')
+      return
+    }
     if (selected.length === 0) {
       setProblem('Pilih sekurang-kurangnya satu posisi.')
       return
     }
-    onJoin(trimmed, selected)
+    onJoin(trimmed, stored, selected)
   }
 
   return (
@@ -67,6 +83,15 @@ export function WaitlistSheet({ open, busy, onClose, onJoin }: WaitlistSheetProp
         maxLength={40}
         autoComplete="name"
         className={`mb-3 ${inputClass}`}
+      />
+      <PhoneField
+        id="waitlist-phone"
+        value={phone}
+        onChange={(value) => {
+          setPhone(value)
+          setProblem(null)
+        }}
+        onEnter={submit}
       />
 
       <p className="mb-2 font-kit text-[13px] text-white/45">Posisi</p>

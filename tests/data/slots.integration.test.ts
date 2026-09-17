@@ -6,7 +6,7 @@ const TOKEN_A = '44444444-4444-4444-8444-444444444444'
 const TOKEN_B = '55555555-5555-4555-8555-555555555555'
 
 async function claim(client: ReturnType<typeof anonClient>, id: string, name: string, token: string) {
-  return client.rpc('claim_slot', { p_slot_id: id, p_name: name, p_token: token })
+  return client.rpc('claim_slot', { p_slot_id: id, p_name: name, p_phone: '60123456789', p_token: token })
 }
 
 describe('slot RPCs against local postgres', () => {

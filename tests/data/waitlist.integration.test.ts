@@ -40,7 +40,7 @@ async function seedWaitlistEntry(sessionId: string, name: string, positions: str
 }
 
 function join(client: ReturnType<typeof anonClient>, sessionId: string, name: string, positions: string[], token: string) {
-  return client.rpc('join_waitlist', { p_session_id: sessionId, p_name: name, p_positions: positions, p_token: token })
+  return client.rpc('join_waitlist', { p_session_id: sessionId, p_name: name, p_phone: '60123456789', p_positions: positions, p_token: token })
 }
 
 describe('waitlist RPCs against local postgres', () => {

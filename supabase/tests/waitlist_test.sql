@@ -116,7 +116,7 @@ begin
   -- immediate claim: MC is free (all three teams), so joining with it
   -- claims Team A's MC (earliest in pitch order) rather than queueing.
   ---------------------------------------------------------------------------
-  v_result := sepak.join_waitlist(v_session_id, 'Hazmi', array['MC'], v_token);
+  v_result := sepak.join_waitlist(v_session_id, 'Hazmi', '60123456789', array['MC'], v_token);
   assert (v_result ->> 'placed')::boolean = true, 'a free preferred position should claim immediately';
   assert (v_result ->> 'slot_id')::uuid = v_mc_a, 'the earliest matching slot in pitch order should be claimed';
   assert (select player_name from sepak.slots where id = v_mc_a) = 'Hazmi',
@@ -127,7 +127,7 @@ begin
   -- Invariant, direction one: a device holding a slot cannot also join the
   -- waitlist.
   begin
-    perform sepak.join_waitlist(v_session_id, 'Hazmi', array['ST'], v_token);
+    perform sepak.join_waitlist(v_session_id, 'Hazmi', '60123456789', array['ST'], v_token);
     raise exception 'a device already holding a slot must not be able to join the waitlist';
   exception when others then
     assert sqlerrm = 'already_in_slot', format('expected already_in_slot, got %s', sqlerrm);
@@ -149,12 +149,12 @@ begin
   ---------------------------------------------------------------------------
   -- queueing, FIFO order, and narrower-but-later not jumping the queue
   ---------------------------------------------------------------------------
-  v_result := sepak.join_waitlist(v_session_id, 'Faiz', array['GK','ST','MC'], v_other);
+  v_result := sepak.join_waitlist(v_session_id, 'Faiz', '60123456789', array['GK','ST','MC'], v_other);
   assert (v_result ->> 'placed')::boolean = false, 'GK is taken -- Faiz should queue';
 
   -- a GK-specific, later entry
   perform pg_sleep(0.01);
-  v_result := sepak.join_waitlist(v_session_id, 'Nabil', array['GK'], v_nabil);
+  v_result := sepak.join_waitlist(v_session_id, 'Nabil', '60123456789', array['GK'], v_nabil);
   assert (v_result ->> 'placed')::boolean = false, 'GK is still taken -- Nabil should queue too';
 
   assert (select count(*) from sepak.waitlist where session_id = v_session_id) = 2,
@@ -204,21 +204,21 @@ begin
   -- validation errors
   ---------------------------------------------------------------------------
   begin
-    perform sepak.join_waitlist(v_session_id, '   ', array['GK'], gen_random_uuid());
+    perform sepak.join_waitlist(v_session_id, '   ', '60123456789', array['GK'], gen_random_uuid());
     raise exception 'a blank name must be rejected';
   exception when others then
     assert sqlerrm = 'invalid_name', format('expected invalid_name, got %s', sqlerrm);
   end;
 
   begin
-    perform sepak.join_waitlist(v_session_id, 'Ghost', array[]::text[], gen_random_uuid());
+    perform sepak.join_waitlist(v_session_id, 'Ghost', '60123456789', array[]::text[], gen_random_uuid());
     raise exception 'an empty positions array must be rejected';
   exception when others then
     assert sqlerrm = 'invalid_positions', format('expected invalid_positions, got %s', sqlerrm);
   end;
 
   begin
-    perform sepak.join_waitlist(v_session_id, 'Ghost', array['SWEEPER'], gen_random_uuid());
+    perform sepak.join_waitlist(v_session_id, 'Ghost', '60123456789', array['SWEEPER'], gen_random_uuid());
     raise exception 'an unknown position must be rejected';
   exception when others then
     assert sqlerrm = 'invalid_positions', format('expected invalid_positions, got %s', sqlerrm);
@@ -233,10 +233,10 @@ begin
    where session_id = v_session_id and player_name is null;
   set local request.jwt.claims = '{}';
   set local role anon;
-  v_result := sepak.join_waitlist(v_session_id, 'Amir', array['GK'], v_amir);
+  v_result := sepak.join_waitlist(v_session_id, 'Amir', '60123456789', array['GK'], v_amir);
   assert (v_result ->> 'placed')::boolean = false, 'sanity: Amir should queue with everything filled';
   begin
-    perform sepak.join_waitlist(v_session_id, 'Amir Lagi', array['ST'], v_amir);
+    perform sepak.join_waitlist(v_session_id, 'Amir Lagi', '60123456789', array['ST'], v_amir);
     raise exception 'joining twice from one device must fail';
   exception when others then
     assert sqlerrm = 'already_waitlisted', format('expected already_waitlisted, got %s', sqlerrm);
@@ -250,7 +250,7 @@ begin
   set local role anon;
 
   begin
-    perform sepak.join_waitlist(v_session_id, 'Latecomer', array['GK'], gen_random_uuid());
+    perform sepak.join_waitlist(v_session_id, 'Latecomer', '60123456789', array['GK'], gen_random_uuid());
     raise exception 'joining a closed session must fail';
   exception when others then
     assert sqlerrm = 'session_closed', format('expected session_closed, got %s', sqlerrm);
@@ -385,14 +385,14 @@ begin
   set local role anon;
 
   -- Both devices queue for GK, which is taken -- Dev first, Other second.
-  perform sepak.join_waitlist(v_session_id, 'Dev', array['GK'], v_dev);
+  perform sepak.join_waitlist(v_session_id, 'Dev', '60123456789', array['GK'], v_dev);
   perform pg_sleep(0.01);
-  perform sepak.join_waitlist(v_session_id, 'Other', array['GK'], v_other);
+  perform sepak.join_waitlist(v_session_id, 'Other', '60123456789', array['GK'], v_other);
   assert (select count(*) from sepak.waitlist where session_id = v_session_id) = 2,
     'sanity: both Dev and Other should be queued';
 
   -- Dev sees ST open and taps it directly, bypassing auto-fill entirely.
-  select * into v_claimed from sepak.claim_slot(v_st, 'Dev', v_dev);
+  select * into v_claimed from sepak.claim_slot(v_st, 'Dev', '60123456789', v_dev);
   assert v_claimed.player_name = 'Dev', 'claim_slot should have claimed ST for Dev';
 
   -- The fix: claiming removes the queue row for that device.

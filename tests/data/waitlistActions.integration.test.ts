@@ -57,7 +57,7 @@ describe('waitlist wrappers against local postgres', () => {
     const gk = slotId(ids, 'A', 'GK')
     await fillAllExcept(sessionId, gk)
 
-    const result = await joinWaitlist(sessionId, 'Hazmi', ['GK', 'ST'])
+    const result = await joinWaitlist(sessionId, 'Hazmi', '60123456789', ['GK', 'ST'])
     expect(result).toEqual({ placed: true, slotId: gk })
 
     const { data } = await anonClient().from('slots').select('player_name').eq('id', gk).single()
@@ -72,7 +72,7 @@ describe('waitlist wrappers against local postgres', () => {
     const gk = slotId(ids, 'A', 'GK')
     await fillAllExcept(sessionId, gk)
 
-    const result = await joinWaitlist(sessionId, 'Hazmi', ['ST'])
+    const result = await joinWaitlist(sessionId, 'Hazmi', '60123456789', ['ST'])
     expect(result.placed).toBe(false)
 
     const mine = await getMyWaitlistEntry(sessionId)
@@ -81,10 +81,10 @@ describe('waitlist wrappers against local postgres', () => {
 
   it('rejects joining twice from the same device with already_waitlisted', async () => {
     await fillAll(sessionId)
-    await joinWaitlist(sessionId, 'Hazmi', ['GK'])
+    await joinWaitlist(sessionId, 'Hazmi', '60123456789', ['GK'])
 
     try {
-      await joinWaitlist(sessionId, 'Hazmi', ['ST'])
+      await joinWaitlist(sessionId, 'Hazmi', '60123456789', ['ST'])
       expect.unreachable('joinWaitlist should have thrown on a second join')
     } catch (err) {
       expect(err).toBeInstanceOf(WaitlistActionError)
@@ -98,11 +98,11 @@ describe('waitlist wrappers against local postgres', () => {
   it('rejects joining while already holding a slot in the session (both directions of the invariant)', async () => {
     const gk = slotId(ids, 'A', 'GK')
     // This device (the wrapper's cached token) claims a slot directly first.
-    const claimed = await anonClient().rpc('claim_slot', { p_slot_id: gk, p_name: 'Hazmi', p_token: getClaimToken() })
+    const claimed = await anonClient().rpc('claim_slot', { p_slot_id: gk, p_name: 'Hazmi', p_phone: '60123456789', p_token: getClaimToken() })
     expect(claimed.error).toBeNull()
 
     try {
-      await joinWaitlist(sessionId, 'Hazmi', ['ST'])
+      await joinWaitlist(sessionId, 'Hazmi', '60123456789', ['ST'])
       expect.unreachable('joinWaitlist should have thrown for a device already in a slot')
     } catch (err) {
       expect(err).toBeInstanceOf(WaitlistActionError)
@@ -118,7 +118,7 @@ describe('waitlist wrappers against local postgres', () => {
 
   it('leaveWaitlist removes the entry, and a second leave reports not_waitlisted', async () => {
     await fillAll(sessionId)
-    await joinWaitlist(sessionId, 'Hazmi', ['GK'])
+    await joinWaitlist(sessionId, 'Hazmi', '60123456789', ['GK'])
     expect(await getMyWaitlistEntry(sessionId)).not.toBeNull()
 
     await leaveWaitlist(sessionId)
@@ -138,6 +138,7 @@ describe('waitlist wrappers against local postgres', () => {
     const first = await anonClient().rpc('join_waitlist', {
       p_session_id: sessionId,
       p_name: 'Faiz',
+      p_phone: '60123456789',
       p_positions: ['GK'],
       p_token: OTHER_TOKEN,
     })
@@ -146,7 +147,7 @@ describe('waitlist wrappers against local postgres', () => {
     // A short, real gap so created_at strictly orders the two rows even at
     // whatever timestamp precision the column stores.
     await new Promise((resolve) => setTimeout(resolve, 5))
-    await joinWaitlist(sessionId, 'Nabil', ['GK'])
+    await joinWaitlist(sessionId, 'Nabil', '60123456789', ['GK'])
 
     const list = await listWaitlist(sessionId)
     expect(list.map((e) => e.playerName)).toEqual(['Faiz', 'Nabil'])

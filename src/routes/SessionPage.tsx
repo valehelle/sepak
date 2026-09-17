@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Link, useParams } from 'react-router'
+import { AdminContactToggle } from '../components/AdminContact'
 import { Button } from '../components/Button'
 import { ClaimSheet } from '../components/ClaimSheet'
 import { CopyButton } from '../components/CopyButton'
@@ -15,6 +16,7 @@ import type { Slot } from '../data/types'
 import { useSessionRealtime } from '../data/useSessionRealtime'
 import { WaitlistActionError, joinWaitlist, leaveWaitlist } from '../data/waitlist'
 import { TEAM_KEYS, formatPositions, positionLabel, type Position, type TeamKey } from '../lib/positions'
+import { rememberPlayer } from '../lib/playerMemory'
 import { buildWhatsAppMessage } from '../lib/whatsapp'
 
 const VIEW_MODE_KEY = 'sepak.viewMode'
@@ -133,16 +135,20 @@ export default function SessionPage() {
     }
   }
 
-  function onClaim(name: string) {
+  function onClaim(name: string, phone: string) {
     const slot = selected?.slot
     if (slot === undefined || slot === null) return
     const claimed: Slot = { ...slot, playerName: name, claimedAt: new Date().toISOString() }
-    void run(() => claimSlot(slot.id, name), {
-      slot: claimed,
-      owned: [[slot.id, true]],
-      revertSlot: slot,
-      revertOwned: [[slot.id, false]],
-    })
+    void run(
+      () => claimSlot(slot.id, name, phone),
+      {
+        slot: claimed,
+        owned: [[slot.id, true]],
+        revertSlot: slot,
+        revertOwned: [[slot.id, false]],
+      },
+      () => rememberPlayer({ name, phone }),
+    )
   }
 
   function onRelease() {
@@ -178,11 +184,12 @@ export default function SessionPage() {
     }
   }
 
-  function onJoinWaitlist(name: string, positions: Position[]) {
+  function onJoinWaitlist(name: string, phone: string, positions: Position[]) {
     if (session === null) return
     setBusy(true)
-    joinWaitlist(session.id, name, positions)
+    joinWaitlist(session.id, name, phone, positions)
       .then((result) => {
+        rememberPlayer({ name, phone })
         setWaitlistOpen(false)
         if (result.placed) {
           // Marking ownership here, ahead of the realtime event for the
@@ -330,6 +337,7 @@ export default function SessionPage() {
                         Keluar dari senarai tunggu
                       </Button>
                     )}
+                    {isAdmin && <AdminContactToggle target={{ waitlistId: entry.id }} />}
                   </li>
                 )
               })}

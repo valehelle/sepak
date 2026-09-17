@@ -94,6 +94,13 @@ vi.mock('../data/slots', () => ({
     constructor(message: string, readonly code: string | null) { super(message) }
   },
 }))
+const getContactPhone = vi.fn()
+vi.mock('../data/contacts', () => ({
+  getContactPhone: (target: unknown) => getContactPhone(target),
+  ContactError: class extends Error {
+    constructor(message: string, readonly code: string | null) { super(message) }
+  },
+}))
 vi.mock('../data/waitlist', () => ({
   joinWaitlist: (...args: unknown[]) => joinWaitlist(...args),
   leaveWaitlist: (...args: unknown[]) => leaveWaitlist(...args),
@@ -145,6 +152,8 @@ describe('SessionPage', () => {
     joinWaitlist.mockReset()
     leaveWaitlist.mockReset().mockResolvedValue(undefined)
     writeText.mockReset()
+    getContactPhone.mockReset().mockResolvedValue(null)
+    localStorage.clear()
     authState.email = null
     authState.role = null
     // `mockReset` would also discard the implementations above, so the
@@ -173,10 +182,47 @@ describe('SessionPage', () => {
 
     await userEvent.click(firstOf(screen.getAllByRole('button', { name: /^GK/ })))
     await userEvent.type(screen.getByLabelText('Nama'), 'Hazmi')
+    await userEvent.type(screen.getByLabelText('Nombor telefon'), '012-345 6789')
     await userEvent.click(screen.getByRole('button', { name: 'Ambil slot' }))
 
-    await waitFor(() => expect(claimSlot).toHaveBeenCalledWith('A-GK', 'Hazmi'))
+    // The phone reaches the server normalised, whatever punctuation was typed.
+    await waitFor(() => expect(claimSlot).toHaveBeenCalledWith('A-GK', 'Hazmi', '60123456789'))
     await waitFor(() => expect(state.setOwned).toHaveBeenCalledWith('A-GK', true))
+  })
+
+  it('refuses a phone that is not a Malaysian mobile', async () => {
+    view()
+    await userEvent.click(firstOf(screen.getAllByRole('button', { name: /^GK/ })))
+    await userEvent.type(screen.getByLabelText('Nama'), 'Hazmi')
+    await userEvent.type(screen.getByLabelText('Nombor telefon'), '03-1234 5678')
+    await userEvent.click(screen.getByRole('button', { name: 'Ambil slot' }))
+    expect(claimSlot).not.toHaveBeenCalled()
+    expect(screen.getByText(/Nombor telefon tak sah/)).toBeTruthy()
+  })
+
+  it('refuses to submit without a phone', async () => {
+    view()
+    await userEvent.click(firstOf(screen.getAllByRole('button', { name: /^GK/ })))
+    await userEvent.type(screen.getByLabelText('Nama'), 'Hazmi')
+    await userEvent.click(screen.getByRole('button', { name: 'Ambil slot' }))
+    expect(claimSlot).not.toHaveBeenCalled()
+    expect(screen.getByText(/Isi nombor telefon/)).toBeTruthy()
+  })
+
+  it('remembers name and phone after a claim and prefills them next time', async () => {
+    claimSlot.mockResolvedValue({ ...firstOf(state.slots), playerName: 'Hazmi', claimedAt: 'now' })
+    const first = view()
+    await userEvent.click(firstOf(screen.getAllByRole('button', { name: /^GK/ })))
+    await userEvent.type(screen.getByLabelText('Nama'), 'Hazmi')
+    await userEvent.type(screen.getByLabelText('Nombor telefon'), '0123456789')
+    await userEvent.click(screen.getByRole('button', { name: 'Ambil slot' }))
+    await waitFor(() => expect(claimSlot).toHaveBeenCalled())
+    first.unmount()
+
+    view()
+    await userEvent.click(firstOf(screen.getAllByRole('button', { name: /^LB/ })))
+    expect(screen.getByLabelText<HTMLInputElement>('Nama').value).toBe('Hazmi')
+    expect(screen.getByLabelText<HTMLInputElement>('Nombor telefon').value).toBe('012-345 6789')
   })
 
   it('refuses to submit a blank name', async () => {
@@ -194,6 +240,7 @@ describe('SessionPage', () => {
 
     await userEvent.click(firstOf(screen.getAllByRole('button', { name: /^GK/ })))
     await userEvent.type(screen.getByLabelText('Nama'), 'Hazmi')
+    await userEvent.type(screen.getByLabelText('Nombor telefon'), '0123456789')
     await userEvent.click(screen.getByRole('button', { name: 'Ambil slot' }))
 
     await waitFor(() => expect(screen.getByRole('status').textContent).toContain('Slot dah diambil.'))
@@ -313,8 +360,9 @@ describe('SessionPage', () => {
 
     expect(screen.getByText(/Nama ini dah ada dalam sesi/)).toBeTruthy()
 
+    await userEvent.type(screen.getByLabelText('Nombor telefon'), '0123456789')
     await userEvent.click(screen.getByRole('button', { name: 'Ambil slot' }))
-    await waitFor(() => expect(claimSlot).toHaveBeenCalledWith('A-GK', 'Hazmi'))
+    await waitFor(() => expect(claimSlot).toHaveBeenCalledWith('A-GK', 'Hazmi', '60123456789'))
   })
 
   it('does not warn when the name is unique', async () => {
@@ -335,6 +383,30 @@ describe('SessionPage', () => {
     await userEvent.click(firstOf(screen.getAllByRole('button', { name: /^LB/ })))
     await userEvent.click(screen.getByRole('button', { name: 'Kosongkan slot (admin)' }))
     await waitFor(() => expect(adminClearSlot).toHaveBeenCalledWith('A-LB'))
+  })
+
+  it('shows the organiser the occupant\'s phone with WhatsApp and call links', async () => {
+    authState.email = 'hazmi@example.com'
+    authState.role = 'admin'
+    getContactPhone.mockResolvedValue('60123456789')
+    state.slots = state.slots.map((slot) =>
+      slot.id === 'A-LB' ? { ...slot, playerName: 'Amir', claimedAt: 'now' } : slot,
+    )
+    view()
+
+    await userEvent.click(firstOf(screen.getAllByRole('button', { name: /^LB/ })))
+    expect(getContactPhone).toHaveBeenCalledWith({ slotId: 'A-LB' })
+    await waitFor(() => expect(screen.getByText('012-345 6789')).toBeTruthy())
+    expect(screen.getByRole('link', { name: 'WhatsApp' }).getAttribute('href')).toBe('https://wa.me/60123456789')
+  })
+
+  it('never looks a phone up for a player, even on their own slot', async () => {
+    state.slots = withClaim(state.slots, 'B-MC')
+    state.mySlotIds = new Set(['B-MC'])
+    view()
+    await userEvent.click(screen.getByRole('button', { name: /^MC.*slot anda/i }))
+    expect(screen.getByRole('button', { name: 'Lepaskan slot' })).toBeTruthy()
+    expect(getContactPhone).not.toHaveBeenCalled()
   })
 
   it('does not offer the override to a player', async () => {
@@ -415,11 +487,12 @@ describe('SessionPage', () => {
 
     await userEvent.click(screen.getByRole('button', { name: 'Sertai senarai tunggu' }))
     await userEvent.type(screen.getByLabelText('Nama'), 'Faiz')
+    await userEvent.type(screen.getByLabelText('Nombor telefon'), '+60 19-876 5432')
     await userEvent.click(screen.getByRole('button', { name: 'MC' }))
     await userEvent.click(screen.getByRole('button', { name: 'AM' }))
     await userEvent.click(screen.getByRole('button', { name: 'Sertai' }))
 
-    await waitFor(() => expect(joinWaitlist).toHaveBeenCalledWith('session-1', 'Faiz', ['MC', 'AM']))
+    await waitFor(() => expect(joinWaitlist).toHaveBeenCalledWith('session-1', 'Faiz', '60198765432', ['MC', 'AM']))
     await waitFor(() => expect(screen.getByText(/1\. Faiz/)).toBeTruthy())
     expect(screen.getByRole('button', { name: 'Keluar dari senarai tunggu' })).toBeTruthy()
     // The sheet closes and the player is no longer prompted to join again.
@@ -432,6 +505,7 @@ describe('SessionPage', () => {
 
     await userEvent.click(screen.getByRole('button', { name: 'Sertai senarai tunggu' }))
     await userEvent.type(screen.getByLabelText('Nama'), 'Faiz')
+    await userEvent.type(screen.getByLabelText('Nombor telefon'), '0198765432')
     await userEvent.click(screen.getByRole('button', { name: 'GK' }))
     await userEvent.click(screen.getByRole('button', { name: 'Sertai' }))
 
@@ -446,6 +520,7 @@ describe('SessionPage', () => {
 
     await userEvent.click(screen.getByRole('button', { name: 'Sertai senarai tunggu' }))
     await userEvent.type(screen.getByLabelText('Nama'), 'Faiz')
+    await userEvent.type(screen.getByLabelText('Nombor telefon'), '0198765432')
     await userEvent.click(screen.getByRole('button', { name: 'GK' }))
     await userEvent.click(screen.getByRole('button', { name: 'Sertai' }))
 
@@ -464,6 +539,21 @@ describe('SessionPage', () => {
     expect(screen.getByText(/2\. Nabil/)).toBeTruthy()
     // Only the device's own row offers the leave button.
     expect(screen.getAllByRole('button', { name: 'Keluar dari senarai tunggu' })).toHaveLength(1)
+    // Players get no phone affordance on the queue.
+    expect(screen.queryByRole('button', { name: 'Lihat nombor' })).toBeNull()
+  })
+
+  it('lets the organiser reveal a queue entry\'s phone on demand', async () => {
+    authState.email = 'hazmi@example.com'
+    authState.role = 'admin'
+    getContactPhone.mockResolvedValue('60198765432')
+    state.waitlist = [{ id: 'wait-1', sessionId: 'session-1', playerName: 'Faiz', positions: ['GK'], createdAt: 't1' }]
+    view()
+
+    expect(getContactPhone).not.toHaveBeenCalled()
+    await userEvent.click(screen.getByRole('button', { name: 'Lihat nombor' }))
+    expect(getContactPhone).toHaveBeenCalledWith({ waitlistId: 'wait-1' })
+    await waitFor(() => expect(screen.getByText('019-876 5432')).toBeTruthy())
   })
 
   it('leaves the waitlist', async () => {

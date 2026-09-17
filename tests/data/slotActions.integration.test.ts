@@ -26,17 +26,17 @@ describe('slot action wrappers against local postgres', () => {
 
   it('claimSlot succeeds and returns a parsed Slot', async () => {
     const gk = slotId(ids, 'A', 'GK')
-    const slot = await claimSlot(gk, 'Hazmi')
+    const slot = await claimSlot(gk, 'Hazmi', '60123456789')
     expect(slot).toMatchObject({ id: gk, sessionId, team: 'A', position: 'GK', playerName: 'Hazmi' })
     expect(slot.claimedAt).not.toBeNull()
   })
 
   it('claimSlot on an occupied slot rejects with slot_taken and its Malay copy', async () => {
     const gk = slotId(ids, 'A', 'GK')
-    await claimSlot(gk, 'Hazmi')
+    await claimSlot(gk, 'Hazmi', '60123456789')
 
     try {
-      await claimSlot(gk, 'Isaac')
+      await claimSlot(gk, 'Isaac', '60123456789')
       expect.unreachable('claimSlot should have thrown on an occupied slot')
     } catch (err) {
       expect(err).toBeInstanceOf(SlotActionError)
@@ -49,7 +49,7 @@ describe('slot action wrappers against local postgres', () => {
 
   it('releaseSlot with a mismatched token rejects with wrong_token', async () => {
     const gk = slotId(ids, 'A', 'GK')
-    const claimed = await anonClient().rpc('claim_slot', { p_slot_id: gk, p_name: 'Isaac', p_token: OTHER_TOKEN })
+    const claimed = await anonClient().rpc('claim_slot', { p_slot_id: gk, p_name: 'Isaac', p_phone: '60123456789', p_token: OTHER_TOKEN })
     expect(claimed.error).toBeNull()
 
     try {
@@ -64,7 +64,7 @@ describe('slot action wrappers against local postgres', () => {
 
   it('releaseSlot with the right token empties the slot', async () => {
     const gk = slotId(ids, 'A', 'GK')
-    await claimSlot(gk, 'Hazmi')
+    await claimSlot(gk, 'Hazmi', '60123456789')
 
     const released = await releaseSlot(gk)
     expect(released.playerName).toBeNull()
@@ -78,8 +78,8 @@ describe('slot action wrappers against local postgres', () => {
     const gk = slotId(ids, 'A', 'GK')
     const st = slotId(ids, 'A', 'ST')
 
-    await claimSlot(gk, 'Hazmi')
-    const other = await anonClient().rpc('claim_slot', { p_slot_id: st, p_name: 'Isaac', p_token: OTHER_TOKEN })
+    await claimSlot(gk, 'Hazmi', '60123456789')
+    const other = await anonClient().rpc('claim_slot', { p_slot_id: st, p_name: 'Isaac', p_phone: '60123456789', p_token: OTHER_TOKEN })
     expect(other.error).toBeNull()
 
     const mine = await getMySlotIds(sessionId)

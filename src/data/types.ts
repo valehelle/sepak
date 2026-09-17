@@ -134,6 +134,10 @@ export const RPC_ERROR_CODES = [
   'already_in_slot',
   'already_waitlisted',
   'not_waitlisted',
+  // Contacts (0009_contacts.sql): invalid_phone is shared by claim_slot and
+  // join_waitlist; not_admin comes from contact_phone.
+  'invalid_phone',
+  'not_admin',
 ] as const
 
 export type RpcErrorCode = (typeof RPC_ERROR_CODES)[number]
@@ -159,6 +163,8 @@ export const RPC_MESSAGES: Record<RpcErrorCode, string> = {
   already_in_slot: 'Anda dah ada slot dalam sesi ini.',
   already_waitlisted: 'Anda dah dalam senarai tunggu.',
   not_waitlisted: 'Anda tak dalam senarai tunggu.',
+  invalid_phone: 'Nombor telefon tak sah. Guna nombor mobile Malaysia, cth. 012-345 6789.',
+  not_admin: 'Hanya admin boleh lihat nombor telefon.',
 }
 
 export const FALLBACK_ERROR_MESSAGE = 'Ada masalah. Cuba lagi.'

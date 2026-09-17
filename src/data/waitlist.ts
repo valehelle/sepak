@@ -120,11 +120,13 @@ export async function listWaitlist(sessionId: string): Promise<WaitlistEntry[]> 
 export async function joinWaitlist(
   sessionId: string,
   playerName: string,
+  phone: string,
   positions: readonly Position[],
 ): Promise<JoinWaitlistResult> {
   const { data, error } = await supabase.rpc('join_waitlist', {
     p_session_id: sessionId,
     p_name: playerName,
+    p_phone: phone,
     p_positions: [...positions],
     p_token: getClaimToken(),
   })
