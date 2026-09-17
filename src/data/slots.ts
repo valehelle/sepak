@@ -36,6 +36,19 @@ export async function releaseSlot(slotId: string): Promise<Slot> {
   return parseSlot(data)
 }
 
+/** The payment tick. Authorised by the claim token, exactly like
+ *  releaseSlot — or by admin, so the organiser can correct a mistaken tick.
+ *  Nothing is gated on it; it is the organiser's collection list. */
+export async function setSlotPaid(slotId: string, paid: boolean): Promise<Slot> {
+  const { data, error } = await supabase.rpc('set_slot_paid', {
+    p_slot_id: slotId,
+    p_token: getClaimToken(),
+    p_paid: paid,
+  })
+  if (error !== null) fail(error)
+  return parseSlot(data)
+}
+
 /** Organiser override for orphaned slots — a player who cleared their browser,
  *  or a joke name. Writes the table directly, which RLS allows only for an
  *  authenticated session. */

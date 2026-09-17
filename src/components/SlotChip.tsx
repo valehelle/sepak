@@ -40,7 +40,9 @@ export function SlotChip({
   // to clear an orphaned or joke entry.
   const inert = disabled || (taken && !view.mine && !adminOverride) || (!taken && lockEmpty)
 
-  const accessibleName = [label, name ?? 'kosong', view.mine ? 'slot anda' : null]
+  const paid = view.slot?.paid === true
+
+  const accessibleName = [label, name ?? 'kosong', paid ? 'dah bayar' : null, view.mine ? 'slot anda' : null]
     .filter((part) => part !== null)
     .join(' — ')
 
@@ -54,7 +56,7 @@ export function SlotChip({
     >
       <span
         className={[
-          'grid h-9 w-9 place-items-center rounded-lg font-kit text-[13px] font-bold leading-none tracking-tight',
+          'relative grid h-9 w-9 place-items-center rounded-lg font-kit text-[13px] font-bold leading-none tracking-tight',
           'shadow-[0_2px_6px_rgba(0,0,0,0.45)] transition',
           taken
             ? BIB[team]
@@ -66,6 +68,17 @@ export function SlotChip({
         ].join(' ')}
       >
         {taken ? label : '+'}
+        {/* The paid tick rides the bib rather than the name line: the name
+            is already the widest thing on a 390px pitch, and the badge has
+            to read at a glance from across three pitches. */}
+        {paid && (
+          <span
+            aria-hidden="true"
+            className="absolute -right-1 -top-1 grid h-4 w-4 place-items-center rounded-full bg-turf-lit text-[10px] font-bold leading-none text-night shadow-[0_1px_3px_rgba(0,0,0,0.6)]"
+          >
+            ✓
+          </span>
+        )}
       </span>
 
       <span className="w-full text-center font-sans text-[11px] font-medium leading-tight text-white drop-shadow-[0_1px_2px_rgba(0,0,0,0.9)]">

@@ -129,6 +129,31 @@ describe('buildWhatsAppMessage', () => {
     expect(message.endsWith('\n\nSenarai Tunggu\n1. Faiz (Semua kecuali GK)\n2. Nabil (MC, AM)')).toBe(true)
   })
 
+  describe('the paid tick', () => {
+    it('marks a paid name on the right, and leaves the rest alone', () => {
+      const paid = slots().map((s) =>
+        s.team === 'A' && s.position === 'ST' ? { ...s, paid: true } : s,
+      )
+      const message = buildWhatsAppMessage(input({ slots: paid }))
+      expect(message).toContain('ST- Zulazhar ✅')
+      expect(message).toContain('\nRWF- Hazmi\n')
+    })
+
+    it('never ticks an empty slot', () => {
+      const paid = slots().map((s) =>
+        s.team === 'A' && s.position === 'GK' ? { ...s, paid: true } : s,
+      )
+      // Team A's GK is unclaimed in the fixture, so the line stays a bare dash.
+      expect(buildWhatsAppMessage(input({ slots: paid }))).toContain('Team A Merah\nGK-\n')
+    })
+
+    it('changes nothing when nobody has paid', () => {
+      expect(buildWhatsAppMessage(input())).toBe(EXPECTED)
+      const explicit = slots().map((s) => ({ ...s, paid: false }))
+      expect(buildWhatsAppMessage(input({ slots: explicit }))).toBe(EXPECTED)
+    })
+  })
+
   describe('shareUrl', () => {
     it('ends the message with the session link when one is given', () => {
       const message = buildWhatsAppMessage(input({ shareUrl: 'https://valehelle.github.io/sepak/s/abc' }))

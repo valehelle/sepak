@@ -21,7 +21,7 @@ export type SessionPatch = Partial<Omit<NewSessionInput, 'sessionNo'>> & { sessi
  *  `slots` — here and in tests — must name columns explicitly rather than
  *  use `select('*')`, which 401s for anon. Reads of `sessions` may keep
  *  `select('*')`: anon has table-wide select there. */
-export const SLOT_COLUMNS = 'id, session_id, team, position, player_name, claimed_at'
+export const SLOT_COLUMNS = 'id, session_id, team, position, player_name, claimed_at, paid'
 
 function boom(what: string, message: string): never {
   throw new Error(`${what}: ${message}`)

@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { anonClient, deleteSession, seedSession, slotId } from '../helpers/localSupabase'
 import { resetClaimTokenCache } from '../../src/lib/claimToken'
-import { SlotActionError, claimSlot, getMySlotIds, releaseSlot } from '../../src/data/slots'
+import { SlotActionError, claimSlot, getMySlotIds, releaseSlot, setSlotPaid } from '../../src/data/slots'
 
 // A second "device": the wrapper functions always act as the current
 // device (via getClaimToken()'s module-level cache), so a genuinely
@@ -113,6 +113,44 @@ describe('slot action wrappers against local postgres', () => {
 
     const mine = await getMySlotIds(sessionId)
     expect(mine.has(gk)).toBe(false)
+  })
+
+  it('setSlotPaid ticks and unticks this device\'s own slot', async () => {
+    const gk = slotId(ids, 'A', 'GK')
+    const claimed = await claimSlot(gk, 'Hazmi', '60123456789')
+    expect(claimed.paid).toBe(false)
+
+    expect((await setSlotPaid(gk, true)).paid).toBe(true)
+    const { data } = await anonClient().from('slots').select('paid').eq('id', gk).single()
+    expect(data).toEqual({ paid: true })
+
+    expect((await setSlotPaid(gk, false)).paid).toBe(false)
+  })
+
+  it('setSlotPaid on another device\'s slot rejects with wrong_token', async () => {
+    const gk = slotId(ids, 'A', 'GK')
+    const claimed = await anonClient().rpc('claim_slot', { p_slot_id: gk, p_name: 'Isaac', p_phone: '60198765432', p_token: OTHER_TOKEN })
+    expect(claimed.error).toBeNull()
+
+    try {
+      await setSlotPaid(gk, true)
+      expect.unreachable('setSlotPaid should have thrown for the wrong token')
+    } catch (err) {
+      expect(err).toBeInstanceOf(SlotActionError)
+      if (err instanceof SlotActionError) expect(err.code).toBe('wrong_token')
+    }
+  })
+
+  it('releasing clears the tick, so the next occupant starts unpaid', async () => {
+    const gk = slotId(ids, 'A', 'GK')
+    await claimSlot(gk, 'Hazmi', '60123456789')
+    await setSlotPaid(gk, true)
+    await releaseSlot(gk)
+
+    const next = await anonClient().rpc('claim_slot', { p_slot_id: gk, p_name: 'Isaac', p_phone: '60198765432', p_token: OTHER_TOKEN })
+    expect(next.error).toBeNull()
+    const { data } = await anonClient().from('slots').select('paid').eq('id', gk).single()
+    expect(data).toEqual({ paid: false })
   })
 
   it("getMySlotIds returns only this device's own slots, not another device's", async () => {

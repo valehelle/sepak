@@ -11,7 +11,7 @@ import type { SlotView } from '../components/SlotChip'
 import { useToast } from '../components/Toast'
 import { WaitlistSheet } from '../components/WaitlistSheet'
 import { useAuthUser } from '../data/auth'
-import { SlotActionError, adminClearSlot, claimSlot, releaseSlot } from '../data/slots'
+import { SlotActionError, adminClearSlot, claimSlot, releaseSlot, setSlotPaid } from '../data/slots'
 import type { Slot } from '../data/types'
 import { useSessionRealtime } from '../data/useSessionRealtime'
 import { WaitlistActionError, joinWaitlist, leaveWaitlist } from '../data/waitlist'
@@ -94,7 +94,7 @@ export default function SessionPage() {
       venue: session.venue,
       feeMyr: session.feeMyr,
       teamNames: session.teamNames,
-      slots: slots.map(({ team, position, playerName }) => ({ team, position, playerName })),
+      slots: slots.map(({ team, position, playerName, paid }) => ({ team, position, playerName, paid })),
       waitlist: waitlist.map(({ playerName, positions }) => ({ playerName, positions })),
       // The path form, not the fragment one in the address bar: only the
       // path has a page of its own carrying this session's Open Graph tags.
@@ -157,7 +157,7 @@ export default function SessionPage() {
   function onRelease() {
     const slot = selected?.slot
     if (slot === undefined || slot === null) return
-    const released: Slot = { ...slot, playerName: null, claimedAt: null }
+    const released: Slot = { ...slot, playerName: null, claimedAt: null, paid: false }
     void run(() => releaseSlot(slot.id), {
       slot: released,
       owned: [[slot.id, false]],
@@ -166,13 +166,42 @@ export default function SessionPage() {
     })
   }
 
+  /** The paid tick, unlike every other action here, leaves the sheet open:
+   *  it is a toggle the player may want to correct straight away. `selected`
+   *  carries its own snapshot of the slot, so it is updated alongside the
+   *  list or the checkbox would not move until the sheet was reopened. */
+  function onTogglePaid(paid: boolean) {
+    const view = selected
+    const slot = view?.slot
+    if (view === null || view === undefined || slot === undefined || slot === null) return
+
+    const withPaid = (next: Slot) => {
+      applyLocal(next)
+      setSelected((current) =>
+        current === null || current.slot === null || current.slot.id !== next.id
+          ? current
+          : { ...current, slot: next },
+      )
+    }
+
+    setBusy(true)
+    withPaid({ ...slot, paid })
+    setSlotPaid(slot.id, paid)
+      .then(withPaid)
+      .catch((cause: unknown) => {
+        withPaid(slot)
+        show(cause instanceof SlotActionError ? cause.message : 'Gagal menanda bayaran.', 'error')
+      })
+      .finally(() => setBusy(false))
+  }
+
   async function onAdminClear() {
     const slot = selected?.slot
     if (slot === undefined || slot === null) return
     setBusy(true)
     try {
       await adminClearSlot(slot.id)
-      applyLocal({ ...slot, playerName: null, claimedAt: null })
+      applyLocal({ ...slot, playerName: null, claimedAt: null, paid: false })
       // The organiser may be clearing their own claim: drop local ownership
       // too, or `mySlotIds` keeps pointing at a slot that is now empty (the
       // "Slot anda" summary would keep naming it, and reopening it would
@@ -266,6 +295,13 @@ export default function SessionPage() {
                 and fail. */}
             <p className="font-sans text-[13px] text-white/60">
               Satu slot untuk satu peranti. Lepaskan slot ini dulu kalau nak tukar posisi.
+            </p>
+            {/* Nothing else on the page says where the tick lives, so the
+                panel that already names your slot points at it. */}
+            <p className="font-sans text-[13px] text-white/60">
+              {mySlot.paid
+                ? '✓ Dah bayar.'
+                : 'Belum bayar — tekan slot anda untuk tandakan bila dah bayar.'}
             </p>
           </div>
         ) : (
@@ -371,6 +407,7 @@ export default function SessionPage() {
         onClose={() => setSelected(null)}
         onClaim={onClaim}
         onRelease={onRelease}
+        onTogglePaid={onTogglePaid}
         onAdminClear={() => void onAdminClear()}
         onNameChange={setPendingName}
       />

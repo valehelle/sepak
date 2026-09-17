@@ -45,6 +45,7 @@ test('auto-fill reaches a second browser over realtime, without a reload', async
 
   await pageOne.getByRole('button', { name: /^GK.*Hazmi/ }).click()
   await pageOne.getByRole('button', { name: 'Lepaskan slot' }).click()
+  await pageOne.getByRole('button', { name: 'Ya, lepaskan slot' }).click()
 
   // No reload on pageTwo: realtime must deliver both the slot filling and
   // the queue shrinking.

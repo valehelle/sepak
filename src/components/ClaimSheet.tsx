@@ -19,6 +19,7 @@ type ClaimSheetProps = {
   /** `phone` arrives in stored form (60123456789), already validated. */
   onClaim: (name: string, phone: string) => void
   onRelease: () => void
+  onTogglePaid: (paid: boolean) => void
   onAdminClear: () => void
   onNameChange: (name: string) => void
 }
@@ -32,12 +33,16 @@ export function ClaimSheet({
   onClose,
   onClaim,
   onRelease,
+  onTogglePaid,
   onAdminClear,
   onNameChange,
 }: ClaimSheetProps) {
   const [name, setName] = useState('')
   const [phone, setPhone] = useState('')
   const [problem, setProblem] = useState<string | null>(null)
+  // Emptying a slot is one tap away from a mis-tap, and the slot can be gone
+  // to someone else a second later, so both destructive buttons arm first.
+  const [confirming, setConfirming] = useState<'release' | 'clear' | null>(null)
 
   // Prefill from the device's last booking so a regular only confirms. The
   // recalled name is reported upward too, or the duplicate-name warning
@@ -47,6 +52,7 @@ export function ClaimSheet({
     setName(remembered.name)
     setPhone(remembered.phone === '' ? '' : formatPhone(remembered.phone))
     setProblem(null)
+    setConfirming(null)
     if (remembered.name !== '') onNameChange(remembered.name)
     // onNameChange is a stable setter from the page; view is the real trigger.
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -59,32 +65,111 @@ export function ClaimSheet({
   const occupiedByOther = view.slot?.playerName != null && !view.mine
 
   if (view.mine || occupiedByOther) {
+    const paid = view.slot?.paid === true
     return (
       <Sheet open title={title} onClose={onClose}>
         <p className="mb-4 font-sans text-[15px] text-white/70">
           {view.mine ? `Slot anda: ${view.slot?.playerName ?? ''}` : view.slot?.playerName ?? ''}
         </p>
+
+        {/* The tick is a self-declaration -- the player ticks it after
+            handing over the fee. Admin may tick or untick anyone's, to fix
+            a mis-tap. */}
+        {(view.mine || isAdmin) && view.slot !== null && (
+          <div className="mb-4">
+            <button
+              type="button"
+              aria-pressed={paid}
+              disabled={busy}
+              onClick={() => onTogglePaid(!paid)}
+              className="flex w-full items-center gap-3 rounded-lg border border-white/15 bg-white/5 px-3 py-2.5 text-left active:bg-white/10 disabled:opacity-60"
+            >
+              <span
+                aria-hidden="true"
+                className={[
+                  'grid h-6 w-6 shrink-0 place-items-center rounded-md text-[13px] font-bold leading-none',
+                  paid ? 'bg-turf-lit text-night' : 'border-2 border-white/35 text-transparent',
+                ].join(' ')}
+              >
+                ✓
+              </span>
+              <span className="font-kit text-[15px] text-white">Dah bayar</span>
+            </button>
+            <p className="mt-1 font-sans text-xs text-white/45">
+              Tekan selepas bayar pada admin. Untuk rekod admin je.
+            </p>
+          </div>
+        )}
+
         {isAdmin && view.slot !== null && (
           <div className="mb-4 rounded-lg border border-white/10 bg-white/5 p-3">
             <AdminContact target={{ slotId: view.slot.id }} />
           </div>
         )}
+
         <div className="space-y-2">
-          {view.mine && (
-            <Button variant="destructive" disabled={busy} onClick={onRelease} className="w-full">
-              Lepaskan slot
-            </Button>
-          )}
-          {isAdmin && (
-            <Button
-              variant="secondary"
-              disabled={busy}
-              onClick={onAdminClear}
-              className="w-full text-kuning"
-            >
-              Kosongkan slot (admin)
-            </Button>
-          )}
+          {view.mine &&
+            (confirming === 'release' ? (
+              <div className="space-y-2 rounded-lg border border-merah-soft/40 bg-merah/15 p-3">
+                <p className="font-sans text-[13px] text-white/80">
+                  Slot ini jadi kosong dan orang lain boleh ambil serta-merta.
+                </p>
+                <Button variant="destructive" disabled={busy} onClick={onRelease} className="w-full">
+                  Ya, lepaskan slot
+                </Button>
+                <Button
+                  variant="secondary"
+                  disabled={busy}
+                  onClick={() => setConfirming(null)}
+                  className="w-full"
+                >
+                  Batal
+                </Button>
+              </div>
+            ) : (
+              <Button
+                variant="destructive"
+                disabled={busy}
+                onClick={() => setConfirming('release')}
+                className="w-full"
+              >
+                Lepaskan slot
+              </Button>
+            ))}
+
+          {isAdmin &&
+            (confirming === 'clear' ? (
+              <div className="space-y-2 rounded-lg border border-kuning/40 bg-kuning/10 p-3">
+                <p className="font-sans text-[13px] text-white/80">
+                  {`Buang ${view.slot?.playerName ?? 'pemain ini'} dari posisi ini?`}
+                </p>
+                <Button
+                  variant="destructive"
+                  disabled={busy}
+                  onClick={onAdminClear}
+                  className="w-full"
+                >
+                  Ya, kosongkan slot
+                </Button>
+                <Button
+                  variant="secondary"
+                  disabled={busy}
+                  onClick={() => setConfirming(null)}
+                  className="w-full"
+                >
+                  Batal
+                </Button>
+              </div>
+            ) : (
+              <Button
+                variant="secondary"
+                disabled={busy}
+                onClick={() => setConfirming('clear')}
+                className="w-full text-kuning"
+              >
+                Kosongkan slot (admin)
+              </Button>
+            ))}
         </div>
       </Sheet>
     )

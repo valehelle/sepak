@@ -25,6 +25,7 @@ const GK: Slot = {
   position: 'GK',
   playerName: null,
   claimedAt: null,
+  paid: false,
 }
 
 const getSessionWithSlots = vi.fn()
@@ -171,6 +172,7 @@ describe('useSessionRealtime', () => {
           position: 'GK',
           player_name: 'Isaac',
           claimed_at: '2026-09-10T06:00:00Z',
+          paid: false,
         },
       })
     })
@@ -379,6 +381,7 @@ describe('useSessionRealtime', () => {
           position: 'GK',
           player_name: 'Faiz',
           claimed_at: '2026-09-10T06:00:00Z',
+          paid: false,
         },
       })
     })

@@ -30,6 +30,7 @@ function emptySlots(): Slot[] {
       position,
       playerName: null,
       claimedAt: null,
+      paid: false,
     })),
   )
 }
@@ -78,6 +79,7 @@ const state = {
 
 const claimSlot = vi.fn()
 const releaseSlot = vi.fn()
+const setSlotPaid = vi.fn()
 const adminClearSlot = vi.fn()
 const joinWaitlist = vi.fn()
 const leaveWaitlist = vi.fn()
@@ -89,6 +91,7 @@ vi.mock('../data/auth', () => ({ useAuthUser: () => authState }))
 vi.mock('../data/slots', () => ({
   claimSlot: (...args: unknown[]) => claimSlot(...args),
   releaseSlot: (...args: unknown[]) => releaseSlot(...args),
+  setSlotPaid: (...args: unknown[]) => setSlotPaid(...args),
   adminClearSlot: (id: string) => adminClearSlot(id),
   SlotActionError: class extends Error {
     constructor(message: string, readonly code: string | null) { super(message) }
@@ -277,6 +280,7 @@ describe('SessionPage', () => {
     expect(screen.getByRole('button', { name: 'Lepaskan slot' })).toBeTruthy()
 
     await userEvent.click(screen.getByRole('button', { name: 'Lepaskan slot' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Ya, lepaskan slot' }))
     await waitFor(() => expect(releaseSlot).toHaveBeenCalledWith('A-ST'))
     await waitFor(() => expect(state.setOwned).toHaveBeenCalledWith('A-ST', false))
   })
@@ -290,6 +294,7 @@ describe('SessionPage', () => {
 
     await userEvent.click(firstOf(screen.getAllByRole('button', { name: /^ST/ })))
     await userEvent.click(screen.getByRole('button', { name: 'Lepaskan slot' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Ya, lepaskan slot' }))
 
     await waitFor(() => expect(screen.getByRole('status').textContent).toContain('Slot ini bukan milik anda.'))
 
@@ -410,6 +415,7 @@ describe('SessionPage', () => {
 
     await userEvent.click(firstOf(screen.getAllByRole('button', { name: /^LB/ })))
     await userEvent.click(screen.getByRole('button', { name: 'Kosongkan slot (admin)' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Ya, kosongkan slot' }))
     await waitFor(() => expect(adminClearSlot).toHaveBeenCalledWith('A-LB'))
   })
 
@@ -473,6 +479,7 @@ describe('SessionPage', () => {
 
     await userEvent.click(firstOf(screen.getAllByRole('button', { name: /^LB/ })))
     await userEvent.click(screen.getByRole('button', { name: 'Kosongkan slot (admin)' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Ya, kosongkan slot' }))
 
     await waitFor(() => expect(screen.getByRole('status').textContent).toContain('Slot tak dijumpai.'))
   })
@@ -489,6 +496,7 @@ describe('SessionPage', () => {
     // Three teams each have an MC slot; only Team B's is claimed and owned.
     await userEvent.click(screen.getByRole('button', { name: /^MC.*slot anda/i }))
     await userEvent.click(screen.getByRole('button', { name: 'Kosongkan slot (admin)' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Ya, kosongkan slot' }))
 
     // The "Slot anda" summary reads off mySlotIds against the current slot
     // list, so it must disappear once ownership is actually dropped — not
@@ -595,6 +603,17 @@ describe('SessionPage', () => {
     await waitFor(() => expect(screen.queryByText(/Faiz/)).toBeNull())
   })
 
+  it('carries the paid tick into the WhatsApp text', async () => {
+    state.slots = state.slots.map((slot) =>
+      slot.id === 'A-ST' ? { ...slot, playerName: 'Hazmi', claimedAt: 'now', paid: true } : slot,
+    )
+    writeText.mockResolvedValue(undefined)
+    view()
+    await userEvent.click(screen.getByRole('button', { name: /Salin untuk WhatsApp/ }))
+    await waitFor(() => expect(writeText).toHaveBeenCalled())
+    expect(String(firstOf(firstOf(writeText.mock.calls)))).toContain('ST- Hazmi ✅')
+  })
+
   it('includes the waitlist in the WhatsApp text', async () => {
     state.waitlist = [{ id: 'wait-1', sessionId: 'session-1', playerName: 'Faiz', positions: ['GK'], createdAt: 't1' }]
     writeText.mockResolvedValue(undefined)
@@ -603,5 +622,69 @@ describe('SessionPage', () => {
     await waitFor(() => expect(writeText).toHaveBeenCalled())
     const copied = String(firstOf(firstOf(writeText.mock.calls)))
     expect(copied).toContain('Senarai Tunggu\n1. Faiz (GK)')
+  })
+  it('marks your own slot paid and keeps the sheet open, so a mis-tap can be undone', async () => {
+    state.slots = withClaim(state.slots, 'A-ST')
+    state.mySlotIds = new Set(['A-ST'])
+    setSlotPaid.mockResolvedValue({ ...findSlot(state.slots, 'A-ST'), paid: true })
+    view()
+
+    await userEvent.click(firstOf(screen.getAllByRole('button', { name: /^ST/ })))
+    const tick = screen.getByRole('button', { name: 'Dah bayar' })
+    expect(tick.getAttribute('aria-pressed')).toBe('false')
+
+    await userEvent.click(tick)
+
+    await waitFor(() => expect(setSlotPaid).toHaveBeenCalledWith('A-ST', true))
+    // Still open, and the checkbox has moved: the sheet is the only place
+    // the tick can be taken back off.
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: 'Dah bayar' }).getAttribute('aria-pressed')).toBe('true'),
+    )
+    expect(screen.getByRole('button', { name: 'Lepaskan slot' })).toBeTruthy()
+  })
+
+  it('puts the tick back and reports the reason when the write fails', async () => {
+    const { SlotActionError } = await import('../data/slots')
+    state.slots = withClaim(state.slots, 'A-ST')
+    state.mySlotIds = new Set(['A-ST'])
+    setSlotPaid.mockRejectedValue(new SlotActionError('Slot ini bukan milik anda.', 'wrong_token'))
+    view()
+
+    await userEvent.click(firstOf(screen.getAllByRole('button', { name: /^ST/ })))
+    await userEvent.click(screen.getByRole('button', { name: 'Dah bayar' }))
+
+    await waitFor(() => expect(screen.getByRole('status').textContent).toContain('Slot ini bukan milik anda.'))
+    expect(screen.getByRole('button', { name: 'Dah bayar' }).getAttribute('aria-pressed')).toBe('false')
+  })
+
+  it('never releases on the first tap, and Batal disarms it', async () => {
+    state.slots = withClaim(state.slots, 'A-ST')
+    state.mySlotIds = new Set(['A-ST'])
+    view()
+
+    await userEvent.click(firstOf(screen.getAllByRole('button', { name: /^ST/ })))
+    await userEvent.click(screen.getByRole('button', { name: 'Lepaskan slot' }))
+    expect(releaseSlot).not.toHaveBeenCalled()
+
+    await userEvent.click(screen.getByRole('button', { name: 'Batal' }))
+    expect(releaseSlot).not.toHaveBeenCalled()
+    expect(screen.getByRole('button', { name: 'Lepaskan slot' })).toBeTruthy()
+  })
+
+  it('needs a second tap before the organiser override empties a slot', async () => {
+    authState.role = 'admin'
+    state.slots = state.slots.map((slot) =>
+      slot.id === 'A-LB' ? { ...slot, playerName: 'Joke Name', claimedAt: 'now' } : slot,
+    )
+    view()
+
+    await userEvent.click(firstOf(screen.getAllByRole('button', { name: /^LB/ })))
+    await userEvent.click(screen.getByRole('button', { name: 'Kosongkan slot (admin)' }))
+    expect(adminClearSlot).not.toHaveBeenCalled()
+    expect(screen.getByText('Buang Joke Name dari posisi ini?')).toBeTruthy()
+
+    await userEvent.click(screen.getByRole('button', { name: 'Ya, kosongkan slot' }))
+    await waitFor(() => expect(adminClearSlot).toHaveBeenCalledWith('A-LB'))
   })
 })

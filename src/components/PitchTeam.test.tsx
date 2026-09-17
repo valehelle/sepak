@@ -13,6 +13,7 @@ function slot(position: Slot['position'], playerName: string | null): Slot {
     position,
     playerName,
     claimedAt: playerName === null ? null : '2026-09-10T06:00:00Z',
+    paid: false,
   }
 }
 
@@ -39,6 +40,13 @@ describe('PitchTeam', () => {
   it('shows a claimed player name', () => {
     render(<PitchTeam {...base} slots={[slot('GK', 'Isaac')]} />)
     expect(screen.getByText('Isaac')).toBeTruthy()
+  })
+
+  it('marks a paid slot, and only a paid one', () => {
+    const paid = { ...slot('GK', 'Isaac'), paid: true }
+    render(<PitchTeam {...base} slots={[paid, slot('ST', 'Amir')]} />)
+    expect(screen.getByRole('button', { name: /GK.*Isaac.*dah bayar/i })).toBeTruthy()
+    expect(screen.queryByRole('button', { name: /Amir.*dah bayar/i })).toBeNull()
   })
 
   it('marks the slot this device owns', () => {

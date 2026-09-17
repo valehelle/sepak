@@ -5,6 +5,9 @@ export type WhatsAppSlot = {
   team: TeamKey
   position: Position
   playerName: string | null
+  /** Optional and defaulting to false, so a caller that does not track
+   *  payment still produces the message unchanged. */
+  paid?: boolean
 }
 
 export type WhatsAppWaitlistEntry = {
@@ -32,23 +35,34 @@ export type WhatsAppInput = {
   shareUrl?: string
 }
 
-type Roster = Map<string, string | null>
+type RosterEntry = { name: string | null; paid: boolean }
+type Roster = Map<string, RosterEntry>
 
 const key = (team: TeamKey, position: Position): string => `${team}:${position}`
+
+/** The tick the organiser reads down the right-hand edge of the list. An
+ *  emoji rather than a bare ✓: WhatsApp renders it at name height on both
+ *  phones and desktop, and it survives being pasted anywhere else. */
+const PAID_MARK = '✅'
 
 function rosterOf(slots: readonly WhatsAppSlot[]): Roster {
   const roster: Roster = new Map()
   for (const slot of slots) {
-    roster.set(key(slot.team, slot.position), slot.playerName?.trim() ?? null)
+    roster.set(key(slot.team, slot.position), {
+      name: slot.playerName?.trim() ?? null,
+      paid: slot.paid === true,
+    })
   }
   return roster
 }
 
 function teamBlock(team: TeamKey, teamName: string, roster: Roster): string {
   const lines = POSITIONS.map((position) => {
-    const name = roster.get(key(team, position))
+    const entry = roster.get(key(team, position))
+    const name = entry?.name
     const label = positionLabel(position)
-    return name ? `${label}- ${name}` : `${label}-`
+    if (!name) return `${label}-`
+    return entry?.paid === true ? `${label}- ${name} ${PAID_MARK}` : `${label}- ${name}`
   })
   return [`Team ${team} ${teamName}`, ...lines].join('\n')
 }

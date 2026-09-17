@@ -28,6 +28,9 @@ export type Slot = {
   position: Position
   playerName: string | null
   claimedAt: string | null
+  /** Player-declared: the fee reached the organiser. Bookkeeping only —
+   *  nothing in the app is gated on it (0011_paid.sql). */
+  paid: boolean
 }
 
 export type SessionWithSlots = { session: Session; slots: Slot[] }
@@ -50,6 +53,12 @@ function nullableStr(row: Record<string, unknown>, field: string): string | null
   const value = row[field]
   if (value === null || value === undefined) return null
   if (typeof value !== 'string') throw new Error(`${field}: expected a string or null`)
+  return value
+}
+
+function bool(row: Record<string, unknown>, field: string): boolean {
+  const value = row[field]
+  if (typeof value !== 'boolean') throw new Error(`${field}: expected a boolean`)
   return value
 }
 
@@ -117,6 +126,7 @@ export function parseSlot(row: unknown): Slot {
     position,
     playerName: nullableStr(r, 'player_name'),
     claimedAt: nullableStr(r, 'claimed_at'),
+    paid: bool(r, 'paid'),
   }
 }
 
@@ -140,6 +150,8 @@ export const RPC_ERROR_CODES = [
   'not_admin',
   // One booking per person (0010_one_booking_per_person.sql).
   'phone_in_use',
+  // Payment tick (0011_paid.sql).
+  'invalid_paid',
 ] as const
 
 export type RpcErrorCode = (typeof RPC_ERROR_CODES)[number]
@@ -168,6 +180,7 @@ export const RPC_MESSAGES: Record<RpcErrorCode, string> = {
   invalid_phone: 'Nombor telefon tak sah. Guna nombor mobile Malaysia, cth. 012-345 6789.',
   not_admin: 'Hanya admin boleh lihat nombor telefon.',
   phone_in_use: 'Nombor ini dah daftar untuk sesi ini. Satu tempat untuk satu orang.',
+  invalid_paid: 'Status bayaran tak sah.',
 }
 
 export const FALLBACK_ERROR_MESSAGE = 'Ada masalah. Cuba lagi.'

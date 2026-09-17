@@ -26,8 +26,32 @@ test('a player claims, sees, and releases a slot', async ({ page }) => {
   await expect(page.getByText(/Slot anda: Team A Merah — GK/)).toBeVisible()
 
   await page.getByRole('button', { name: /GK.*Hazmi/ }).click()
+  // Emptying a slot arms first: one tap is a mis-tap away from losing it.
   await page.getByRole('button', { name: 'Lepaskan slot' }).click()
+  await page.getByRole('button', { name: 'Ya, lepaskan slot' }).click()
   await expect(page.getByText('0/33 penuh')).toBeVisible()
+})
+
+test('a player ticks their own slot as paid, and the tick shows on the pitch', async ({ page }) => {
+  await page.goto(`s/${sessionId}`)
+  await page.getByRole('button', { name: /^GK/ }).first().click()
+  await page.getByLabel('Nama').fill('Hazmi')
+  await page.getByLabel('Nombor telefon').fill('012-345 6789')
+  await page.getByRole('button', { name: 'Ambil slot' }).click()
+  await expect(page.getByText(/Belum bayar/)).toBeVisible()
+
+  await page.getByRole('button', { name: /GK.*Hazmi/ }).click()
+  await page.getByRole('button', { name: 'Dah bayar', exact: true }).click()
+
+  // The badge is on the chip, so the accessible name is what proves it.
+  await expect(page.getByRole('button', { name: /GK.*Hazmi.*dah bayar/ })).toBeVisible()
+  await expect(page.getByRole('button', { name: 'Dah bayar', exact: true })).toHaveAttribute('aria-pressed', 'true')
+
+  // Untickable, and the summary panel follows.
+  await page.getByRole('button', { name: 'Dah bayar', exact: true }).click()
+  await expect(page.getByRole('button', { name: 'Dah bayar', exact: true })).toHaveAttribute('aria-pressed', 'false')
+  await page.keyboard.press('Escape')
+  await expect(page.getByText(/Belum bayar/)).toBeVisible()
 })
 
 test('a claim appears live in another browser', async ({ browser }) => {

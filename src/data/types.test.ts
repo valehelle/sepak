@@ -26,6 +26,7 @@ const SLOT_ROW = {
   position: 'CB1',
   player_name: 'amie',
   claimed_at: '2026-09-10T05:00:00Z',
+  paid: false,
 }
 
 describe('parseSession', () => {
