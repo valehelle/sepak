@@ -12,7 +12,7 @@ test.afterEach(async () => {
 })
 
 test('a player claims, sees, and releases a slot', async ({ page }) => {
-  await page.goto(`#/s/${sessionId}`)
+  await page.goto(`s/${sessionId}`)
   await expect(page.getByText('E2E Geng')).toBeVisible()
   await expect(page.getByText('0/33 penuh')).toBeVisible()
 
@@ -36,8 +36,8 @@ test('a claim appears live in another browser', async ({ browser }) => {
   const pageOne = await one.newPage()
   const pageTwo = await two.newPage()
 
-  await pageOne.goto(`#/s/${sessionId}`)
-  await pageTwo.goto(`#/s/${sessionId}`)
+  await pageOne.goto(`s/${sessionId}`)
+  await pageTwo.goto(`s/${sessionId}`)
 
   await pageOne.getByRole('button', { name: /^ST/ }).first().click()
   await pageOne.getByLabel('Nama').fill('Zulazhar')
@@ -57,8 +57,8 @@ test('two players racing one slot: one wins, the other is told', async ({ browse
   const pageOne = await one.newPage()
   const pageTwo = await two.newPage()
 
-  await pageOne.goto(`#/s/${sessionId}`)
-  await pageTwo.goto(`#/s/${sessionId}`)
+  await pageOne.goto(`s/${sessionId}`)
+  await pageTwo.goto(`s/${sessionId}`)
 
   // Distinct numbers, because these are two different people: one booking
   // per phone per session (0010_one_booking_per_person.sql). Sharing one
@@ -102,7 +102,7 @@ test('a closed session is read-only', async ({ page }) => {
   const { error } = await admin().from('sessions').update({ status: 'closed' }).eq('id', sessionId)
   if (error !== null) throw new Error(`failed to close session: ${error.message}`)
 
-  await page.goto(`#/s/${sessionId}`)
+  await page.goto(`s/${sessionId}`)
   await expect(page.getByText('Sesi ditutup')).toBeVisible()
   await expect(page.getByRole('button', { name: /^GK/ }).first()).toBeDisabled()
 })

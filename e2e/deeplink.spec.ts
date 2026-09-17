@@ -13,22 +13,29 @@ test.afterEach(async () => {
 
 test('a pasted session link opens directly', async ({ page }) => {
   // This is the WhatsApp case: a cold navigation straight to a nested route.
-  // The route lives in the fragment so the shared link is really the site
-  // root, which GitHub Pages answers with a 200 and the Open Graph tags --
-  // a 404 would render as a bare URL in the chat (see src/main.tsx).
-  await page.goto(`#/s/${sessionId}`)
+  // In production this path is a real file carrying the session's own share
+  // tags (scripts/sessionPages.mjs); here it exercises the 404.html
+  // fallback, which is what a session created since the last build gets.
+  await page.goto(`s/${sessionId}`)
   await expect(page.getByText('E2E Geng')).toBeVisible()
 })
 
 test('refreshing a session page keeps it working', async ({ page }) => {
-  await page.goto(`#/s/${sessionId}`)
+  await page.goto(`s/${sessionId}`)
   await expect(page.getByText('E2E Geng')).toBeVisible()
   await page.reload()
   await expect(page.getByText('E2E Geng')).toBeVisible()
   await expect(page.getByText('Team A Merah')).toBeVisible()
 })
 
+test('a link with a trailing slash opens the same session', async ({ page }) => {
+  // GitHub Pages redirects `/s/<id>` to `/s/<id>/` to serve the generated
+  // directory index, so the app has to route the slashed form too.
+  await page.goto(`s/${sessionId}/`)
+  await expect(page.getByText('E2E Geng')).toBeVisible()
+})
+
 test('an unknown session id says so instead of breaking', async ({ page }) => {
-  await page.goto('#/s/11111111-1111-4111-8111-999999999999')
+  await page.goto('s/11111111-1111-4111-8111-999999999999')
   await expect(page.getByText('Sesi tak dijumpai.')).toBeVisible()
 })

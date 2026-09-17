@@ -5,15 +5,16 @@
 // single-page app therefore has exactly one preview, however many sessions
 // it holds -- which is why every link showed the same generic card.
 //
-// This writes a real file per session at `s/<id>/index.html`, carrying that
-// session's own title and a description led by the date, which is what
-// people actually want to see in the chat. The page itself is a stub: a
-// crawler takes the tags, a person is sent straight into the app.
+// This writes a real file per session at `s/<id>/index.html`: the built
+// index.html with its share tags swapped for that session's own title and a
+// description led by the date. It is the whole app, not a stub, so the URL
+// in the address bar is both what loads the session and what previews
+// correctly when pasted into a chat.
 //
 // Sessions created after the last build have no file yet, so their links
 // fall back to the site-wide card (and the 404 shim still opens them). The
 // deploy workflow rebuilds on a schedule to keep that window short.
-import { mkdir, writeFile } from 'node:fs/promises'
+import { mkdir, readFile, writeFile } from 'node:fs/promises'
 import { resolve } from 'node:path'
 
 const MONTHS = ['Jan', 'Feb', 'Mac', 'Apr', 'Mei', 'Jun', 'Jul', 'Ogo', 'Sep', 'Okt', 'Nov', 'Dis']
@@ -74,46 +75,36 @@ function escapeAttribute(value) {
     .replace(/"/g, '&quot;')
 }
 
-/** A stub, not the app: the crawler wants the tags and a person wants the
- *  session, so the tags are inline and the redirect fires immediately. The
- *  app itself routes on the fragment (see src/main.tsx), hence the form of
- *  the target. */
-export function sessionPreviewHtml(session, { base, origin, image }) {
+/** Replaces one tag's content, failing loudly rather than silently
+ *  shipping the site-wide text: a renamed or dropped tag in index.html
+ *  would otherwise turn every session's preview back into the generic one
+ *  with nothing to show for it. */
+function replaceTag(html, pattern, value, what) {
+  if (!pattern.test(html)) throw new Error(`session preview: no ${what} in index.html`)
+  return html.replace(pattern, (match, open, close) => `${open}${escapeAttribute(value)}${close}`)
+}
+
+/** The built index.html with its share tags rewritten for one session.
+ *  Asset URLs inside it are absolute (Vite's base), so the same markup
+ *  works from `s/<id>/` as from the root. */
+export function sessionPreviewHtml(indexHtml, session, { base, origin }) {
   const title = previewTitle(session)
   const description = previewDescription(session)
   const url = `${origin}${base}s/${session.id}`
-  const attr = (value) => escapeAttribute(value)
 
-  return `<!doctype html>
-<html lang="ms">
-  <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
-    <title>${attr(title)}</title>
-    <meta name="description" content="${attr(description)}" />
-    <meta property="og:type" content="website" />
-    <meta property="og:site_name" content="Geng Turun Peluh" />
-    <meta property="og:locale" content="ms_MY" />
-    <meta property="og:title" content="${attr(title)}" />
-    <meta property="og:description" content="${attr(description)}" />
-    <meta property="og:url" content="${attr(url)}" />
-    <meta property="og:image" content="${attr(`${origin}${base}og.jpg`)}" />
-    <meta property="og:image:width" content="1200" />
-    <meta property="og:image:height" content="630" />
-    <meta property="og:image:type" content="image/jpeg" />
-    <meta property="og:image:alt" content="Padang bola di bawah lampu limpah pada waktu malam" />
-    <meta name="twitter:card" content="summary_large_image" />
-    <meta name="twitter:title" content="${attr(title)}" />
-    <meta name="twitter:description" content="${attr(description)}" />
-    <meta name="twitter:image" content="${attr(image ?? `${origin}${base}og.jpg`)}" />
-    <link rel="canonical" href="${attr(url)}" />
-    <script>
-      location.replace(${JSON.stringify(`${base}#/s/`)} + ${JSON.stringify(session.id)})
-    </script>
-  </head>
-  <body></body>
-</html>
-`
+  let html = indexHtml
+  html = replaceTag(html, /(<title>)[^<]*(<\/title>)/, title, '<title>')
+  for (const [name, value] of [
+    ['name="description"', description],
+    ['property="og:title"', title],
+    ['property="og:description"', description],
+    ['property="og:url"', url],
+    ['name="twitter:title"', title],
+    ['name="twitter:description"', description],
+  ]) {
+    html = replaceTag(html, new RegExp(`(<meta ${name} content=")[^"]*(")`), value, name)
+  }
+  return html
 }
 
 /** Every session, not just the upcoming ones: a link shared months ago
@@ -137,11 +128,12 @@ export async function writeSessionPages({ dist, base, origin, url, key, log = co
     return 0
   }
 
+  const indexHtml = await readFile(resolve(dist, 'index.html'), 'utf8')
   const sessions = await fetchSessions(url, key)
   for (const session of sessions) {
     const dir = resolve(dist, 's', session.id)
     await mkdir(dir, { recursive: true })
-    await writeFile(resolve(dir, 'index.html'), sessionPreviewHtml(session, { base, origin }))
+    await writeFile(resolve(dir, 'index.html'), sessionPreviewHtml(indexHtml, session, { base, origin }))
   }
   log(`session-pages: wrote ${sessions.length} per-session preview${sessions.length === 1 ? '' : 's'}`)
   return sessions.length
