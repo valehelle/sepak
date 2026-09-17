@@ -37,6 +37,16 @@ vi.mock('../data/auth', () => ({
   signOut: () => signOut(),
 }))
 
+// Admin renders ActivityFeed, which imports the supabase client through
+// ../data/activity -- mocked here so the page's own tests need no
+// credentials. The feed's behaviour is tested in ActivityFeed.test.tsx.
+vi.mock('../data/activity', () => ({
+  listActivity: () => Promise.resolve([]),
+  ActivityError: class extends Error {
+    constructor(message: string, readonly code: string | null) { super(message) }
+  },
+}))
+
 vi.mock('../data/admins', () => ({
   listAdmins: () => listAdmins(),
   addAdmin: vi.fn(),

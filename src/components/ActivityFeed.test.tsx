@@ -8,16 +8,18 @@ import type { ActivityEvent } from '../data/activity'
 // effect is reported unhandled by vitest even when the component catches it.
 let loads = 0
 let impl: () => Promise<ActivityEvent[]> = () => Promise.resolve([])
-vi.mock('../data/activity', async () => {
-  const actual = await vi.importActual<typeof import('../data/activity')>('../data/activity')
-  return {
-    ...actual,
-    listActivity: () => {
-      loads += 1
-      return impl()
-    },
-  }
-})
+// Nothing is imported for real here: src/data/activity pulls in the supabase
+// client, which throws at import time without credentials, so this factory
+// replaces the module outright rather than spreading importActual over it.
+vi.mock('../data/activity', () => ({
+  listActivity: () => {
+    loads += 1
+    return impl()
+  },
+  ActivityError: class extends Error {
+    constructor(message: string, readonly code: string | null) { super(message) }
+  },
+}))
 
 const { ActivityFeed, describeActivity } = await import('./ActivityFeed')
 
