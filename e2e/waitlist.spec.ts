@@ -37,6 +37,11 @@ test('auto-fill reaches a second browser over realtime, without a reload', async
   await pageTwo.getByRole('button', { name: 'GK', exact: true }).click()
   await pageTwo.getByRole('button', { name: 'Sertai', exact: true }).click()
 
+  // Joining the queue now offers notifications straight away. Dismissed with
+  // Escape rather than a named button: which button the sheet shows depends
+  // on what the browser supports, and this test is about auto-fill.
+  await pageTwo.keyboard.press('Escape')
+
   // Confirms the queue really did form before the release below -- without
   // this, a bug that always claims immediately would make the test pass
   // for the wrong reason.

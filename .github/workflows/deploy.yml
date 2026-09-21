@@ -60,6 +60,9 @@ jobs:
           # never referenced here.
           VITE_SUPABASE_URL: ${{ vars.VITE_SUPABASE_URL }}
           VITE_SUPABASE_ANON_KEY: ${{ vars.VITE_SUPABASE_ANON_KEY }}
+          # Public by design -- it is what a browser subscribes with. The
+          # private half lives only in the Edge Function's secrets.
+          VITE_VAPID_PUBLIC_KEY: ${{ vars.VITE_VAPID_PUBLIC_KEY }}
 
       # `vite preview` (and therefore the e2e deep-link suite) SPA-falls-back
       # for every path, but GitHub Pages does not -- it serves 404.html

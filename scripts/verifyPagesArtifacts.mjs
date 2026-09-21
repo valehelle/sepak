@@ -58,6 +58,30 @@ if (await exists(indexPath)) {
     }
   }
   if (!index.includes('twitter:card')) failures.push(`${indexPath} has no twitter:card tag`)
+
+  // The installable shell. iOS only permits push to a web app added to the
+  // home screen, so a missing manifest or icon is not cosmetic here -- it
+  // silently removes notifications for every iPhone in the group.
+  if (!index.includes('rel="manifest"')) failures.push(`${indexPath} has no manifest link`)
+  if (!index.includes('rel="apple-touch-icon"')) {
+    failures.push(`${indexPath} has no apple-touch-icon link -- iOS would use a screenshot`)
+  }
+
+  const manifestPath = resolve(dist, 'manifest.webmanifest')
+  if (!(await exists(manifestPath))) {
+    failures.push(`missing ${manifestPath}`)
+  } else {
+    const manifest = JSON.parse(await readFile(manifestPath, 'utf8'))
+    for (const icon of manifest.icons ?? []) {
+      const file = icon.src.split('/').pop()
+      if (!(await exists(resolve(dist, file)))) {
+        failures.push(`the manifest names ${file}, which is missing from ${dist}`)
+      }
+    }
+    if (!(await exists(resolve(dist, 'apple-touch-icon.png')))) {
+      failures.push(`missing ${resolve(dist, 'apple-touch-icon.png')}`)
+    }
+  }
 }
 
 if (failures.length > 0) {
@@ -66,4 +90,4 @@ if (failures.length > 0) {
   process.exit(1)
 }
 
-console.log('verify:pages: .nojekyll present, 404.html matches index.html, og:image present and shipped')
+console.log('verify:pages: .nojekyll, 404.html, og:image, manifest and every icon it names are present')

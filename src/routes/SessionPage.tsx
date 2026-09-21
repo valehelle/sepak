@@ -6,16 +6,19 @@ import { ClaimSheet } from '../components/ClaimSheet'
 import { CopyButton } from '../components/CopyButton'
 import { ListTeam } from '../components/ListTeam'
 import { PitchTeam } from '../components/PitchTeam'
+import { PushPrompt } from '../components/PushPrompt'
 import { SessionMeta } from '../components/SessionMeta'
 import type { SlotView } from '../components/SlotChip'
 import { useToast } from '../components/Toast'
 import { WaitlistSheet } from '../components/WaitlistSheet'
 import { useAuthUser } from '../data/auth'
+import { hasPushSubscription } from '../data/push'
 import { SlotActionError, adminClearSlot, claimSlot, releaseSlot, setSlotPaid } from '../data/slots'
 import type { Slot } from '../data/types'
 import { useSessionRealtime } from '../data/useSessionRealtime'
 import { WaitlistActionError, joinWaitlist, leaveWaitlist } from '../data/waitlist'
 import { TEAM_KEYS, formatPositions, positionLabel, type Position, type TeamKey } from '../lib/positions'
+import { rememberSession } from '../lib/lastSession'
 import { rememberPlayer } from '../lib/playerMemory'
 import { buildWhatsAppMessage } from '../lib/whatsapp'
 
@@ -70,10 +73,29 @@ export default function SessionPage() {
   const [viewMode, setViewMode] = useState<'pitch' | 'list'>(readViewMode)
   const [pendingName, setPendingName] = useState('')
   const [waitlistOpen, setWaitlistOpen] = useState(false)
+  const [pushOpen, setPushOpen] = useState(false)
+  const [pushOn, setPushOn] = useState(true)
 
   useEffect(() => {
     setPendingName('')
   }, [selected])
+
+  // The installed app's icon can only open one address, and that address is
+  // the index. Remembering the session lets it land somewhere useful.
+  useEffect(() => {
+    if (session !== null) rememberSession(session.id)
+  }, [session])
+
+  // Only asked when there is something to ask about. `pushOn` starts true so
+  // the bell never flashes into view before we know the answer.
+  useEffect(() => {
+    if (myWaitlistEntry === null) return
+    let cancelled = false
+    hasPushSubscription()
+      .then((on) => { if (!cancelled) setPushOn(on) })
+      .catch(() => { if (!cancelled) setPushOn(false) })
+    return () => { cancelled = true }
+  }, [myWaitlistEntry])
 
   const mySlot = slots.find((slot) => mySlotIds.has(slot.id)) ?? null
   const filled = slots.filter((slot) => slot.playerName !== null).length
@@ -234,6 +256,9 @@ export default function SessionPage() {
         const entry = { id: result.waitlistId, positions, createdAt: new Date().toISOString() }
         setMyWaitlistEntry(entry)
         applyWaitlistLocal({ ...entry, sessionId: session.id, playerName: name })
+        // They have just told us they want a place they cannot have yet:
+        // the one moment where offering to notify them is obviously useful.
+        setPushOpen(true)
       })
       .catch((cause: unknown) => {
         show(cause instanceof WaitlistActionError ? cause.message : 'Ada masalah. Cuba lagi.', 'error')
@@ -315,9 +340,19 @@ export default function SessionPage() {
                 </p>
               )}
               {myWaitlistEntry !== null ? (
-                <p className="font-kit text-[15px] text-white">
-                  {`Anda dalam senarai tunggu (${formatPositions(myWaitlistEntry.positions)}).`}
-                </p>
+                <>
+                  <p className="font-kit text-[15px] text-white">
+                    {`Anda dalam senarai tunggu (${formatPositions(myWaitlistEntry.positions)}).`}
+                  </p>
+                  {/* Stays on offer until they accept: on iOS the first tap
+                      only produces install instructions, and this is what
+                      they come back to afterwards. */}
+                  {!pushOn && (
+                    <Button variant="secondary" onClick={() => setPushOpen(true)} className="w-full">
+                      Beritahu saya bila naik
+                    </Button>
+                  )}
+                </>
               ) : (
                 <Button variant="primary" onClick={() => setWaitlistOpen(true)} className="w-full">
                   Sertai senarai tunggu
@@ -410,6 +445,12 @@ export default function SessionPage() {
         onTogglePaid={onTogglePaid}
         onAdminClear={() => void onAdminClear()}
         onNameChange={setPendingName}
+      />
+
+      <PushPrompt
+        open={pushOpen}
+        onClose={() => setPushOpen(false)}
+        onSubscribed={() => setPushOn(true)}
       />
 
       <WaitlistSheet

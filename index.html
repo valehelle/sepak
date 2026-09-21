@@ -27,6 +27,18 @@
     <meta name="twitter:title" content="Geng Turun Peluh 30+" />
     <meta name="twitter:description" content="Booking sesi bola Geng Turun Peluh." />
     <meta name="twitter:image" content="https://valehelle.github.io/sepak/og.jpg" />
+
+    <!-- Installable, which on iOS is the only way push notifications are
+         allowed to reach a web app at all. Paths are absolute and carry the
+         base: a session page is served from /sepak/s/<id>/, where a relative
+         href would resolve one directory too deep and 404. Same reason the
+         og: URLs above are absolute. -->
+    <link rel="manifest" href="/sepak/manifest.webmanifest" />
+    <link rel="apple-touch-icon" href="/sepak/apple-touch-icon.png" />
+    <link rel="icon" type="image/png" sizes="192x192" href="/sepak/icon-192.png" />
+    <!-- What iOS writes under the home-screen icon; the manifest's name is
+         too long to survive there. -->
+    <meta name="apple-mobile-web-app-title" content="GTP" />
   </head>
   <body>
     <div id="root"></div>

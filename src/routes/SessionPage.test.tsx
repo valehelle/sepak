@@ -97,6 +97,24 @@ vi.mock('../data/slots', () => ({
     constructor(message: string, readonly code: string | null) { super(message) }
   },
 }))
+// SessionPage asks whether this device is already subscribed; mocked here so
+// the page's tests need no supabase credentials. The prompt's own behaviour
+// is tested in src/components/PushPrompt.test.tsx.
+let pushOn = false
+vi.mock('../data/push', () => ({
+  hasPushSubscription: () => Promise.resolve(pushOn),
+  subscribeToPush: () => Promise.resolve(),
+  PushError: class extends Error {
+    constructor(message: string, readonly code: string | null) { super(message) }
+  },
+}))
+vi.mock('../lib/pushCapability', () => ({
+  pushCapability: () => 'ready',
+  isIosNonSafari: () => false,
+  isStandalone: () => false,
+  isIos: () => false,
+}))
+
 const getContactPhone = vi.fn()
 vi.mock('../data/contacts', () => ({
   getContactPhone: (target: unknown) => getContactPhone(target),
@@ -141,6 +159,7 @@ function findSlot(slots: readonly Slot[], slotId: string): Slot {
 
 describe('SessionPage', () => {
   beforeEach(() => {
+    pushOn = false
     state.session = SESSION
     state.slots = emptySlots()
     state.mySlotIds = new Set<string>()
@@ -533,6 +552,55 @@ describe('SessionPage', () => {
     expect(screen.getByRole('button', { name: 'Keluar dari senarai tunggu' })).toBeTruthy()
     // The sheet closes and the player is no longer prompted to join again.
     expect(screen.queryByLabelText('Nama')).toBeNull()
+  })
+
+  it('offers notifications the moment a join actually queues', async () => {
+    joinWaitlist.mockResolvedValue({ placed: false, waitlistId: 'wait-1' })
+    view()
+
+    await userEvent.click(screen.getByRole('button', { name: 'Sertai senarai tunggu' }))
+    await userEvent.type(screen.getByLabelText('Nama'), 'Faiz')
+    await userEvent.type(screen.getByLabelText('Nombor telefon'), '019-876 5432')
+    await userEvent.click(screen.getByRole('button', { name: 'MC' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Sertai' }))
+
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Ya, beritahu saya' })).toBeTruthy())
+  })
+
+  it('does not offer notifications when the join landed a slot instead', async () => {
+    // Nothing to be notified about: they already have the position.
+    joinWaitlist.mockResolvedValue({ placed: true, slotId: 'A-GK' })
+    view()
+
+    await userEvent.click(screen.getByRole('button', { name: 'Sertai senarai tunggu' }))
+    await userEvent.type(screen.getByLabelText('Nama'), 'Faiz')
+    await userEvent.type(screen.getByLabelText('Nombor telefon'), '019-876 5432')
+    await userEvent.click(screen.getByRole('button', { name: 'MC' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Sertai' }))
+
+    await waitFor(() => expect(screen.queryByLabelText('Nama')).toBeNull())
+    expect(screen.queryByRole('button', { name: 'Ya, beritahu saya' })).toBeNull()
+  })
+
+  it('keeps offering the bell to a queued device that has not subscribed', async () => {
+    // The iOS round trip depends on this: the first tap only produces
+    // install instructions, and this button is what they come back to.
+    pushOn = false
+    state.waitlist = [{ id: 'wait-1', sessionId: 'session-1', playerName: 'Faiz', positions: ['GK'], createdAt: 't1' }]
+    state.myWaitlistEntry = { id: 'wait-1', positions: ['GK'], createdAt: 't1' }
+    view()
+
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Beritahu saya bila naik' })).toBeTruthy())
+  })
+
+  it('stops offering the bell once this device is subscribed', async () => {
+    pushOn = true
+    state.waitlist = [{ id: 'wait-1', sessionId: 'session-1', playerName: 'Faiz', positions: ['GK'], createdAt: 't1' }]
+    state.myWaitlistEntry = { id: 'wait-1', positions: ['GK'], createdAt: 't1' }
+    view()
+
+    await waitFor(() => expect(screen.getByText(/Anda dalam senarai tunggu/)).toBeTruthy())
+    expect(screen.queryByRole('button', { name: 'Beritahu saya bila naik' })).toBeNull()
   })
 
   it('closes the sheet and highlights the slot when joining places immediately', async () => {
