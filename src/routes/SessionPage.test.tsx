@@ -97,14 +97,22 @@ vi.mock('../data/slots', () => ({
     constructor(message: string, readonly code: string | null) { super(message) }
   },
 }))
-// SessionPage asks whether this device is already subscribed; mocked here so
-// the page's tests need no supabase credentials. The prompt's own behaviour
-// is tested in src/components/PushPrompt.test.tsx.
+// SessionPage asks both channels whether this device is already notified;
+// mocked here so the page's tests need no supabase credentials. The sheet's
+// own behaviour is tested in src/components/NotifySheet.test.tsx.
 let pushOn = false
 vi.mock('../data/push', () => ({
   hasPushSubscription: () => Promise.resolve(pushOn),
   subscribeToPush: () => Promise.resolve(),
   PushError: class extends Error {
+    constructor(message: string, readonly code: string | null) { super(message) }
+  },
+}))
+vi.mock('../data/telegram', () => ({
+  TELEGRAM_BOT: 'GengTurunPeluhBot',
+  hasTelegramChat: () => Promise.resolve(false),
+  createTelegramLink: () => Promise.resolve('https://t.me/GengTurunPeluhBot?start=code'),
+  TelegramError: class extends Error {
     constructor(message: string, readonly code: string | null) { super(message) }
   },
 }))
@@ -564,7 +572,7 @@ describe('SessionPage', () => {
     await userEvent.click(screen.getByRole('button', { name: 'MC' }))
     await userEvent.click(screen.getByRole('button', { name: 'Sertai' }))
 
-    await waitFor(() => expect(screen.getByRole('button', { name: 'Ya, beritahu saya' })).toBeTruthy())
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Guna Telegram' })).toBeTruthy())
   })
 
   it('does not offer notifications when the join landed a slot instead', async () => {
@@ -579,10 +587,10 @@ describe('SessionPage', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Sertai' }))
 
     await waitFor(() => expect(screen.queryByLabelText('Nama')).toBeNull())
-    expect(screen.queryByRole('button', { name: 'Ya, beritahu saya' })).toBeNull()
+    expect(screen.queryByRole('button', { name: 'Guna Telegram' })).toBeNull()
   })
 
-  it('keeps offering the bell to a queued device that has not subscribed', async () => {
+  it('keeps offering the button to a queued device that has not subscribed', async () => {
     // The iOS round trip depends on this: the first tap only produces
     // install instructions, and this button is what they come back to.
     pushOn = false
@@ -590,17 +598,35 @@ describe('SessionPage', () => {
     state.myWaitlistEntry = { id: 'wait-1', positions: ['GK'], createdAt: 't1' }
     view()
 
-    await waitFor(() => expect(screen.getByRole('button', { name: 'Beritahu saya bila naik' })).toBeTruthy())
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Hidupkan notifikasi' })).toBeTruthy())
   })
 
-  it('stops offering the bell once this device is subscribed', async () => {
+  it('offers it to a device holding a slot too, since the subscription outlives one booking', async () => {
+    pushOn = false
+    state.slots = withClaim(state.slots, 'A-ST')
+    state.mySlotIds = new Set(['A-ST'])
+    view()
+
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Hidupkan notifikasi' })).toBeTruthy())
+  })
+
+  it('offers nothing to a device with no place in the session', async () => {
+    // save_push_subscription would refuse it, so a button here could only fail.
+    pushOn = false
+    view()
+
+    await waitFor(() => expect(screen.getByText(/Tekan posisi kosong/)).toBeTruthy())
+    expect(screen.queryByRole('button', { name: 'Hidupkan notifikasi' })).toBeNull()
+  })
+
+  it('stops offering the button once this device is subscribed', async () => {
     pushOn = true
     state.waitlist = [{ id: 'wait-1', sessionId: 'session-1', playerName: 'Faiz', positions: ['GK'], createdAt: 't1' }]
     state.myWaitlistEntry = { id: 'wait-1', positions: ['GK'], createdAt: 't1' }
     view()
 
-    await waitFor(() => expect(screen.getByText(/Anda dalam senarai tunggu/)).toBeTruthy())
-    expect(screen.queryByRole('button', { name: 'Beritahu saya bila naik' })).toBeNull()
+    await waitFor(() => expect(screen.getByText(/Notifikasi hidup/)).toBeTruthy())
+    expect(screen.queryByRole('button', { name: 'Hidupkan notifikasi' })).toBeNull()
   })
 
   it('closes the sheet and highlights the slot when joining places immediately', async () => {

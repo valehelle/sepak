@@ -13,13 +13,13 @@ test.afterEach(async () => {
 })
 
 // Scope, honestly stated: headless Chromium reports Notification.permission
-// as "denied" whatever is granted to the context, so the accept path cannot
-// be driven from here -- that branch is covered in
-// src/components/PushPrompt.test.tsx. What this proves is the wiring: the
-// offer appears at the right moment, says the right thing for a browser that
-// has blocked notifications, and stays reachable afterwards. Delivery itself
-// needs a real push service and a real phone.
-test('queueing offers notifications, explains a blocked browser, and keeps the offer reachable', async ({
+// as "denied" whatever is granted to the context, so the browser-notification
+// path cannot be driven from here -- that branch is covered in
+// src/components/NotifySheet.test.tsx. What this proves is the wiring that
+// only a real database can: queueing offers the sheet, and "Guna Telegram"
+// mints a real one-time code and opens a t.me link built from it. Delivery
+// itself needs a real phone.
+test('queueing offers notifications, and Telegram opens a link carrying a fresh code', async ({
   page,
   browser,
 }) => {
@@ -41,21 +41,24 @@ test('queueing offers notifications, explains a blocked browser, and keeps the o
   await queued.getByRole('button', { name: 'GK', exact: true }).click()
   await queued.getByRole('button', { name: 'Sertai', exact: true }).click()
 
-  // The offer arrives by itself, the moment they are in the queue.
+  // The sheet arrives by itself, the moment they are in the queue, and
+  // Telegram leads because it is the option that works on every phone.
   const sheet = queued.getByRole('dialog', { name: 'Beritahu saya bila naik' })
   await expect(sheet).toBeVisible()
-  // ...and in a browser that has blocked notifications it says so rather
-  // than offering a button that cannot work.
-  await expect(queued.getByText(/disekat untuk laman ni/)).toBeVisible()
-  await expect(queued.getByRole('button', { name: 'Ya, beritahu saya' })).toHaveCount(0)
+  await expect(queued.getByRole('button', { name: 'Guna Telegram' })).toBeVisible()
 
-  await queued.getByRole('button', { name: 'Tutup' }).click()
-  await expect(sheet).toBeHidden()
+  const opened = second.waitForEvent('page')
+  await queued.getByRole('button', { name: 'Guna Telegram' }).click()
+  const telegram = await opened
+  // A real code from the database, and not the claim token.
+  expect(telegram.url()).toMatch(/^https:\/\/t\.me\/[A-Za-z0-9_]+\?start=[0-9a-f-]{36}$/)
+  await telegram.close()
 
-  // Still reachable: on iOS the first tap only yields install instructions,
-  // so this button is the way back.
-  await queued.getByRole('button', { name: 'Beritahu saya bila naik' }).click()
-  await expect(sheet).toBeVisible()
+  // Back on the page, it now waits to be told Start was pressed -- Telegram
+  // cannot tell us.
+  await expect(queued.getByRole('button', { name: 'Dah tekan Start' })).toBeVisible()
+  await queued.getByRole('button', { name: 'Dah tekan Start' }).click()
+  await expect(queued.getByText(/Belum sambung/)).toBeVisible()
 
   await second.close()
 })

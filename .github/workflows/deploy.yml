@@ -63,6 +63,7 @@ jobs:
           # Public by design -- it is what a browser subscribes with. The
           # private half lives only in the Edge Function's secrets.
           VITE_VAPID_PUBLIC_KEY: ${{ vars.VITE_VAPID_PUBLIC_KEY }}
+          VITE_TELEGRAM_BOT: ${{ vars.VITE_TELEGRAM_BOT }}
 
       # `vite preview` (and therefore the e2e deep-link suite) SPA-falls-back
       # for every path, but GitHub Pages does not -- it serves 404.html
@@ -127,6 +128,9 @@ jobs:
       - run: |
           echo "VITE_SUPABASE_URL=$(supabase status -o json | jq -r .API_URL)" >> "$GITHUB_ENV"
           echo "VITE_SUPABASE_ANON_KEY=$(supabase status -o json | jq -r .ANON_KEY)" >> "$GITHUB_ENV"
+          # Any username will do here: the integration suite asserts the
+          # shape of the t.me link it builds, not which bot it points at.
+          echo "VITE_TELEGRAM_BOT=TestBot" >> "$GITHUB_ENV"
 
       - run: pnpm test:db && pnpm test:int
 

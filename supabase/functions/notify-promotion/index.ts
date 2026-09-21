@@ -11,6 +11,10 @@
 // bearer token. The activity id is all it is given -- the claim token, the
 // phone numbers and the endpoints stay inside the database until this
 // function asks for them as service_role.
+//
+// It also serves Telegram's webhook (0014_telegram.sql), which is a second
+// job in one file on purpose: it means one function to deploy and one place
+// to read, and both halves need the same Vault-backed configuration.
 import webpush from 'npm:web-push@3.6.7'
 
 // These two are injected by Supabase; nothing here has to be configured by
@@ -25,6 +29,8 @@ type Config = {
   vapid_public: string | null
   vapid_private: string | null
   vapid_subject: string | null
+  telegram_token: string | null
+  telegram_secret: string | null
 }
 
 // Cached for the lifetime of a warm instance: a promotion is rare, but two
@@ -35,6 +41,13 @@ type Target = {
   endpoint: string
   p256dh: string
   auth: string
+  title: string
+  body: string
+  url: string
+}
+
+type TelegramTarget = {
+  chat_id: number
   title: string
   body: string
   url: string
@@ -77,6 +90,24 @@ async function config(): Promise<Config> {
   return first
 }
 
+function isTelegramTarget(value: unknown): value is TelegramTarget {
+  if (typeof value !== 'object' || value === null) return false
+  const row = value as Record<string, unknown>
+  return typeof row.chat_id === 'number' && typeof row.title === 'string' && typeof row.body === 'string'
+}
+
+/** One call to the Bot API. Returns the HTTP status so the caller can tell a
+ *  chat that is gone (403) from a transient failure. */
+async function telegram(token: string, method: string, body: Record<string, unknown>): Promise<number> {
+  const response = await fetch(`https://api.telegram.org/bot${token}/${method}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  })
+  if (!response.ok) console.error(`telegram ${method}`, response.status, await response.text())
+  return response.status
+}
+
 function isTarget(value: unknown): value is Target {
   if (typeof value !== 'object' || value === null) return false
   const row = value as Record<string, unknown>
@@ -90,6 +121,55 @@ function isTarget(value: unknown): value is Target {
   )
 }
 
+/** Telegram's side of the opt-in: somebody pressed Start on the bot, having
+ *  arrived through a t.me link carrying a one-time code. Telegram calls this
+ *  with the secret token it was given at registration, which is what makes
+ *  the endpoint safe to leave open. */
+async function handleTelegramUpdate(update: unknown, settings: Config): Promise<Response> {
+  const token = settings.telegram_token
+  if (token === null) return new Response('telegram not configured', { status: 500 })
+
+  const message = typeof update === 'object' && update !== null
+    ? (update as Record<string, unknown>).message
+    : null
+  if (typeof message !== 'object' || message === null) return Response.json({ ok: true })
+
+  const fields = message as Record<string, unknown>
+  const chat = typeof fields.chat === 'object' && fields.chat !== null
+    ? (fields.chat as Record<string, unknown>)
+    : null
+  const chatId = chat === null ? null : chat.id
+  const text = typeof fields.text === 'string' ? fields.text.trim() : ''
+  if (typeof chatId !== 'number') return Response.json({ ok: true })
+
+  if (text === '/stop') {
+    await rpc('drop_telegram_chat', { p_chat_id: chatId })
+    await telegram(token, 'sendMessage', {
+      chat_id: chatId,
+      text: 'Dah berhenti. Anda tak akan dapat notifikasi dari kami lagi.',
+    })
+    return Response.json({ ok: true })
+  }
+
+  const code = text.startsWith('/start') ? text.slice('/start'.length).trim() : ''
+  if (code === '') {
+    await telegram(token, 'sendMessage', {
+      chat_id: chatId,
+      text: 'Buka pautan "Guna Telegram" dalam halaman sesi untuk sambung akaun ni.',
+    })
+    return Response.json({ ok: true })
+  }
+
+  const linked = await rpc('claim_telegram_link', { p_code: code, p_chat_id: chatId })
+  await telegram(token, 'sendMessage', {
+    chat_id: chatId,
+    text: linked === true
+      ? 'Siap! Kami akan beritahu di sini sebaik sahaja anda naik dari senarai tunggu.'
+      : 'Pautan ni dah tamat tempoh. Buka halaman sesi dan tekan "Guna Telegram" sekali lagi.',
+  })
+  return Response.json({ ok: true })
+}
+
 Deno.serve(async (request) => {
   if (request.method !== 'POST') {
     return new Response('method not allowed', { status: 405 })
@@ -97,14 +177,28 @@ Deno.serve(async (request) => {
 
   const settings = await config()
 
+  // Telegram identifies itself with the secret token given at registration.
+  // Checked before the shared-secret gate below, because Telegram does not
+  // send an Authorization header.
+  const telegramSecret = request.headers.get('X-Telegram-Bot-Api-Secret-Token')
+  if (telegramSecret !== null) {
+    if (settings.telegram_secret === null || telegramSecret !== settings.telegram_secret) {
+      return new Response('unauthorized', { status: 401 })
+    }
+    let update: unknown = null
+    try {
+      update = await request.json()
+    } catch {
+      return new Response('bad json', { status: 400 })
+    }
+    return handleTelegramUpdate(update, settings)
+  }
+
   // The trigger is the only caller. Without this, the function's URL is a
   // public button anybody could press to spam the group's phones.
   const auth = request.headers.get('Authorization') ?? ''
   if (settings.shared_secret === null || auth !== `Bearer ${settings.shared_secret}`) {
     return new Response('unauthorized', { status: 401 })
-  }
-  if (settings.vapid_private === null || settings.vapid_public === null) {
-    return new Response('vapid keys not in vault', { status: 500 })
   }
 
   let activityId: unknown = null
@@ -120,13 +214,19 @@ Deno.serve(async (request) => {
     return new Response('activity_id required', { status: 400 })
   }
 
-  webpush.setVapidDetails(
-    settings.vapid_subject ?? 'mailto:admin@example.com',
-    settings.vapid_public,
-    settings.vapid_private,
-  )
+  // The two channels are independent: a setup with only Telegram configured
+  // (no VAPID pair in Vault) must still deliver, and vice versa. Neither
+  // missing key is an error, it just means that channel is not in use.
+  const pushConfigured = settings.vapid_public !== null && settings.vapid_private !== null
+  if (pushConfigured) {
+    webpush.setVapidDetails(
+      settings.vapid_subject ?? 'mailto:admin@example.com',
+      settings.vapid_public ?? '',
+      settings.vapid_private ?? '',
+    )
+  }
 
-  const rows = await rpc('push_targets', { p_activity_id: activityId })
+  const rows = pushConfigured ? await rpc('push_targets', { p_activity_id: activityId }) : []
   const targets = Array.isArray(rows) ? rows.filter(isTarget) : []
 
   let sent = 0
@@ -157,6 +257,37 @@ Deno.serve(async (request) => {
     }
   }
 
+  // Telegram, the channel that works on every phone: no install, no
+  // permission dialog, and free. Failures here must not affect the push
+  // result above -- they are separate deliveries of the same news.
+  let telegramSent = 0
+  let telegramDropped = 0
+  if (settings.telegram_token !== null) {
+    const chatRows = await rpc('telegram_targets', { p_activity_id: activityId })
+    const chats = Array.isArray(chatRows) ? chatRows.filter(isTelegramTarget) : []
+    for (const chat of chats) {
+      const status = await telegram(settings.telegram_token, 'sendMessage', {
+        chat_id: chat.chat_id,
+        // Markdown is deliberately avoided: a player's name is user input,
+        // and escaping it correctly is more risk than the bold is worth.
+        text: `${chat.title}\n${chat.body}\n${chat.url}`,
+        disable_web_page_preview: false,
+      })
+      if (status === 200) {
+        telegramSent += 1
+        await rpc('mark_telegram_sent', { p_chat_id: chat.chat_id })
+      } else if (status === 403 || status === 400) {
+        // Blocked the bot, or deleted the chat: stop trying forever.
+        await rpc('drop_telegram_chat', { p_chat_id: chat.chat_id })
+        telegramDropped += 1
+      }
+    }
+  }
+
   // The response is for the logs; pg_net does not read it.
-  return Response.json({ activity_id: activityId, targets: targets.length, sent, dropped })
+  return Response.json({
+    activity_id: activityId,
+    push: { targets: targets.length, sent, dropped },
+    telegram: { sent: telegramSent, dropped: telegramDropped },
+  })
 })

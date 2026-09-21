@@ -6,7 +6,7 @@ import { ClaimSheet } from '../components/ClaimSheet'
 import { CopyButton } from '../components/CopyButton'
 import { ListTeam } from '../components/ListTeam'
 import { PitchTeam } from '../components/PitchTeam'
-import { PushPrompt } from '../components/PushPrompt'
+import { NotifySheet } from '../components/NotifySheet'
 import { SessionMeta } from '../components/SessionMeta'
 import type { SlotView } from '../components/SlotChip'
 import { useToast } from '../components/Toast'
@@ -16,6 +16,7 @@ import { hasPushSubscription } from '../data/push'
 import { SlotActionError, adminClearSlot, claimSlot, releaseSlot, setSlotPaid } from '../data/slots'
 import type { Slot } from '../data/types'
 import { useSessionRealtime } from '../data/useSessionRealtime'
+import { hasTelegramChat } from '../data/telegram'
 import { WaitlistActionError, joinWaitlist, leaveWaitlist } from '../data/waitlist'
 import { TEAM_KEYS, formatPositions, positionLabel, type Position, type TeamKey } from '../lib/positions'
 import { rememberSession } from '../lib/lastSession'
@@ -86,21 +87,24 @@ export default function SessionPage() {
     if (session !== null) rememberSession(session.id)
   }, [session])
 
-  // Only asked when there is something to ask about. `pushOn` starts true so
-  // the bell never flashes into view before we know the answer.
-  useEffect(() => {
-    if (myWaitlistEntry === null) return
-    let cancelled = false
-    hasPushSubscription()
-      .then((on) => { if (!cancelled) setPushOn(on) })
-      .catch(() => { if (!cancelled) setPushOn(false) })
-    return () => { cancelled = true }
-  }, [myWaitlistEntry])
-
   const mySlot = slots.find((slot) => mySlotIds.has(slot.id)) ?? null
   const filled = slots.filter((slot) => slot.playerName !== null).length
   const open = 33 - filled
   const closed = session?.status === 'closed'
+
+  // Only asked when there is something to ask about -- a device holding a
+  // slot or a queue place. Either channel counts as notified, so both are
+  // asked; `pushOn` starts true so the button never flashes into view before
+  // the answers arrive.
+  const mineId = mySlot?.id ?? myWaitlistEntry?.id ?? null
+  useEffect(() => {
+    if (mineId === null) return
+    let cancelled = false
+    Promise.all([hasPushSubscription(), hasTelegramChat()])
+      .then(([push, telegram]) => { if (!cancelled) setPushOn(push || telegram) })
+      .catch(() => { if (!cancelled) setPushOn(false) })
+    return () => { cancelled = true }
+  }, [mineId])
 
   const duplicateName =
     pendingName.trim() !== '' &&
@@ -340,19 +344,9 @@ export default function SessionPage() {
                 </p>
               )}
               {myWaitlistEntry !== null ? (
-                <>
-                  <p className="font-kit text-[15px] text-white">
-                    {`Anda dalam senarai tunggu (${formatPositions(myWaitlistEntry.positions)}).`}
-                  </p>
-                  {/* Stays on offer until they accept: on iOS the first tap
-                      only produces install instructions, and this is what
-                      they come back to afterwards. */}
-                  {!pushOn && (
-                    <Button variant="secondary" onClick={() => setPushOpen(true)} className="w-full">
-                      Beritahu saya bila naik
-                    </Button>
-                  )}
-                </>
+                <p className="font-kit text-[15px] text-white">
+                  {`Anda dalam senarai tunggu (${formatPositions(myWaitlistEntry.positions)}).`}
+                </p>
               ) : (
                 <Button variant="primary" onClick={() => setWaitlistOpen(true)} className="w-full">
                   Sertai senarai tunggu
@@ -360,6 +354,31 @@ export default function SessionPage() {
               )}
             </div>
           )
+        )}
+
+        {/* Its own row rather than living inside the queue panel: an iPhone
+            user installs the app and comes back needing this, and somebody
+            holding a slot today is in the queue next week -- the
+            subscription belongs to the device, not to one booking. Hidden
+            for a device with no place in the session, which is also what
+            save_push_subscription refuses. */}
+        {mineId !== null && (
+          <div className="space-y-1 rounded-lg border border-white/10 bg-white/5 px-3 py-2">
+            {pushOn ? (
+              <p className="font-sans text-[13px] text-turf-lit">
+                ✓ Notifikasi hidup untuk peranti ni.
+              </p>
+            ) : (
+              <>
+                <Button variant="secondary" onClick={() => setPushOpen(true)} className="w-full">
+                  Hidupkan notifikasi
+                </Button>
+                <p className="font-sans text-[12px] text-white/45">
+                  Kami beritahu bila anda naik dari senarai tunggu.
+                </p>
+              </>
+            )}
+          </div>
         )}
 
         <button
@@ -447,7 +466,7 @@ export default function SessionPage() {
         onNameChange={setPendingName}
       />
 
-      <PushPrompt
+      <NotifySheet
         open={pushOpen}
         onClose={() => setPushOpen(false)}
         onSubscribed={() => setPushOn(true)}
