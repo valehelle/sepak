@@ -155,3 +155,13 @@ export async function getMyWaitlistEntry(sessionId: string): Promise<MyWaitlistE
   const [first] = rows
   return first === undefined ? null : parseMyWaitlistEntry(first)
 }
+
+/** Organiser override: take somebody out of the queue. A player leaves by
+ *  presenting their token (leaveWaitlist above); the organiser has no token,
+ *  so this writes the table directly, which the waitlist_write policy allows
+ *  an admin and nobody else (0007_waitlist.sql). The activity line is written
+ *  by the delete trigger and attributed to 'admin' on its own. */
+export async function adminRemoveFromWaitlist(waitlistId: string): Promise<void> {
+  const { error } = await supabase.from('waitlist').delete().eq('id', waitlistId)
+  if (error !== null) fail(error)
+}

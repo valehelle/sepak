@@ -13,11 +13,16 @@ import { useToast } from '../components/Toast'
 import { WaitlistSheet } from '../components/WaitlistSheet'
 import { useAuthUser } from '../data/auth'
 import { hasPushSubscription } from '../data/push'
-import { SlotActionError, adminClearSlot, claimSlot, releaseSlot, setSlotPaid } from '../data/slots'
+import { SlotActionError, adminClearSlot, claimSlot, moveSlot, releaseSlot, setSlotPaid } from '../data/slots'
 import type { Slot } from '../data/types'
 import { useSessionRealtime } from '../data/useSessionRealtime'
 import { hasTelegramChat } from '../data/telegram'
-import { WaitlistActionError, joinWaitlist, leaveWaitlist } from '../data/waitlist'
+import {
+  WaitlistActionError,
+  adminRemoveFromWaitlist,
+  joinWaitlist,
+  leaveWaitlist,
+} from '../data/waitlist'
 import { TEAM_KEYS, formatPositions, positionLabel, type Position, type TeamKey } from '../lib/positions'
 import { rememberSession } from '../lib/lastSession'
 import { rememberPlayer } from '../lib/playerMemory'
@@ -74,6 +79,9 @@ export default function SessionPage() {
   const [viewMode, setViewMode] = useState<'pitch' | 'list'>(readViewMode)
   const [pendingName, setPendingName] = useState('')
   const [waitlistOpen, setWaitlistOpen] = useState(false)
+  // Which queue entry the organiser has armed for removal, if any. One at a
+  // time: the confirm replaces the button in place.
+  const [removingFromQueue, setRemovingFromQueue] = useState<string | null>(null)
   const [pushOpen, setPushOpen] = useState(false)
   const [pushOn, setPushOn] = useState(true)
 
@@ -242,6 +250,66 @@ export default function SessionPage() {
     }
   }
 
+  /** Changing position, which is one transaction rather than a release and a
+   *  claim -- see moveSlot. Both slots change at once, so this does not use
+   *  `run`, which carries a single slot. */
+  function onMove() {
+    const to = selected?.slot
+    const from = mySlot
+    if (to === undefined || to === null || from === null) return
+
+    const vacated: Slot = { ...from, playerName: null, claimedAt: null, paid: false }
+    const filled: Slot = {
+      ...to,
+      playerName: from.playerName,
+      claimedAt: new Date().toISOString(),
+      // The tick travels with the player; move_slot restores it server-side.
+      paid: from.paid,
+    }
+
+    setBusy(true)
+    applyLocal(vacated)
+    applyLocal(filled)
+    setOwned(from.id, false)
+    setOwned(to.id, true)
+    setSelected(null)
+
+    moveSlot(from.id, to.id)
+      .then((result) => {
+        applyLocal(result)
+        // The slot left behind may already hold a promoted player, which
+        // arrives over Realtime -- but a refetch is what makes the queue
+        // panel and the pitch agree immediately.
+        refetch()
+      })
+      .catch((cause: unknown) => {
+        applyLocal(from)
+        applyLocal(to)
+        setOwned(from.id, true)
+        setOwned(to.id, false)
+        show(cause instanceof SlotActionError ? cause.message : 'Gagal menukar posisi.', 'error')
+        refetch()
+      })
+      .finally(() => setBusy(false))
+  }
+
+  /** Organiser override, mirroring onAdminClear for the pitch: somebody who
+   *  cleared their browser, or a duplicate, taken out of the queue. */
+  async function onAdminRemoveFromWaitlist(waitlistId: string) {
+    setBusy(true)
+    try {
+      await adminRemoveFromWaitlist(waitlistId)
+      removeWaitlistLocal(waitlistId)
+      // The organiser may be removing their own entry.
+      if (myWaitlistEntry !== null && myWaitlistEntry.id === waitlistId) setMyWaitlistEntry(null)
+    } catch (cause: unknown) {
+      show(cause instanceof WaitlistActionError ? cause.message : 'Gagal membuang dari senarai.', 'error')
+      refetch()
+    } finally {
+      setBusy(false)
+    }
+  }
+
   function onJoinWaitlist(name: string, phone: string, positions: Position[]) {
     if (session === null) return
     setBusy(true)
@@ -320,10 +388,10 @@ export default function SessionPage() {
               {`Slot anda: Team ${mySlot.team} ${session.teamNames[mySlot.team]} — ${positionLabel(mySlot.position)}`}
             </p>
             {/* One slot per device (claim_slot raises already_in_slot), so
-                say so here rather than letting an empty slot look tappable
-                and fail. */}
+                the way to change position is to move, not to take a second
+                one. The pitch is the picker: say where to tap. */}
             <p className="font-sans text-[13px] text-white/60">
-              Satu slot untuk satu peranti. Lepaskan slot ini dulu kalau nak tukar posisi.
+              Nak tukar posisi? Tekan mana-mana slot kosong.
             </p>
             {/* Nothing else on the page says where the tick lives, so the
                 panel that already names your slot points at it. */}
@@ -344,9 +412,21 @@ export default function SessionPage() {
                 </p>
               )}
               {myWaitlistEntry !== null ? (
-                <p className="font-kit text-[15px] text-white">
-                  {`Anda dalam senarai tunggu (${formatPositions(myWaitlistEntry.positions)}).`}
-                </p>
+                <>
+                  <p className="font-kit text-[15px] text-white">
+                    {`Anda dalam senarai tunggu (${formatPositions(myWaitlistEntry.positions)}).`}
+                  </p>
+                  {/* Queueing is a standing preference, not a restriction:
+                      claim_slot consumes this device's own queue entry, so
+                      any open position can still be taken by hand -- even
+                      one that was never on the list. Nothing else says so. */}
+                  {open > 0 && (
+                    <p className="font-sans text-[13px] text-white/60">
+                      Tak perlu tunggu — anda boleh terus ambil mana-mana slot kosong, walaupun
+                      posisi yang anda tak pilih.
+                    </p>
+                  )}
+                </>
               ) : (
                 <Button variant="primary" onClick={() => setWaitlistOpen(true)} className="w-full">
                   Sertai senarai tunggu
@@ -403,7 +483,6 @@ export default function SessionPage() {
               mySlotIds={mySlotIds}
               disabled={closed || busy}
               adminOverride={isAdmin}
-              lockEmpty={mySlot !== null}
               onSelect={setSelected}
             />
           ))}
@@ -440,6 +519,42 @@ export default function SessionPage() {
                       </Button>
                     )}
                     {isAdmin && <AdminContactToggle target={{ waitlistId: entry.id }} />}
+                    {isAdmin &&
+                      (removingFromQueue === entry.id ? (
+                        <div className="space-y-2 rounded-lg border border-kuning/40 bg-kuning/10 p-2">
+                          <p className="font-sans text-[13px] text-white/80">
+                            {`Buang ${entry.playerName} dari senarai tunggu?`}
+                          </p>
+                          <Button
+                            variant="destructive"
+                            disabled={busy}
+                            onClick={() => {
+                              setRemovingFromQueue(null)
+                              void onAdminRemoveFromWaitlist(entry.id)
+                            }}
+                            className="w-full px-2 py-1 text-[12px]"
+                          >
+                            Ya, buang
+                          </Button>
+                          <Button
+                            variant="secondary"
+                            disabled={busy}
+                            onClick={() => setRemovingFromQueue(null)}
+                            className="w-full px-2 py-1 text-[12px]"
+                          >
+                            Batal
+                          </Button>
+                        </div>
+                      ) : (
+                        <Button
+                          variant="secondary"
+                          disabled={busy}
+                          onClick={() => setRemovingFromQueue(entry.id)}
+                          className="px-2 py-1 text-[12px] text-kuning"
+                        >
+                          Buang dari senarai (admin)
+                        </Button>
+                      ))}
                   </li>
                 )
               })}
@@ -458,10 +573,16 @@ export default function SessionPage() {
         busy={busy}
         duplicateName={duplicateName}
         isAdmin={isAdmin}
+        currentLabel={
+          mySlot === null
+            ? null
+            : `Team ${mySlot.team} ${session.teamNames[mySlot.team]} — ${positionLabel(mySlot.position)}`
+        }
         onClose={() => setSelected(null)}
         onClaim={onClaim}
         onRelease={onRelease}
         onTogglePaid={onTogglePaid}
+        onMove={onMove}
         onAdminClear={() => void onAdminClear()}
         onNameChange={setPendingName}
       />

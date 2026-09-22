@@ -15,11 +15,16 @@ type ClaimSheetProps = {
   busy: boolean
   duplicateName: boolean
   isAdmin: boolean
+  /** Where this device already is, as "Team A Merah — GK", when it holds a
+   *  slot in this session. Set only then, and only that changes what an
+   *  empty slot offers: moving there instead of claiming it. */
+  currentLabel: string | null
   onClose: () => void
   /** `phone` arrives in stored form (60123456789), already validated. */
   onClaim: (name: string, phone: string) => void
   onRelease: () => void
   onTogglePaid: (paid: boolean) => void
+  onMove: () => void
   onAdminClear: () => void
   onNameChange: (name: string) => void
 }
@@ -30,10 +35,12 @@ export function ClaimSheet({
   busy,
   duplicateName,
   isAdmin,
+  currentLabel,
   onClose,
   onClaim,
   onRelease,
   onTogglePaid,
+  onMove,
   onAdminClear,
   onNameChange,
 }: ClaimSheetProps) {
@@ -171,6 +178,31 @@ export function ClaimSheet({
               </Button>
             ))}
         </div>
+      </Sheet>
+    )
+  }
+
+  // An empty slot, opened by a device that already holds one. Claiming is not
+  // on the table -- one booking per person per session -- so the only thing
+  // to offer is the move, and the form would fail if it were shown.
+  if (currentLabel !== null) {
+    return (
+      <Sheet open title={title} onClose={onClose}>
+        <p className="mb-1 font-sans text-[15px] text-white/70">Anda sekarang di</p>
+        <p className="mb-4 font-kit text-[17px] font-semibold text-white">{currentLabel}</p>
+        {/* Said before the button, not after: leaving a position hands it to
+            whoever is queued for it straight away, so a move can be the last
+            move somebody makes. */}
+        <p className="mb-4 font-sans text-[13px] leading-relaxed text-kuning">
+          Posisi lama anda jadi kosong serta-merta. Kalau ada orang dalam senarai tunggu untuk
+          posisi tu, dia terus dapat — jadi anda tak boleh pindah balik.
+        </p>
+        <Button variant="primary" disabled={busy} onClick={onMove} className="mb-2 w-full">
+          Pindah ke sini
+        </Button>
+        <Button variant="secondary" disabled={busy} onClick={onClose} className="w-full">
+          Batal
+        </Button>
       </Sheet>
     )
   }

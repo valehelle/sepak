@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { getClaimToken, resetClaimTokenCache } from '../../src/lib/claimToken'
 import {
   WaitlistActionError,
+  adminRemoveFromWaitlist,
   getMyWaitlistEntry,
   joinWaitlist,
   leaveWaitlist,
@@ -151,5 +152,32 @@ describe('waitlist wrappers against local postgres', () => {
 
     const list = await listWaitlist(sessionId)
     expect(list.map((e) => e.playerName)).toEqual(['Faiz', 'Nabil'])
+  })
+
+  it('an admin removes somebody else from the queue; a player cannot', async () => {
+    await fillAll(sessionId)
+    const joined = await anonClient().rpc('join_waitlist', {
+      p_session_id: sessionId, p_name: 'Amir', p_phone: '60198765432',
+      p_positions: ['GK'], p_token: OTHER_TOKEN,
+    })
+    expect(joined.error).toBeNull()
+
+    // As an anonymous visitor: refused outright. anon holds no delete grant
+    // on the table at all (0007_waitlist.sql revokes then re-grants only
+    // SELECT), so this never even reaches the admin-only RLS policy.
+    try {
+      await adminRemoveFromWaitlist(String(joined.data.waitlist_id))
+      expect.unreachable('a visitor must not be able to empty the queue')
+    } catch (err) {
+      expect(err).toBeInstanceOf(WaitlistActionError)
+    }
+    expect(await listWaitlist(sessionId)).toHaveLength(1)
+
+    const { error } = await adminClient()
+      .from('waitlist')
+      .delete()
+      .eq('id', String(joined.data.waitlist_id))
+    expect(error).toBeNull()
+    expect(await listWaitlist(sessionId)).toHaveLength(0)
   })
 })

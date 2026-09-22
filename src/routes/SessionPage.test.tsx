@@ -81,6 +81,8 @@ const claimSlot = vi.fn()
 const releaseSlot = vi.fn()
 const setSlotPaid = vi.fn()
 const adminClearSlot = vi.fn()
+const moveSlot = vi.fn()
+const adminRemoveFromWaitlist = vi.fn()
 const joinWaitlist = vi.fn()
 const leaveWaitlist = vi.fn()
 const writeText = vi.fn()
@@ -93,6 +95,7 @@ vi.mock('../data/slots', () => ({
   releaseSlot: (...args: unknown[]) => releaseSlot(...args),
   setSlotPaid: (...args: unknown[]) => setSlotPaid(...args),
   adminClearSlot: (id: string) => adminClearSlot(id),
+  moveSlot: (...args: unknown[]) => moveSlot(...args),
   SlotActionError: class extends Error {
     constructor(message: string, readonly code: string | null) { super(message) }
   },
@@ -133,6 +136,7 @@ vi.mock('../data/contacts', () => ({
 vi.mock('../data/waitlist', () => ({
   joinWaitlist: (...args: unknown[]) => joinWaitlist(...args),
   leaveWaitlist: (...args: unknown[]) => leaveWaitlist(...args),
+  adminRemoveFromWaitlist: (id: string) => adminRemoveFromWaitlist(id),
   WaitlistActionError: class extends Error {
     constructor(message: string, readonly code: string | null) { super(message) }
   },
@@ -179,6 +183,8 @@ describe('SessionPage', () => {
     claimSlot.mockReset()
     releaseSlot.mockReset()
     adminClearSlot.mockReset().mockResolvedValue(undefined)
+    moveSlot.mockReset()
+    adminRemoveFromWaitlist.mockReset().mockResolvedValue(undefined)
     joinWaitlist.mockReset()
     leaveWaitlist.mockReset().mockResolvedValue(undefined)
     writeText.mockReset()
@@ -342,15 +348,15 @@ describe('SessionPage', () => {
     expect(firstOf(stButtons).getAttribute('aria-label')).toContain('Hazmi')
   })
 
-  it('locks every empty slot once this device holds one, and says why', () => {
+  it('points a device that holds a slot at the empty ones, which stay tappable', () => {
     state.slots = withClaim(state.slots, 'B-MC')
     state.mySlotIds = new Set(['B-MC'])
     view()
 
-    expect(screen.getByText(/Satu slot untuk satu peranti/)).toBeTruthy()
-    // An empty slot must not even open the form: claim_slot would refuse it.
+    expect(screen.getByText(/Nak tukar posisi/)).toBeTruthy()
+    // Empty slots are how a move starts, so they must not be inert.
     const emptyGk = firstOf(screen.getAllByRole('button', { name: /^GK — kosong/ }))
-    expect(emptyGk.hasAttribute('disabled')).toBe(true)
+    expect(emptyGk.hasAttribute('disabled')).toBe(false)
     // The device's own slot stays tappable, so it can still be released.
     expect(screen.getByRole('button', { name: /^MC.*slot anda/i }).hasAttribute('disabled')).toBe(false)
   })
@@ -359,7 +365,7 @@ describe('SessionPage', () => {
     view()
     const emptyGk = firstOf(screen.getAllByRole('button', { name: /^GK — kosong/ }))
     expect(emptyGk.hasAttribute('disabled')).toBe(false)
-    expect(screen.queryByText(/Satu slot untuk satu peranti/)).toBeNull()
+    expect(screen.queryByText(/Nak tukar posisi/)).toBeNull()
   })
 
   it('summarises your slot at the top of the page', () => {
@@ -780,5 +786,113 @@ describe('SessionPage', () => {
 
     await userEvent.click(screen.getByRole('button', { name: 'Ya, kosongkan slot' }))
     await waitFor(() => expect(adminClearSlot).toHaveBeenCalledWith('A-LB'))
+  })
+
+  it('moves a held slot to an empty one, and says what it costs first', async () => {
+    state.slots = withClaim(state.slots, 'B-MC')
+    state.mySlotIds = new Set(['B-MC'])
+    moveSlot.mockResolvedValue({ ...findSlot(state.slots, 'A-GK'), playerName: 'Hazmi', claimedAt: 'now' })
+    view()
+
+    await userEvent.click(firstOf(screen.getAllByRole('button', { name: /^GK — kosong/ })))
+    // Where they are now, and the one thing a move cannot be taken back from.
+    expect(screen.getByText('Team B Putih — MC')).toBeTruthy()
+    expect(screen.getByRole('dialog').textContent).toContain('tak boleh pindah balik')
+    // Not the claim form: a second claim would be refused outright.
+    expect(screen.queryByLabelText('Nama')).toBeNull()
+
+    await userEvent.click(screen.getByRole('button', { name: 'Pindah ke sini' }))
+
+    await waitFor(() => expect(moveSlot).toHaveBeenCalledWith('B-MC', 'A-GK'))
+    // Both ends change on screen, and ownership follows the player.
+    expect(findSlot(state.slots, 'B-MC').playerName).toBeNull()
+    expect(findSlot(state.slots, 'A-GK').playerName).toBe('Hazmi')
+    expect(state.mySlotIds.has('A-GK')).toBe(true)
+    expect(state.mySlotIds.has('B-MC')).toBe(false)
+  })
+
+  it('carries the paid tick across a move rather than dropping it', async () => {
+    state.slots = replace(withClaim(state.slots, 'B-MC'), {
+      ...findSlot(withClaim(state.slots, 'B-MC'), 'B-MC'),
+      paid: true,
+    })
+    state.mySlotIds = new Set(['B-MC'])
+    // Held open, so the assertion lands on the optimistic update rather than
+    // on the row the server sends back -- the tick has to be right on screen
+    // the instant the move is made, not a round trip later.
+    let settle = (_: Slot) => {}
+    moveSlot.mockReturnValue(new Promise<Slot>((resolve) => { settle = resolve }))
+    view()
+
+    await userEvent.click(firstOf(screen.getAllByRole('button', { name: /^GK — kosong/ })))
+    await userEvent.click(screen.getByRole('button', { name: 'Pindah ke sini' }))
+
+    await waitFor(() => expect(findSlot(state.slots, 'A-GK').playerName).toBe('Hazmi'))
+    expect(findSlot(state.slots, 'A-GK').paid).toBe(true)
+
+    settle({ ...findSlot(state.slots, 'A-GK'), paid: true })
+    await waitFor(() => expect(state.refetch).toHaveBeenCalled())
+  })
+
+  it('puts both slots back when a move fails', async () => {
+    state.slots = withClaim(state.slots, 'B-MC')
+    state.mySlotIds = new Set(['B-MC'])
+    const { SlotActionError } = await import('../data/slots')
+    moveSlot.mockRejectedValue(new SlotActionError('Slot dah diambil.', 'slot_taken'))
+    view()
+
+    await userEvent.click(firstOf(screen.getAllByRole('button', { name: /^GK — kosong/ })))
+    await userEvent.click(screen.getByRole('button', { name: 'Pindah ke sini' }))
+
+    await waitFor(() => expect(screen.getByText('Slot dah diambil.')).toBeTruthy())
+    expect(findSlot(state.slots, 'B-MC').playerName).toBe('Hazmi')
+    expect(findSlot(state.slots, 'A-GK').playerName).toBeNull()
+    expect(state.mySlotIds.has('B-MC')).toBe(true)
+  })
+
+  it('tells a queued device it can still take an open slot by hand', () => {
+    state.myWaitlistEntry = { id: 'w1', positions: ['GK'], createdAt: 'now' }
+    view()
+    expect(screen.getByText(/anda boleh terus ambil mana-mana slot kosong/)).toBeTruthy()
+  })
+
+  it('lets an admin remove somebody from the queue, after arming it', async () => {
+    authState.email = 'admin@sepak.local'
+    authState.role = 'admin'
+    state.waitlist = [
+      { id: 'w1', sessionId: 'session-1', playerName: 'Amir', positions: ['GK'], createdAt: 'now' },
+    ]
+    view()
+
+    await userEvent.click(screen.getByRole('button', { name: 'Buang dari senarai (admin)' }))
+    // Named, because a queue of similar rows is easy to mis-tap.
+    expect(screen.getByText('Buang Amir dari senarai tunggu?')).toBeTruthy()
+    await userEvent.click(screen.getByRole('button', { name: 'Ya, buang' }))
+
+    await waitFor(() => expect(adminRemoveFromWaitlist).toHaveBeenCalledWith('w1'))
+    expect(state.waitlist).toHaveLength(0)
+  })
+
+  it('does not remove a queue entry on the first tap', async () => {
+    authState.email = 'admin@sepak.local'
+    authState.role = 'admin'
+    state.waitlist = [
+      { id: 'w1', sessionId: 'session-1', playerName: 'Amir', positions: ['GK'], createdAt: 'now' },
+    ]
+    view()
+
+    await userEvent.click(screen.getByRole('button', { name: 'Buang dari senarai (admin)' }))
+    expect(adminRemoveFromWaitlist).not.toHaveBeenCalled()
+    await userEvent.click(screen.getByRole('button', { name: 'Batal' }))
+    expect(screen.getByRole('button', { name: 'Buang dari senarai (admin)' })).toBeTruthy()
+    expect(adminRemoveFromWaitlist).not.toHaveBeenCalled()
+  })
+
+  it('hides queue removal from players', () => {
+    state.waitlist = [
+      { id: 'w1', sessionId: 'session-1', playerName: 'Amir', positions: ['GK'], createdAt: 'now' },
+    ]
+    view()
+    expect(screen.queryByRole('button', { name: 'Buang dari senarai (admin)' })).toBeNull()
   })
 })

@@ -78,3 +78,21 @@ export async function getMySlotIds(sessionId: string): Promise<Set<string>> {
   }
   return ids
 }
+
+/** Changes position without passing through an empty-handed moment. Two
+ *  separate actions cannot do this: 0010_one_booking_per_person.sql refuses a
+ *  second claim from a device that already holds a slot, so a player would
+ *  have to release first and race everyone -- including the waitlist -- for
+ *  the position they wanted.
+ *
+ *  Returns the destination slot. The slot left behind may be taken by a
+ *  queued player in the same transaction, which arrives over Realtime. */
+export async function moveSlot(fromSlotId: string, toSlotId: string): Promise<Slot> {
+  const { data, error } = await supabase.rpc('move_slot', {
+    p_from: fromSlotId,
+    p_to: toSlotId,
+    p_token: getClaimToken(),
+  })
+  if (error !== null) fail(error)
+  return parseSlot(data)
+}

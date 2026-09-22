@@ -152,6 +152,11 @@ export const RPC_ERROR_CODES = [
   'phone_in_use',
   // Payment tick (0011_paid.sql).
   'invalid_paid',
+  // Switching position (0015_move_slot.sql). Neither is reachable from the
+  // app, which only offers empty slots in the session on screen, but the
+  // RPC is public and a generic fallback would hide a real bug.
+  'same_slot',
+  'cross_session',
 ] as const
 
 export type RpcErrorCode = (typeof RPC_ERROR_CODES)[number]
@@ -181,6 +186,8 @@ export const RPC_MESSAGES: Record<RpcErrorCode, string> = {
   not_admin: 'Hanya admin boleh lihat nombor telefon.',
   phone_in_use: 'Nombor ini dah daftar untuk sesi ini. Satu tempat untuk satu orang.',
   invalid_paid: 'Status bayaran tak sah.',
+  same_slot: 'Anda dah berada di posisi ini.',
+  cross_session: 'Posisi itu bukan dalam sesi ini.',
 }
 
 export const FALLBACK_ERROR_MESSAGE = 'Ada masalah. Cuba lagi.'

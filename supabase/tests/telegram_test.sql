@@ -112,7 +112,7 @@ begin
 
   select * into v_row from sepak.telegram_targets(v_activity_id);
   assert v_row.chat_id = 999001, format('expected the linked chat, got %s', v_row.chat_id);
-  assert v_row.title = 'Anda dah naik!', format('unexpected title %s', v_row.title);
+  assert v_row.title = 'Anda berjaya masuk!', format('unexpected title %s', v_row.title);
   assert v_row.body like 'Team A Merah — ST · Sesi 909, 11 Nov %',
     format('unexpected body: %s', v_row.body);
   assert v_row.body like '%8:30 PM', format('unexpected time in %s', v_row.body);

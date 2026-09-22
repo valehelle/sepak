@@ -1,7 +1,14 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { anonClient, deleteSession, seedSession, slotId } from '../helpers/localSupabase'
 import { resetClaimTokenCache } from '../../src/lib/claimToken'
-import { SlotActionError, claimSlot, getMySlotIds, releaseSlot, setSlotPaid } from '../../src/data/slots'
+import {
+  SlotActionError,
+  claimSlot,
+  getMySlotIds,
+  moveSlot,
+  releaseSlot,
+  setSlotPaid,
+} from '../../src/data/slots'
 
 // A second "device": the wrapper functions always act as the current
 // device (via getClaimToken()'s module-level cache), so a genuinely
@@ -166,5 +173,64 @@ describe('slot action wrappers against local postgres', () => {
     const mine = await getMySlotIds(sessionId)
     expect(mine.has(gk)).toBe(true)
     expect(mine.has(st)).toBe(false)
+  })
+
+  it('moveSlot changes position and leaves the old one empty', async () => {
+    const gk = slotId(ids, 'A', 'GK')
+    const st = slotId(ids, 'C', 'ST')
+    await claimSlot(gk, 'Hazmi', '60123456789')
+
+    const moved = await moveSlot(gk, st)
+    expect(moved).toMatchObject({ id: st, team: 'C', position: 'ST', playerName: 'Hazmi' })
+
+    const mine = await getMySlotIds(sessionId)
+    expect(mine.has(st)).toBe(true)
+    expect(mine.has(gk)).toBe(false)
+    const { data } = await anonClient().from('slots').select('player_name').eq('id', gk).single()
+    expect(data).toEqual({ player_name: null })
+  })
+
+  it('moveSlot keeps the paid tick, because the same person is still playing', async () => {
+    const gk = slotId(ids, 'A', 'GK')
+    const st = slotId(ids, 'C', 'ST')
+    await claimSlot(gk, 'Hazmi', '60123456789')
+    await setSlotPaid(gk, true)
+
+    const moved = await moveSlot(gk, st)
+    expect(moved.paid).toBe(true)
+  })
+
+  it('moveSlot refuses a slot somebody else holds, with its Malay copy', async () => {
+    const gk = slotId(ids, 'A', 'GK')
+    const st = slotId(ids, 'A', 'ST')
+    await claimSlot(gk, 'Hazmi', '60123456789')
+    const other = await anonClient().rpc('claim_slot', { p_slot_id: st, p_name: 'Isaac', p_phone: '60198765432', p_token: OTHER_TOKEN })
+    expect(other.error).toBeNull()
+
+    try {
+      await moveSlot(gk, st)
+      expect.unreachable('moveSlot should have thrown on an occupied destination')
+    } catch (err) {
+      expect(err).toBeInstanceOf(SlotActionError)
+      if (err instanceof SlotActionError) {
+        expect(err.code).toBe('slot_taken')
+        expect(err.message).toBe('Slot dah diambil.')
+      }
+    }
+  })
+
+  it('moveSlot refuses to move a slot this device does not hold', async () => {
+    const gk = slotId(ids, 'A', 'GK')
+    const st = slotId(ids, 'A', 'ST')
+    const other = await anonClient().rpc('claim_slot', { p_slot_id: gk, p_name: 'Isaac', p_phone: '60198765432', p_token: OTHER_TOKEN })
+    expect(other.error).toBeNull()
+
+    try {
+      await moveSlot(gk, st)
+      expect.unreachable('moveSlot should have thrown on somebody else\'s slot')
+    } catch (err) {
+      expect(err).toBeInstanceOf(SlotActionError)
+      if (err instanceof SlotActionError) expect(err.code).toBe('wrong_token')
+    }
   })
 })
