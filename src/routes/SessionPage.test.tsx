@@ -82,6 +82,7 @@ const releaseSlot = vi.fn()
 const setSlotPaid = vi.fn()
 const adminClearSlot = vi.fn()
 const moveSlot = vi.fn()
+const getSlot = vi.fn()
 const adminRemoveFromWaitlist = vi.fn()
 const joinWaitlist = vi.fn()
 const leaveWaitlist = vi.fn()
@@ -96,6 +97,7 @@ vi.mock('../data/slots', () => ({
   setSlotPaid: (...args: unknown[]) => setSlotPaid(...args),
   adminClearSlot: (id: string) => adminClearSlot(id),
   moveSlot: (...args: unknown[]) => moveSlot(...args),
+  getSlot: (id: string) => getSlot(id),
   SlotActionError: class extends Error {
     constructor(message: string, readonly code: string | null) { super(message) }
   },
@@ -184,6 +186,7 @@ describe('SessionPage', () => {
     releaseSlot.mockReset()
     adminClearSlot.mockReset().mockResolvedValue(undefined)
     moveSlot.mockReset()
+    getSlot.mockReset().mockResolvedValue(null)
     adminRemoveFromWaitlist.mockReset().mockResolvedValue(undefined)
     joinWaitlist.mockReset()
     leaveWaitlist.mockReset().mockResolvedValue(undefined)
@@ -894,5 +897,126 @@ describe('SessionPage', () => {
     ]
     view()
     expect(screen.queryByRole('button', { name: 'Buang dari senarai' })).toBeNull()
+  })
+
+  describe('the WhatsApp change prompt', () => {
+    function claimed(slotId: string) {
+      state.slots = withClaim(state.slots, slotId)
+      state.mySlotIds = new Set([slotId])
+    }
+
+    it('offers the group message after a release, naming the freed position', async () => {
+      claimed('A-GK')
+      releaseSlot.mockResolvedValue({ ...findSlot(state.slots, 'A-GK'), playerName: null, claimedAt: null })
+      view()
+
+      await userEvent.click(screen.getByRole('button', { name: /^GK.*Hazmi/ }))
+      await userEvent.click(screen.getByRole('button', { name: 'Lepaskan slot' }))
+      await userEvent.click(screen.getByRole('button', { name: 'Ya, lepaskan slot' }))
+
+      await waitFor(() => expect(screen.getByText('Senarai dah berubah')).toBeTruthy())
+      expect(screen.getByText('🔴 Team A Merah — GK: Hazmi → kosong')).toBeTruthy()
+    })
+
+    it('corrects itself to name the player the queue promoted', async () => {
+      claimed('A-GK')
+      releaseSlot.mockResolvedValue({ ...findSlot(state.slots, 'A-GK'), playerName: null, claimedAt: null })
+      // The auto-fill commits inside the release's own transaction, so only a
+      // fresh read of the slot can see who is sitting in it now.
+      getSlot.mockResolvedValue({ ...findSlot(state.slots, 'A-GK'), playerName: 'Isaac' })
+      view()
+
+      await userEvent.click(screen.getByRole('button', { name: /^GK.*Hazmi/ }))
+      await userEvent.click(screen.getByRole('button', { name: 'Lepaskan slot' }))
+      await userEvent.click(screen.getByRole('button', { name: 'Ya, lepaskan slot' }))
+
+      await waitFor(() =>
+        expect(
+          screen.getByText('🔄 Team A Merah — GK: Hazmi → Isaac (naik dari senarai tunggu)'),
+        ).toBeTruthy(),
+      )
+    })
+
+    it('offers it after a position change, as one arrow between two places', async () => {
+      claimed('B-MC')
+      moveSlot.mockResolvedValue({ ...findSlot(state.slots, 'A-GK'), playerName: 'Hazmi', claimedAt: 'now' })
+      view()
+
+      await userEvent.click(firstOf(screen.getAllByRole('button', { name: /^GK — kosong/ })))
+      await userEvent.click(screen.getByRole('button', { name: 'Pindah ke sini' }))
+
+      await waitFor(() =>
+        expect(screen.getByText('🔄 Hazmi: Team B Putih MC → Team A Merah GK')).toBeTruthy(),
+      )
+    })
+
+    it('waits for the claim sheet to close before offering it after a tick', async () => {
+      claimed('A-GK')
+      setSlotPaid.mockResolvedValue({ ...findSlot(state.slots, 'A-GK'), playerName: 'Hazmi', paid: true })
+      view()
+
+      await userEvent.click(screen.getByRole('button', { name: /^GK.*Hazmi/ }))
+      await userEvent.click(screen.getByRole('button', { name: 'Dah bayar' }))
+      await waitFor(() => expect(setSlotPaid).toHaveBeenCalled())
+
+      // The tick leaves its own sheet open on purpose, so a mis-tap can be
+      // undone. A prompt on top of it would bury the thing that undoes it.
+      expect(screen.getByRole('button', { name: 'Dah bayar' })).toBeTruthy()
+      expect(screen.queryByText('Senarai dah berubah')).toBeNull()
+
+      await userEvent.click(screen.getByTestId('sheet-backdrop'))
+      await waitFor(() =>
+        expect(screen.getByText('✅ Team A Merah — GK: Hazmi dah bayar')).toBeTruthy(),
+      )
+    })
+
+    it('stays shut when a tick is taken back, which is nobody else\'s business', async () => {
+      state.slots = replace(withClaim(state.slots, 'A-GK'), {
+        ...findSlot(withClaim(state.slots, 'A-GK'), 'A-GK'),
+        paid: true,
+      })
+      state.mySlotIds = new Set(['A-GK'])
+      setSlotPaid.mockResolvedValue({ ...findSlot(state.slots, 'A-GK'), playerName: 'Hazmi', paid: false })
+      view()
+
+      await userEvent.click(screen.getByRole('button', { name: /^GK.*Hazmi/ }))
+      await userEvent.click(screen.getByRole('button', { name: 'Dah bayar' }))
+
+      await waitFor(() => expect(setSlotPaid).toHaveBeenCalled())
+      expect(screen.queryByText('Senarai dah berubah')).toBeNull()
+    })
+
+    it('stays shut after a claim, which would fire once per player in the rush', async () => {
+      claimSlot.mockResolvedValue({ ...findSlot(state.slots, 'A-GK'), playerName: 'Hazmi', claimedAt: 'now' })
+      view()
+
+      await userEvent.click(firstOf(screen.getAllByRole('button', { name: /^GK — kosong/ })))
+      await userEvent.type(screen.getByLabelText('Nama'), 'Hazmi')
+      await userEvent.type(screen.getByLabelText('Nombor telefon'), '0123456789')
+      await userEvent.click(screen.getByRole('button', { name: 'Ambil slot' }))
+
+      await waitFor(() => expect(claimSlot).toHaveBeenCalled())
+      expect(screen.queryByText('Senarai dah berubah')).toBeNull()
+    })
+
+    it('leaves the panel copy button free of the change line', async () => {
+      claimed('A-GK')
+      releaseSlot.mockResolvedValue({ ...findSlot(state.slots, 'A-GK'), playerName: null, claimedAt: null })
+      view()
+
+      await userEvent.click(screen.getByRole('button', { name: /^GK.*Hazmi/ }))
+      await userEvent.click(screen.getByRole('button', { name: 'Lepaskan slot' }))
+      await userEvent.click(screen.getByRole('button', { name: 'Ya, lepaskan slot' }))
+      await waitFor(() => expect(screen.getByText('Senarai dah berubah')).toBeTruthy())
+
+      // Two copy buttons on screen now: the sheet's and the panel's. The
+      // organiser's own copy must stay the plain list.
+      await userEvent.click(screen.getByRole('button', { name: 'Tutup' }))
+      await userEvent.click(screen.getByRole('button', { name: 'Salin untuk WhatsApp' }))
+      await waitFor(() => expect(writeText).toHaveBeenCalled())
+      const copied = String(writeText.mock.calls[0]?.[0] ?? '')
+      expect(copied.startsWith('Sesi 005')).toBe(true)
+      expect(copied).not.toContain('Jangan edit')
+    })
   })
 })

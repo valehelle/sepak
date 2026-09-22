@@ -143,6 +143,8 @@ test('a player switches position, keeping the paid tick', async ({ page }) => {
   await page.getByRole('button', { name: /GK.*Hazmi/ }).click()
   await page.getByRole('button', { name: 'Dah bayar', exact: true }).click()
   await page.keyboard.press('Escape')
+  // Closing the claim sheet surfaces the queued group prompt for that tick.
+  await page.getByRole('button', { name: 'Tutup' }).click()
 
   // An empty slot is the picker: the page says so rather than locking it.
   await expect(page.getByText(/Nak tukar posisi/)).toBeVisible()
@@ -158,4 +160,48 @@ test('a player switches position, keeping the paid tick', async ({ page }) => {
   await expect(page.getByRole('button', { name: /ST.*Hazmi.*dah bayar/ })).toBeVisible()
   await expect(page.getByRole('button', { name: /^GK — kosong/ }).first()).toBeVisible()
   await expect(page.getByText('1/33 penuh')).toBeVisible()
+})
+
+test('releasing offers the group message, with the freed position named', async ({ page }) => {
+  await page.goto(`s/${sessionId}`)
+
+  await page.getByRole('button', { name: /^GK/ }).first().click()
+  await page.getByLabel('Nama').fill('Hazmi')
+  await page.getByLabel('Nombor telefon').fill('012-345 6789')
+  await page.getByRole('button', { name: 'Ambil slot' }).click()
+  await expect(page.getByText(/Slot anda: Team A Merah — GK/)).toBeVisible()
+  // A claim must not prompt: during the opening rush it would fire per player.
+  await expect(page.getByText('Senarai dah berubah')).not.toBeVisible()
+
+  await page.getByRole('button', { name: /GK.*Hazmi/ }).click()
+  await page.getByRole('button', { name: 'Lepaskan slot' }).click()
+  await page.getByRole('button', { name: 'Ya, lepaskan slot' }).click()
+
+  await expect(page.getByText('Senarai dah berubah')).toBeVisible()
+  await expect(page.getByText('🔴 Team A Merah — GK: Hazmi → kosong')).toBeVisible()
+  // The sheet shows the one line, never the forty-line paste behind it.
+  await expect(page.getByRole('dialog')).not.toContainText('Team B Putih')
+  await page.getByRole('button', { name: 'Tutup' }).click()
+  await expect(page.getByText('Senarai dah berubah')).not.toBeVisible()
+})
+
+test('the paid tick can still be undone before the group prompt appears', async ({ page }) => {
+  await page.goto(`s/${sessionId}`)
+  await page.getByRole('button', { name: /^GK/ }).first().click()
+  await page.getByLabel('Nama').fill('Hazmi')
+  await page.getByLabel('Nombor telefon').fill('012-345 6789')
+  await page.getByRole('button', { name: 'Ambil slot' }).click()
+
+  await page.getByRole('button', { name: /GK.*Hazmi/ }).click()
+  await page.getByRole('button', { name: 'Dah bayar', exact: true }).click()
+  await expect(page.getByRole('button', { name: 'Dah bayar', exact: true })).toHaveAttribute('aria-pressed', 'true')
+  // The prompt must not cover the toggle that undoes a mis-tap.
+  await expect(page.getByText('Senarai dah berubah')).not.toBeVisible()
+
+  await page.getByRole('button', { name: 'Dah bayar', exact: true }).click()
+  await expect(page.getByRole('button', { name: 'Dah bayar', exact: true })).toHaveAttribute('aria-pressed', 'false')
+  await page.getByTestId('sheet-backdrop').click()
+
+  // Ticked then un-ticked is a no-op, so the group is told nothing at all.
+  await expect(page.getByText('Senarai dah berubah')).not.toBeVisible()
 })

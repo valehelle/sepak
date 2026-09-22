@@ -33,6 +33,48 @@ export type WhatsAppInput = {
    *  this fixture rather than the site-wide one. Optional, so a caller
    *  without an origin still produces the message unchanged. */
   shareUrl?: string
+  /** One line naming what just happened, from describeChange below. It leads
+   *  the message rather than trailing it: WhatsApp's chat list previews the
+   *  first line, so a change announced anywhere else is invisible until
+   *  somebody opens a message that looks like every other paste. Optional,
+   *  so the organiser's plain copy is unchanged. */
+  change?: string
+}
+
+/** Where a change happened, as the message says it. */
+export type ChangeAt = { team: TeamKey; teamName: string; position: Position }
+
+/** What one person just did, in the terms the group cares about. Not the
+ *  activity log: that records everything, and this is deliberately only the
+ *  action being announced. */
+export type RosterChange =
+  | { kind: 'release'; at: ChangeAt; playerName: string; takenBy: string | null }
+  | { kind: 'move'; at: ChangeAt; to: ChangeAt; playerName: string }
+  | { kind: 'paid'; at: ChangeAt; playerName: string }
+  | { kind: 'unpaid'; at: ChangeAt; playerName: string }
+
+const where = (at: ChangeAt): string => `Team ${at.team} ${at.teamName} — ${positionLabel(at.position)}`
+const bare = (at: ChangeAt): string => `Team ${at.team} ${at.teamName} ${positionLabel(at.position)}`
+
+/** The one line, or null when there is nothing worth telling the group.
+ *
+ *  A plain arrow rather than an emoji one: WhatsApp draws ➡️ at emoji size,
+ *  which makes the line look like a button. */
+export function describeChange(change: RosterChange): string | null {
+  switch (change.kind) {
+    case 'release':
+      return change.takenBy === null
+        ? `🔴 ${where(change.at)}: ${change.playerName} → kosong`
+        : `🔄 ${where(change.at)}: ${change.playerName} → ${change.takenBy} (naik dari senarai tunggu)`
+    case 'move':
+      return `🔄 ${change.playerName}: ${bare(change.at)} → ${bare(change.to)}`
+    case 'paid':
+      return `✅ ${where(change.at)}: ${change.playerName} dah bayar`
+    // Taking a tick back is a correction to the organiser's own bookkeeping.
+    // Nobody needs a message saying somebody un-paid.
+    case 'unpaid':
+      return null
+  }
 }
 
 type RosterEntry = { name: string | null; paid: boolean }
@@ -44,6 +86,12 @@ const key = (team: TeamKey, position: Position): string => `${team}:${position}`
  *  emoji rather than a bare ✓: WhatsApp renders it at name height on both
  *  phones and desktop, and it survives being pasted anywhere else. */
 const PAID_MARK = '✅'
+
+/** Sent with every announced change, because the list in the group is a
+ *  copy and the site is the original -- somebody editing the copy by hand
+ *  is how the two drift apart. */
+const NO_EDIT_WARNING =
+  '⚠️ Jangan edit senarai ni terus — update kat website, lepas tu copy senarai baru.'
 
 function rosterOf(slots: readonly WhatsAppSlot[]): Roster {
   const roster: Roster = new Map()
@@ -94,6 +142,19 @@ export function buildWhatsAppMessage(input: WhatsAppInput): string {
   const teams = TEAM_KEYS.map((team) => teamBlock(team, input.teamNames[team], roster))
   const waitlist = waitlistBlock(input.waitlist ?? [])
   const link = input.shareUrl === undefined || input.shareUrl === '' ? [] : [input.shareUrl]
+  // The warning rides with the change, not with every copy: the organiser
+  // pasting a fresh list has not been told off, and telling the group every
+  // time would wear out fast.
+  const announced = input.change === undefined || input.change === ''
+  const lead = announced ? [] : [input.change]
+  const warning = announced ? [] : [NO_EDIT_WARNING]
 
-  return [header, ...teams, ...(waitlist === null ? [] : [waitlist]), ...link].join('\n\n')
+  return [
+    ...lead,
+    header,
+    ...teams,
+    ...(waitlist === null ? [] : [waitlist]),
+    ...warning,
+    ...link,
+  ].join('\n\n')
 }

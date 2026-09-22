@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Link, useParams } from 'react-router'
 import { AdminContactToggle } from '../components/AdminContact'
 import { Button } from '../components/Button'
@@ -13,7 +13,15 @@ import { useToast } from '../components/Toast'
 import { WaitlistSheet } from '../components/WaitlistSheet'
 import { useAuthUser } from '../data/auth'
 import { hasPushSubscription } from '../data/push'
-import { SlotActionError, adminClearSlot, claimSlot, moveSlot, releaseSlot, setSlotPaid } from '../data/slots'
+import {
+  SlotActionError,
+  adminClearSlot,
+  claimSlot,
+  getSlot,
+  moveSlot,
+  releaseSlot,
+  setSlotPaid,
+} from '../data/slots'
 import type { Slot } from '../data/types'
 import { useSessionRealtime } from '../data/useSessionRealtime'
 import { hasTelegramChat } from '../data/telegram'
@@ -26,7 +34,8 @@ import {
 import { TEAM_KEYS, formatPositions, positionLabel, type Position, type TeamKey } from '../lib/positions'
 import { rememberSession } from '../lib/lastSession'
 import { rememberPlayer } from '../lib/playerMemory'
-import { buildWhatsAppMessage } from '../lib/whatsapp'
+import { ShareChangeSheet } from '../components/ShareChangeSheet'
+import { buildWhatsAppMessage, describeChange, type RosterChange } from '../lib/whatsapp'
 
 const VIEW_MODE_KEY = 'sepak.viewMode'
 
@@ -82,6 +91,9 @@ export default function SessionPage() {
   // Which queue entry the organiser has armed for removal, if any. One at a
   // time: the confirm replaces the button in place.
   const [removingFromQueue, setRemovingFromQueue] = useState<string | null>(null)
+  // What to offer the group, after a change that makes the list already
+  // pasted there wrong. Null the rest of the time.
+  const [change, setChange] = useState<RosterChange | null>(null)
   const [pushOpen, setPushOpen] = useState(false)
   const [pushOn, setPushOn] = useState(true)
 
@@ -118,23 +130,36 @@ export default function SessionPage() {
     pendingName.trim() !== '' &&
     slots.some((slot) => slot.playerName?.toLowerCase() === pendingName.trim().toLowerCase())
 
-  const whatsappText = useMemo(() => {
-    if (session === null) return ''
-    return buildWhatsAppMessage({
-      sessionNo: session.sessionNo,
-      title: session.title,
-      playDate: session.playDate,
-      startTime: session.startTime,
-      venue: session.venue,
-      feeMyr: session.feeMyr,
-      teamNames: session.teamNames,
-      slots: slots.map(({ team, position, playerName, paid }) => ({ team, position, playerName, paid })),
-      waitlist: waitlist.map(({ playerName, positions }) => ({ playerName, positions })),
-      // The path form, not the fragment one in the address bar: only the
-      // path has a page of its own carrying this session's Open Graph tags.
-      shareUrl: `${window.location.origin}${import.meta.env.BASE_URL}s/${session.id}`,
-    })
-  }, [session, slots, waitlist])
+  // Null when there is nothing worth telling the group -- an un-tick, say.
+  const changeLine = change === null ? null : describeChange(change)
+
+  /** The group message. `line` leads it when a change is being announced;
+   *  the organiser's own copy button passes nothing and gets exactly the
+   *  message it always did. */
+  const buildMessage = useCallback(
+    (line: string | null): string => {
+      if (session === null) return ''
+      return buildWhatsAppMessage({
+        sessionNo: session.sessionNo,
+        title: session.title,
+        playDate: session.playDate,
+        startTime: session.startTime,
+        venue: session.venue,
+        feeMyr: session.feeMyr,
+        teamNames: session.teamNames,
+        slots: slots.map(({ team, position, playerName, paid }) => ({ team, position, playerName, paid })),
+        waitlist: waitlist.map(({ playerName, positions }) => ({ playerName, positions })),
+        // The path form, not the fragment one in the address bar: only the
+        // path has a page of its own carrying this session's Open Graph tags.
+        shareUrl: `${window.location.origin}${import.meta.env.BASE_URL}s/${session.id}`,
+        change: line ?? '',
+      })
+    },
+    [session, slots, waitlist],
+  )
+
+  const whatsappText = useMemo(() => buildMessage(null), [buildMessage])
+  const changeText = useMemo(() => buildMessage(changeLine), [buildMessage, changeLine])
 
   function toggleViewMode() {
     const next = viewMode === 'pitch' ? 'list' : 'pitch'
@@ -190,14 +215,44 @@ export default function SessionPage() {
 
   function onRelease() {
     const slot = selected?.slot
-    if (slot === undefined || slot === null) return
+    if (slot === undefined || slot === null || session === null) return
+    const name = slot.playerName
     const released: Slot = { ...slot, playerName: null, claimedAt: null, paid: false }
-    void run(() => releaseSlot(slot.id), {
-      slot: released,
-      owned: [[slot.id, false]],
-      revertSlot: slot,
-      revertOwned: [[slot.id, true]],
-    })
+    const at = {
+      team: slot.team,
+      teamName: session.teamNames[slot.team],
+      position: slot.position,
+    }
+    void run(
+      () => releaseSlot(slot.id),
+      {
+        slot: released,
+        owned: [[slot.id, false]],
+        revertSlot: slot,
+        revertOwned: [[slot.id, true]],
+      },
+      () => {
+        if (name === null) return
+        // Offered straight away with "kosong", then corrected: the auto-fill
+        // runs in the release's own transaction, but release_slot returns the
+        // row from its UPDATE, which is always empty. Only a fresh read knows.
+        setChange({ kind: 'release', at, playerName: name, takenBy: null })
+        void getSlot(slot.id)
+          .then((after) => {
+            const taken = after?.playerName ?? null
+            if (taken === null) return
+            setChange((current) =>
+              current === null || current.kind !== 'release'
+                ? current
+                : { ...current, takenBy: taken },
+            )
+          })
+          .catch(() => {
+            // The sheet already says "kosong", which is what the roster
+            // underneath will show too if the read failed for a real reason.
+          })
+      },
+    )
   }
 
   /** The paid tick, unlike every other action here, leaves the sheet open:
@@ -221,7 +276,16 @@ export default function SessionPage() {
     setBusy(true)
     withPaid({ ...slot, paid })
     setSlotPaid(slot.id, paid)
-      .then(withPaid)
+      .then((next) => {
+        withPaid(next)
+        const name = next.playerName
+        if (name === null || session === null) return
+        setChange({
+          kind: paid ? 'paid' : 'unpaid',
+          at: { team: next.team, teamName: session.teamNames[next.team], position: next.position },
+          playerName: name,
+        })
+      })
       .catch((cause: unknown) => {
         withPaid(slot)
         show(cause instanceof SlotActionError ? cause.message : 'Gagal menanda bayaran.', 'error')
@@ -277,6 +341,14 @@ export default function SessionPage() {
     moveSlot(from.id, to.id)
       .then((result) => {
         applyLocal(result)
+        if (from.playerName !== null && session !== null) {
+          setChange({
+            kind: 'move',
+            playerName: from.playerName,
+            at: { team: from.team, teamName: session.teamNames[from.team], position: from.position },
+            to: { team: to.team, teamName: session.teamNames[to.team], position: to.position },
+          })
+        }
         // The slot left behind may already hold a promoted player, which
         // arrives over Realtime -- but a refetch is what makes the queue
         // panel and the pitch agree immediately.
@@ -595,6 +667,17 @@ export default function SessionPage() {
         onMove={onMove}
         onAdminClear={() => void onAdminClear()}
         onNameChange={setPendingName}
+      />
+
+      {/* Queued behind the claim sheet rather than stacked on top of it.
+          Releasing and moving close that sheet themselves, but the paid tick
+          deliberately leaves it open so a mis-tap can be undone -- and a
+          prompt covering the tick would take that away. Un-ticking before
+          closing simply replaces the change with one that says nothing. */}
+      <ShareChangeSheet
+        change={selected === null ? change : null}
+        message={changeText}
+        onClose={() => setChange(null)}
       />
 
       <NotifySheet

@@ -1,9 +1,12 @@
 import { useState } from 'react'
 import { useToast } from './Toast'
 
-type CopyButtonProps = { text: string; label: string }
+/** `emphasis` ranks this against whatever sits next to it. The organiser's
+ *  panel has only this one button, so it stays quiet there; in a sheet whose
+ *  whole purpose is the copy, it has to outrank the close button. */
+type CopyButtonProps = { text: string; label: string; emphasis?: 'quiet' | 'primary' }
 
-export function CopyButton({ text, label }: CopyButtonProps) {
+export function CopyButton({ text, label, emphasis = 'quiet' }: CopyButtonProps) {
   const { show } = useToast()
   const [copied, setCopied] = useState(false)
 
@@ -23,9 +26,13 @@ export function CopyButton({ text, label }: CopyButtonProps) {
       onClick={copy}
       className={[
         'w-full rounded-lg border px-4 py-3 font-kit text-[15px] font-semibold tracking-wide transition',
+        // Copied always lands on green. The idle state is what differs, so
+        // the flip stays visible either way.
         copied
           ? 'border-turf-lit bg-turf-lit text-white'
-          : 'border-white/15 bg-white/5 text-white active:bg-white/10',
+          : emphasis === 'primary'
+            ? 'border-turf-lit/70 bg-turf text-white active:bg-turf-lit'
+            : 'border-white/15 bg-white/5 text-white active:bg-white/10',
       ].join(' ')}
     >
       {copied ? 'Dah disalin' : label}

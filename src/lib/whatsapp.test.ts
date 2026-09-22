@@ -1,6 +1,12 @@
 import { describe, expect, it } from 'vitest'
 import { POSITIONS, TEAM_KEYS, type TeamKey } from './positions'
-import { buildWhatsAppMessage, type WhatsAppInput, type WhatsAppSlot } from './whatsapp'
+import {
+  buildWhatsAppMessage,
+  describeChange,
+  type RosterChange,
+  type WhatsAppInput,
+  type WhatsAppSlot,
+} from './whatsapp'
 
 const NAMES: Record<TeamKey, readonly (string | null)[]> = {
   A: [null, 'kimie', 'amie', 'Zulfadhli', 'haniff mohd', 'Fauzi', 'azim', 'lan', 'yasin', 'Hazmi', 'Zulazhar'],
@@ -163,6 +169,65 @@ describe('buildWhatsAppMessage', () => {
     it('changes nothing when no link is given', () => {
       expect(buildWhatsAppMessage(input())).toBe(EXPECTED)
       expect(buildWhatsAppMessage(input({ shareUrl: '' }))).toBe(EXPECTED)
+    })
+  })
+
+  describe('the change line', () => {
+    it('leads the message, because WhatsApp previews the first line only', () => {
+      const message = buildWhatsAppMessage(input({ change: '🔴 Team A Merah — GK: Amir → kosong' }))
+      expect(message.startsWith('🔴 Team A Merah — GK: Amir → kosong\n\nSesi 005')).toBe(true)
+    })
+
+    it('carries the warning with it, above the link', () => {
+      const message = buildWhatsAppMessage(input({
+        change: '🔴 Team A Merah — GK: Amir → kosong',
+        shareUrl: 'https://valehelle.github.io/sepak/s/abc',
+      }))
+      expect(message.endsWith(
+        '\n\n⚠️ Jangan edit senarai ni terus — update kat website, lepas tu copy senarai baru.' +
+        '\n\nhttps://valehelle.github.io/sepak/s/abc',
+      )).toBe(true)
+    })
+
+    it('changes nothing at all when there is no change to announce', () => {
+      expect(buildWhatsAppMessage(input())).toBe(EXPECTED)
+      expect(buildWhatsAppMessage(input({ change: '' }))).toBe(EXPECTED)
+    })
+  })
+
+  describe('describeChange', () => {
+    const at = { team: 'A' as const, teamName: 'Merah', position: 'GK' as const }
+
+    it('names the position that opened up', () => {
+      const change: RosterChange = { kind: 'release', at, playerName: 'Amir', takenBy: null }
+      expect(describeChange(change)).toBe('🔴 Team A Merah — GK: Amir → kosong')
+    })
+
+    it('says so on one line when the queue took it straight away', () => {
+      const change: RosterChange = { kind: 'release', at, playerName: 'Amir', takenBy: 'Isaac' }
+      expect(describeChange(change)).toBe(
+        '🔄 Team A Merah — GK: Amir → Isaac (naik dari senarai tunggu)',
+      )
+    })
+
+    it('reads a position change as one arrow between two places', () => {
+      const change: RosterChange = {
+        kind: 'move',
+        playerName: 'Amir',
+        at,
+        to: { team: 'C', teamName: 'Kuning', position: 'ST' },
+      }
+      expect(describeChange(change)).toBe('🔄 Amir: Team A Merah GK → Team C Kuning ST')
+    })
+
+    it('announces a payment without an arrow, since nothing moved', () => {
+      const change: RosterChange = { kind: 'paid', at, playerName: 'Amir' }
+      expect(describeChange(change)).toBe('✅ Team A Merah — GK: Amir dah bayar')
+    })
+
+    it('has nothing to announce when a tick is taken back', () => {
+      const change: RosterChange = { kind: 'unpaid', at, playerName: 'Amir' }
+      expect(describeChange(change)).toBeNull()
     })
   })
 })

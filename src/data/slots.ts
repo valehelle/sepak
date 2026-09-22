@@ -1,5 +1,6 @@
 import { getClaimToken } from '../lib/claimToken'
 import { supabase } from '../lib/supabase'
+import { SLOT_COLUMNS } from './sessions'
 import { FALLBACK_ERROR_MESSAGE, RPC_MESSAGES, parseSlot, rpcErrorCode, type Slot } from './types'
 
 export class SlotActionError extends Error {
@@ -95,4 +96,21 @@ export async function moveSlot(fromSlotId: string, toSlotId: string): Promise<Sl
   })
   if (error !== null) fail(error)
   return parseSlot(data)
+}
+
+/** One slot as it stands right now.
+ *
+ *  Needed because releasing cannot report who took the slot next:
+ *  release_slot returns the row from its own UPDATE, and the auto-fill
+ *  trigger runs afterwards in the same transaction. By the time the call
+ *  returns, the committed row may hold somebody else -- and only a fresh
+ *  read can say so. */
+export async function getSlot(slotId: string): Promise<Slot | null> {
+  const { data, error } = await supabase
+    .from('slots')
+    .select(SLOT_COLUMNS)
+    .eq('id', slotId)
+    .maybeSingle()
+  if (error !== null) fail(error)
+  return data === null ? null : parseSlot(data)
 }
