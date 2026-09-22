@@ -21,9 +21,10 @@
     "e2e": "playwright test",
     "db:start": "supabase start",
     "db:reset": "supabase db reset",
-    "test:db": "sh scripts/psql.sh < supabase/tests/schema_test.sql && sh scripts/psql.sh < supabase/tests/rls_test.sql && sh scripts/psql.sh < supabase/tests/waitlist_test.sql && sh scripts/psql.sh < supabase/tests/contacts_test.sql && sh scripts/psql.sh < supabase/tests/one_booking_test.sql && sh scripts/psql.sh < supabase/tests/paid_test.sql && sh scripts/psql.sh < supabase/tests/activity_test.sql && sh scripts/psql.sh < supabase/tests/push_test.sql && sh scripts/psql.sh < supabase/tests/telegram_test.sql",
+    "test:db": "sh scripts/psql.sh < supabase/tests/schema_test.sql && sh scripts/psql.sh < supabase/tests/rls_test.sql && sh scripts/psql.sh < supabase/tests/waitlist_test.sql && sh scripts/psql.sh < supabase/tests/contacts_test.sql && sh scripts/psql.sh < supabase/tests/one_booking_test.sql && sh scripts/psql.sh < supabase/tests/paid_test.sql && sh scripts/psql.sh < supabase/tests/move_test.sql && sh scripts/psql.sh < supabase/tests/activity_test.sql && sh scripts/psql.sh < supabase/tests/push_test.sql && sh scripts/psql.sh < supabase/tests/telegram_test.sql",
     "verify:pages": "node scripts/verifyPagesArtifacts.mjs",
-    "icons": "node scripts/makeIcons.mjs"
+    "icons": "node scripts/makeIcons.mjs",
+    "banner": "node scripts/makeBanner.mjs"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.58.0",
