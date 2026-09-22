@@ -864,7 +864,7 @@ describe('SessionPage', () => {
     ]
     view()
 
-    await userEvent.click(screen.getByRole('button', { name: 'Buang dari senarai (admin)' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Buang dari senarai' }))
     // Named, because a queue of similar rows is easy to mis-tap.
     expect(screen.getByText('Buang Amir dari senarai tunggu?')).toBeTruthy()
     await userEvent.click(screen.getByRole('button', { name: 'Ya, buang' }))
@@ -881,10 +881,10 @@ describe('SessionPage', () => {
     ]
     view()
 
-    await userEvent.click(screen.getByRole('button', { name: 'Buang dari senarai (admin)' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Buang dari senarai' }))
     expect(adminRemoveFromWaitlist).not.toHaveBeenCalled()
     await userEvent.click(screen.getByRole('button', { name: 'Batal' }))
-    expect(screen.getByRole('button', { name: 'Buang dari senarai (admin)' })).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Buang dari senarai' })).toBeTruthy()
     expect(adminRemoveFromWaitlist).not.toHaveBeenCalled()
   })
 
@@ -893,6 +893,6 @@ describe('SessionPage', () => {
       { id: 'w1', sessionId: 'session-1', playerName: 'Amir', positions: ['GK'], createdAt: 'now' },
     ]
     view()
-    expect(screen.queryByRole('button', { name: 'Buang dari senarai (admin)' })).toBeNull()
+    expect(screen.queryByRole('button', { name: 'Buang dari senarai' })).toBeNull()
   })
 })

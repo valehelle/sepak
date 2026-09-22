@@ -85,9 +85,10 @@ export function ActivityFeed() {
         <h2 className="font-kit text-lg font-semibold tracking-wide text-white">Aktiviti</h2>
         <Button
           variant="secondary"
+          size="sm"
           disabled={feed.state === 'loading'}
           onClick={() => void load()}
-          className="ml-auto px-2 py-1 text-[12px]"
+          className="ml-auto"
         >
           Muat semula
         </Button>

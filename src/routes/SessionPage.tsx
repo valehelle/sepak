@@ -511,50 +511,60 @@ export default function SessionPage() {
                     {mine && (
                       <Button
                         variant="destructive"
+                        size="sm"
                         disabled={busy}
                         onClick={onLeaveWaitlist}
-                        className="px-2 py-1 text-[12px]"
                       >
                         Keluar dari senarai tunggu
                       </Button>
                     )}
-                    {isAdmin && <AdminContactToggle target={{ waitlistId: entry.id }} />}
-                    {isAdmin &&
-                      (removingFromQueue === entry.id ? (
-                        <div className="space-y-2 rounded-lg border border-kuning/40 bg-kuning/10 p-2">
-                          <p className="font-sans text-[13px] text-white/80">
-                            {`Buang ${entry.playerName} dari senarai tunggu?`}
-                          </p>
+                    {/* Organiser tools sit on one quiet line of text links,
+                        matching "Lihat nombor": a queue is a list of rows, and
+                        a solid button on each one would shout over the names
+                        the organiser is actually reading. */}
+                    {isAdmin && (
+                      <div className="flex flex-wrap items-center gap-x-4 gap-y-1">
+                        <AdminContactToggle target={{ waitlistId: entry.id }} />
+                        {removingFromQueue !== entry.id && (
+                          <button
+                            type="button"
+                            disabled={busy}
+                            onClick={() => setRemovingFromQueue(entry.id)}
+                            className="font-kit text-[13px] font-medium text-merah-soft underline decoration-merah-soft/40 underline-offset-4 disabled:opacity-50"
+                          >
+                            Buang dari senarai
+                          </button>
+                        )}
+                      </div>
+                    )}
+                    {isAdmin && removingFromQueue === entry.id && (
+                      <div className="rounded-lg border border-merah-soft/40 bg-merah/15 p-2">
+                        <p className="mb-2 font-sans text-[13px] text-white/80">
+                          {`Buang ${entry.playerName} dari senarai tunggu?`}
+                        </p>
+                        <div className="flex gap-2">
                           <Button
                             variant="destructive"
+                            size="sm"
                             disabled={busy}
                             onClick={() => {
                               setRemovingFromQueue(null)
                               void onAdminRemoveFromWaitlist(entry.id)
                             }}
-                            className="w-full px-2 py-1 text-[12px]"
                           >
                             Ya, buang
                           </Button>
                           <Button
                             variant="secondary"
+                            size="sm"
                             disabled={busy}
                             onClick={() => setRemovingFromQueue(null)}
-                            className="w-full px-2 py-1 text-[12px]"
                           >
                             Batal
                           </Button>
                         </div>
-                      ) : (
-                        <Button
-                          variant="secondary"
-                          disabled={busy}
-                          onClick={() => setRemovingFromQueue(entry.id)}
-                          className="px-2 py-1 text-[12px] text-kuning"
-                        >
-                          Buang dari senarai (admin)
-                        </Button>
-                      ))}
+                      </div>
+                    )}
                   </li>
                 )
               })}
