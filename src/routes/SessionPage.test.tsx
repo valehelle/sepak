@@ -935,6 +935,9 @@ describe('SessionPage', () => {
           screen.getByText('🔄 Team A Merah — GK: Hazmi → Isaac (naik dari senarai tunggu)'),
         ).toBeTruthy(),
       )
+      // And the roster offered for pasting shows him too, rather than waiting
+      // for the realtime event to arrive.
+      expect(findSlot(state.slots, 'A-GK').playerName).toBe('Isaac')
     })
 
     it('offers it after a position change, as one arrow between two places', async () => {

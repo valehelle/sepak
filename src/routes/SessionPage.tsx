@@ -240,7 +240,13 @@ export default function SessionPage() {
         void getSlot(slot.id)
           .then((after) => {
             const taken = after?.playerName ?? null
-            if (taken === null) return
+            if (after === null || taken === null) return
+            // The same read fixes the roster, not just the headline. The
+            // promoted player would otherwise only appear when the realtime
+            // event lands -- and until then the message offered for pasting
+            // would show this position as empty, which is the one mistake
+            // this whole prompt exists to prevent.
+            applyLocal(after)
             setChange((current) =>
               current === null || current.kind !== 'release'
                 ? current
