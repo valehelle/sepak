@@ -34,7 +34,7 @@ describe('PitchTeam', () => {
 
   it('names the team', () => {
     render(<PitchTeam {...base} slots={[]} />)
-    expect(screen.getByText('Team A Merah')).toBeTruthy()
+    expect(screen.getByText('Team Merah')).toBeTruthy()
   })
 
   it('shows a claimed player name', () => {

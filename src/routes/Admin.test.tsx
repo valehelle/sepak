@@ -26,6 +26,7 @@ const signOut = vi.fn()
 const listSessions = vi.fn()
 const createSession = vi.fn()
 const updateSession = vi.fn()
+const sessionTeamCount = vi.fn()
 const setSessionStatus = vi.fn()
 const deleteSessionFn = vi.fn()
 const nextSessionNo = vi.fn()
@@ -61,6 +62,7 @@ vi.mock('../data/sessions', () => ({
   setSessionStatus: (id: string, status: string) => setSessionStatus(id, status),
   deleteSession: (id: string) => deleteSessionFn(id),
   nextSessionNo: () => nextSessionNo(),
+  sessionTeamCount: (id: string) => sessionTeamCount(id),
   fillCounts: () => Promise.resolve(new Map()),
 }))
 
@@ -82,6 +84,7 @@ describe('Admin', () => {
     listSessions.mockReset().mockResolvedValue([SESSION])
     createSession.mockReset().mockResolvedValue({ ...SESSION, id: 'new-session' })
     updateSession.mockReset().mockResolvedValue(SESSION)
+    sessionTeamCount.mockReset().mockResolvedValue(3)
     setSessionStatus.mockReset().mockResolvedValue({ ...SESSION, status: 'closed' })
     deleteSessionFn.mockReset().mockResolvedValue(undefined)
     nextSessionNo.mockReset().mockResolvedValue(6)

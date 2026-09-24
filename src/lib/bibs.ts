@@ -25,3 +25,11 @@ const BY_TEAM: Record<TeamKey, Bib | undefined> = {
 export function bibFor(team: TeamKey, teamName: string): Bib {
   return BY_NAME.find(([pattern]) => pattern.test(teamName))?.[1] ?? BY_TEAM[team] ?? 'merah'
 }
+
+/** What people read for a team: its name, never its letter. The letter is
+ *  only the slot key, and on a four-team night "Team B" and "Team C" say
+ *  nothing about who is in red. Names are what the admin form sets, and it
+ *  keeps them distinct. */
+export function teamLabel(teamName: string): string {
+  return `Team ${teamName}`
+}

@@ -1,4 +1,4 @@
-import { bibFor, type Bib } from '../lib/bibs'
+import { bibFor, teamLabel, type Bib } from '../lib/bibs'
 import { PITCH_ROWS, positionLabel, type Position, type TeamKey } from '../lib/positions'
 import type { Slot } from '../data/types'
 import { SlotChip, type SlotView } from './SlotChip'
@@ -55,7 +55,7 @@ export function PitchTeam({
       <div className="mb-2 flex items-center gap-2 px-1">
         <span className={`h-3 w-3 rounded-sm ${SWATCH[bib] ?? ''}`} aria-hidden="true" />
         <h3 className="font-kit text-base font-semibold tracking-wide text-white">
-          {`Team ${team} ${teamName}`}
+          {teamLabel(teamName)}
         </h3>
         <span className="ml-auto font-kit text-sm text-white/45">{`${filled}/11`}</span>
       </div>

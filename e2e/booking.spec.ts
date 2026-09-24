@@ -23,7 +23,7 @@ test('a player claims, sees, and releases a slot', async ({ page }) => {
 
   await expect(page.getByText('Hazmi')).toBeVisible()
   await expect(page.getByText('1/44 penuh')).toBeVisible()
-  await expect(page.getByText(/Slot anda: Team A Merah — GK/)).toBeVisible()
+  await expect(page.getByText(/Slot anda: Team Merah — GK/)).toBeVisible()
 
   await page.getByRole('button', { name: /GK.*Hazmi/ }).click()
   // Emptying a slot arms first: one tap is a mis-tap away from losing it.
@@ -138,7 +138,7 @@ test('a player switches position, keeping the paid tick', async ({ page }) => {
   await page.getByLabel('Nama').fill('Hazmi')
   await page.getByLabel('Nombor telefon').fill('012-345 6789')
   await page.getByRole('button', { name: 'Ambil slot' }).click()
-  await expect(page.getByText(/Slot anda: Team A Merah — GK/)).toBeVisible()
+  await expect(page.getByText(/Slot anda: Team Merah — GK/)).toBeVisible()
 
   await page.getByRole('button', { name: /GK.*Hazmi/ }).click()
   await page.getByRole('button', { name: 'Dah bayar', exact: true }).click()
@@ -151,11 +151,11 @@ test('a player switches position, keeping the paid tick', async ({ page }) => {
   await page.getByRole('button', { name: /^ST — kosong/ }).first().click()
   // Scoped to the sheet: the summary panel behind it says the same words.
   await expect(
-    page.getByRole('dialog').getByText('Team A Merah — GK', { exact: true }),
+    page.getByRole('dialog').getByText('Team Merah — GK', { exact: true }),
   ).toBeVisible()
   await page.getByRole('button', { name: 'Pindah ke sini' }).click()
 
-  await expect(page.getByText(/Slot anda: Team A Merah — ST/)).toBeVisible()
+  await expect(page.getByText(/Slot anda: Team Merah — ST/)).toBeVisible()
   // The tick travelled, and the slot left behind is empty again.
   await expect(page.getByRole('button', { name: /ST.*Hazmi.*dah bayar/ })).toBeVisible()
   await expect(page.getByRole('button', { name: /^GK — kosong/ }).first()).toBeVisible()
@@ -169,7 +169,7 @@ test('releasing offers the group message, with the freed position named', async 
   await page.getByLabel('Nama').fill('Hazmi')
   await page.getByLabel('Nombor telefon').fill('012-345 6789')
   await page.getByRole('button', { name: 'Ambil slot' }).click()
-  await expect(page.getByText(/Slot anda: Team A Merah — GK/)).toBeVisible()
+  await expect(page.getByText(/Slot anda: Team Merah — GK/)).toBeVisible()
   // A claim must not prompt: during the opening rush it would fire per player.
   await expect(page.getByText('Senarai dah berubah')).not.toBeVisible()
 
@@ -178,9 +178,9 @@ test('releasing offers the group message, with the freed position named', async 
   await page.getByRole('button', { name: 'Ya, lepaskan slot' }).click()
 
   await expect(page.getByText('Senarai dah berubah')).toBeVisible()
-  await expect(page.getByText('🔴 Team A Merah — GK: Hazmi → kosong')).toBeVisible()
+  await expect(page.getByText('🔴 Team Merah — GK: Hazmi → kosong')).toBeVisible()
   // The sheet shows the one line, never the forty-line paste behind it.
-  await expect(page.getByRole('dialog')).not.toContainText('Team B Putih')
+  await expect(page.getByRole('dialog')).not.toContainText('Team Putih')
   await page.getByRole('button', { name: 'Tutup' }).click()
   await expect(page.getByText('Senarai dah berubah')).not.toBeVisible()
 })

@@ -8,7 +8,7 @@ import { SessionForm, type SessionFormValues } from '../components/SessionForm'
 import { Sheet } from '../components/Sheet'
 import { useToast } from '../components/Toast'
 import { signIn, signOut, signUp, useAuthUser } from '../data/auth'
-import { createSession, deleteSession, listSessions, nextSessionNo, setSessionStatus, updateSession } from '../data/sessions'
+import { createSession, deleteSession, listSessions, nextSessionNo, sessionTeamCount, setSessionStatus, updateSession } from '../data/sessions'
 import type { Session } from '../data/types'
 import { formatPlayDate, formatStartTime } from '../lib/format'
 
@@ -21,10 +21,22 @@ const DEFAULTS: SessionFormValues = {
   venue: '',
   feeMyr: null,
   feeGkMyr: null,
-  teamAName: 'Merah',
-  teamBName: 'Merah',
-  teamCName: 'Kuning',
-  teamDName: 'Kuning',
+  teamAName: 'Merah A',
+  teamBName: 'Merah B',
+  teamCName: 'Kuning A',
+  teamDName: 'Kuning B',
+}
+
+/** The duplicated session's team names, if they still work for four teams.
+ *  A three-team session never had a real Team D name -- its C and D are
+ *  both "Kuning" -- so it gets the four-team defaults instead. */
+function teamNamesFrom(session: Session): Pick<SessionFormValues, 'teamAName' | 'teamBName' | 'teamCName' | 'teamDName'> {
+  const { A, B, C, D } = session.teamNames
+  const distinct = new Set([A, B, C, D].map((name) => name.trim().toLowerCase())).size === 4
+  if (!distinct) {
+    return { teamAName: DEFAULTS.teamAName, teamBName: DEFAULTS.teamBName, teamCName: DEFAULTS.teamCName, teamDName: DEFAULTS.teamDName }
+  }
+  return { teamAName: A, teamBName: B, teamCName: C, teamDName: D }
 }
 
 /** Supabase error strings the form can explain better than "Cuba lagi".
@@ -144,6 +156,9 @@ export default function Admin() {
   // from "Duplikasi sesi lepas", since both map to 'new'.
   const [formKey, setFormKey] = useState(0)
   const [editing, setEditing] = useState<Session | null>(null)
+  // New sessions always get four teams; an older one being edited may have
+  // three, and then Team D's name is neither shown nor checked.
+  const [teamCount, setTeamCount] = useState<3 | 4>(4)
   const [confirmDelete, setConfirmDelete] = useState<Session | null>(null)
   const [busy, setBusy] = useState(false)
 
@@ -198,17 +213,22 @@ export default function Admin() {
         venue: last.venue,
         feeMyr: last.feeMyr,
         feeGkMyr: last.feeGkMyr,
-        teamAName: last.teamNames.A,
-        teamBName: last.teamNames.B,
-        teamCName: last.teamNames.C,
-        teamDName: last.teamNames.D,
+        ...teamNamesFrom(last),
       })
     } catch {
       show('Gagal menyediakan borang duplikasi.', 'error')
     }
   }, [sessions, show])
 
-  function openEdit(session: Session) {
+  async function openEdit(session: Session) {
+    let teams: 3 | 4
+    try {
+      teams = await sessionTeamCount(session.id)
+    } catch {
+      show('Gagal membuka sesi.', 'error')
+      return
+    }
+    setTeamCount(teams)
     setEditing(session)
     setFormKey((key) => key + 1)
     setFormValues({
@@ -332,7 +352,7 @@ export default function Admin() {
                   <Button variant="secondary" size="sm" className="w-full" onClick={() => void toggleStatus(session)}>
                     {session.status === 'open' ? 'Tutup sesi' : 'Buka semula'}
                   </Button>
-                  <Button variant="secondary" size="sm" className="w-full" onClick={() => openEdit(session)}>
+                  <Button variant="secondary" size="sm" className="w-full" onClick={() => void openEdit(session)}>
                     Sunting
                   </Button>
                   <Button variant="destructive" size="sm" className="w-full" onClick={() => setConfirmDelete(session)}>
@@ -364,6 +384,7 @@ export default function Admin() {
           <SessionForm
             key={formKey}
             initial={formValues}
+            teamCount={editing !== null ? teamCount : 4}
             submitLabel={editing !== null ? 'Simpan perubahan' : 'Cipta sesi'}
             busy={busy}
             onSubmit={(v) => void submit(v)}

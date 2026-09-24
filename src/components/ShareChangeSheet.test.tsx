@@ -31,7 +31,7 @@ describe('ShareChangeSheet', () => {
   it('shows the one line, and copies the whole message', async () => {
     view({ kind: 'release', at: AT, playerName: 'Amir', takenBy: null })
 
-    expect(screen.getByText('🔴 Team A Merah — GK: Amir → kosong')).toBeTruthy()
+    expect(screen.getByText('🔴 Team Merah — GK: Amir → kosong')).toBeTruthy()
     // The paste is forty lines; the sheet shows the headline, not the body.
     expect(screen.queryByText('FULL MESSAGE')).toBeNull()
 
@@ -42,7 +42,7 @@ describe('ShareChangeSheet', () => {
   it('names the player the queue promoted, on the same line', () => {
     view({ kind: 'release', at: AT, playerName: 'Amir', takenBy: 'Isaac' })
     expect(
-      screen.getByText('🔄 Team A Merah — GK: Amir → Isaac (naik dari senarai tunggu)'),
+      screen.getByText('🔄 Team Merah — GK: Amir → Isaac (naik dari senarai tunggu)'),
     ).toBeTruthy()
   })
 

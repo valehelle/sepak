@@ -56,7 +56,7 @@ test('auto-fill reaches a second browser over realtime, without a reload', async
   // the queue shrinking.
   await expect(pageTwo.getByText('Isaac')).toBeVisible({ timeout: 10_000 })
   await expect(pageTwo.getByText('Anda dalam senarai tunggu')).not.toBeVisible()
-  await expect(pageTwo.getByText(/Slot anda: Team A Merah — GK/)).toBeVisible()
+  await expect(pageTwo.getByText(/Slot anda: Team Merah — GK/)).toBeVisible()
 
   await one.close()
   await two.close()
@@ -107,7 +107,7 @@ test('a queued player takes an open slot by hand, even one they never asked for'
   await pageTwo.getByLabel('Nombor telefon').fill('019-876 5432')
   await pageTwo.getByRole('button', { name: 'Ambil slot' }).click()
 
-  await expect(pageTwo.getByText(/Slot anda: Team A Merah — GK/)).toBeVisible()
+  await expect(pageTwo.getByText(/Slot anda: Team Merah — GK/)).toBeVisible()
   await expect(pageTwo.getByText('Anda dalam senarai tunggu')).not.toBeVisible()
 
   await one.close()

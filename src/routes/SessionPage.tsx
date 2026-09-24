@@ -31,6 +31,7 @@ import {
   joinWaitlist,
   leaveWaitlist,
 } from '../data/waitlist'
+import { teamLabel } from '../lib/bibs'
 import { TEAM_KEYS, formatPositions, positionLabel, type Position, type TeamKey } from '../lib/positions'
 import { rememberSession } from '../lib/lastSession'
 import { rememberPlayer } from '../lib/playerMemory'
@@ -467,7 +468,7 @@ export default function SessionPage() {
         {mySlot !== null ? (
           <div className="space-y-1 rounded-lg border border-white/20 bg-white/10 px-3 py-2">
             <p className="font-kit text-[15px]">
-              {`Slot anda: Team ${mySlot.team} ${session.teamNames[mySlot.team]} — ${positionLabel(mySlot.position)}`}
+              {`Slot anda: ${teamLabel(session.teamNames[mySlot.team])} — ${positionLabel(mySlot.position)}`}
             </p>
             {/* One slot per device (claim_slot raises already_in_slot), so
                 the way to change position is to move, not to take a second
@@ -660,7 +661,7 @@ export default function SessionPage() {
         teamName={
           selected?.slot === undefined || selected.slot === null
             ? ''
-            : `Team ${selected.slot.team} ${session.teamNames[selected.slot.team]}`
+            : teamLabel(session.teamNames[selected.slot.team])
         }
         busy={busy}
         duplicateName={duplicateName}
@@ -668,7 +669,7 @@ export default function SessionPage() {
         currentLabel={
           mySlot === null
             ? null
-            : `Team ${mySlot.team} ${session.teamNames[mySlot.team]} — ${positionLabel(mySlot.position)}`
+            : `${teamLabel(session.teamNames[mySlot.team])} — ${positionLabel(mySlot.position)}`
         }
         onClose={() => setSelected(null)}
         onClaim={onClaim}

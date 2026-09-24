@@ -118,7 +118,7 @@ begin
 
   select * into v_row from sepak.push_targets(v_activity_id) limit 1;
   assert v_row.title = 'Anda berjaya masuk!', format('unexpected title %s', v_row.title);
-  assert v_row.body like 'Team A Merah — ST · Sesi 907, 14 Okt %',
+  assert v_row.body like 'Team Merah — ST · Sesi 907, 14 Okt %',
     format('unexpected body: %s', v_row.body);
   assert v_row.body like '%8:00 PM', format('the time should read as 8:00 PM, got %s', v_row.body);
   assert v_row.url = 'https://valehelle.github.io/sepak/s/' || v_session_id::text,

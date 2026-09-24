@@ -17,7 +17,7 @@ const SESSION: Session = {
   venue: 'Padang Presint 8',
   feeMyr: 27,
   feeGkMyr: null,
-  teamNames: { A: 'Merah', B: 'Putih', C: 'Kuning', D: 'Kuning' },
+  teamNames: { A: 'Merah', B: 'Putih', C: 'Kuning', D: 'Hijau' },
   status: 'open',
   createdAt: '2026-09-10T00:00:00Z',
 }
@@ -211,20 +211,20 @@ describe('SessionPage', () => {
   it('shows the session header and all three teams', () => {
     view()
     expect(screen.getByRole('heading', { name: 'Sesi 005 Geng Turun Peluh' })).toBeTruthy()
-    expect(screen.getByText('Team A Merah')).toBeTruthy()
-    expect(screen.getByText('Team B Putih')).toBeTruthy()
-    expect(screen.getByText('Team C Kuning')).toBeTruthy()
+    expect(screen.getByText('Team Merah')).toBeTruthy()
+    expect(screen.getByText('Team Putih')).toBeTruthy()
+    expect(screen.getByText('Team Kuning')).toBeTruthy()
     expect(screen.getByText('0/33 penuh')).toBeTruthy()
     // A three-team session does not grow an empty fourth pitch.
-    expect(screen.queryByText(/^Team D/)).toBeNull()
+    expect(screen.queryByText('Team Hijau')).toBeNull()
   })
 
   it('shows all four teams, with two sharing a bib, for a four-team session', () => {
-    state.session = { ...SESSION, teamNames: { A: 'Merah', B: 'Merah', C: 'Kuning', D: 'Kuning' } }
+    state.session = { ...SESSION, teamNames: { A: 'Merah A', B: 'Merah B', C: 'Kuning A', D: 'Kuning B' } }
     state.slots = emptySlots(['A', 'B', 'C', 'D'])
     view()
-    expect(screen.getByText('Team B Merah')).toBeTruthy()
-    expect(screen.getByText('Team D Kuning')).toBeTruthy()
+    expect(screen.getByText('Team Merah B')).toBeTruthy()
+    expect(screen.getByText('Team Kuning B')).toBeTruthy()
     expect(screen.getByText('0/44 penuh')).toBeTruthy()
     expect(screen.getByText('Tekan posisi kosong untuk daftar — 44 lagi kosong.')).toBeTruthy()
   })
@@ -389,7 +389,7 @@ describe('SessionPage', () => {
     state.slots = withClaim(state.slots, 'B-MC')
     state.mySlotIds = new Set(['B-MC'])
     view()
-    expect(screen.getByText(/Slot anda: Team B Putih — MC/)).toBeTruthy()
+    expect(screen.getByText(/Slot anda: Team Putih — MC/)).toBeTruthy()
   })
 
   it('copies the WhatsApp message', async () => {
@@ -541,7 +541,7 @@ describe('SessionPage', () => {
     state.mySlotIds = new Set(['B-MC'])
     view()
 
-    expect(screen.getByText(/Slot anda: Team B Putih — MC/)).toBeTruthy()
+    expect(screen.getByText(/Slot anda: Team Putih — MC/)).toBeTruthy()
 
     // Three teams each have an MC slot; only Team B's is claimed and owned.
     await userEvent.click(screen.getByRole('button', { name: /^MC.*slot anda/i }))
@@ -813,7 +813,7 @@ describe('SessionPage', () => {
 
     await userEvent.click(firstOf(screen.getAllByRole('button', { name: /^GK — kosong/ })))
     // Where they are now, and the one thing a move cannot be taken back from.
-    expect(screen.getByText('Team B Putih — MC')).toBeTruthy()
+    expect(screen.getByText('Team Putih — MC')).toBeTruthy()
     expect(screen.getByRole('dialog').textContent).toContain('tak boleh pindah balik')
     // Not the claim form: a second claim would be refused outright.
     expect(screen.queryByLabelText('Nama')).toBeNull()
@@ -929,7 +929,7 @@ describe('SessionPage', () => {
       await userEvent.click(screen.getByRole('button', { name: 'Ya, lepaskan slot' }))
 
       await waitFor(() => expect(screen.getByText('Senarai dah berubah')).toBeTruthy())
-      expect(screen.getByText('🔴 Team A Merah — GK: Hazmi → kosong')).toBeTruthy()
+      expect(screen.getByText('🔴 Team Merah — GK: Hazmi → kosong')).toBeTruthy()
     })
 
     it('corrects itself to name the player the queue promoted', async () => {
@@ -946,7 +946,7 @@ describe('SessionPage', () => {
 
       await waitFor(() =>
         expect(
-          screen.getByText('🔄 Team A Merah — GK: Hazmi → Isaac (naik dari senarai tunggu)'),
+          screen.getByText('🔄 Team Merah — GK: Hazmi → Isaac (naik dari senarai tunggu)'),
         ).toBeTruthy(),
       )
       // And the roster offered for pasting shows him too, rather than waiting
@@ -963,7 +963,7 @@ describe('SessionPage', () => {
       await userEvent.click(screen.getByRole('button', { name: 'Pindah ke sini' }))
 
       await waitFor(() =>
-        expect(screen.getByText('🔄 Hazmi: Team B Putih MC → Team A Merah GK')).toBeTruthy(),
+        expect(screen.getByText('🔄 Hazmi: Team Putih MC → Team Merah GK')).toBeTruthy(),
       )
     })
 
@@ -983,7 +983,7 @@ describe('SessionPage', () => {
 
       await userEvent.click(screen.getByTestId('sheet-backdrop'))
       await waitFor(() =>
-        expect(screen.getByText('✅ Team A Merah — GK: Hazmi dah bayar')).toBeTruthy(),
+        expect(screen.getByText('✅ Team Merah — GK: Hazmi dah bayar')).toBeTruthy(),
       )
     })
 

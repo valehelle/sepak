@@ -20,6 +20,8 @@ export type SessionFormValues = {
 
 type SessionFormProps = {
   initial: SessionFormValues
+  /** 3 for a session made before Team D: its D name is kept but not shown. */
+  teamCount?: 3 | 4
   submitLabel: string
   busy: boolean
   onSubmit: (values: SessionFormValues) => void
@@ -44,7 +46,7 @@ function Field({
   )
 }
 
-export function SessionForm({ initial, submitLabel, busy, onSubmit }: SessionFormProps) {
+export function SessionForm({ initial, teamCount = 4, submitLabel, busy, onSubmit }: SessionFormProps) {
   const [values, setValues] = useState(initial)
   // Fee is held as text so an empty box stays empty rather than snapping to 0.
   const [feeText, setFeeText] = useState(initial.feeMyr === null ? '' : String(initial.feeMyr))
@@ -61,6 +63,14 @@ export function SessionForm({ initial, submitLabel, busy, onSubmit }: SessionFor
     if (values.venue.trim() === '') return setProblem('Isi tempat.')
     if (values.playDate === '') return setProblem('Pilih tarikh.')
     if (values.startTime === '') return setProblem('Pilih masa.')
+
+    // Teams are told apart by name alone (see teamLabel), so two teams with
+    // the same name would be two identical headings and two identical
+    // blocks in the WhatsApp list.
+    const names = [values.teamAName, values.teamBName, values.teamCName, values.teamDName]
+      .slice(0, teamCount)
+      .map((name) => name.trim().toLowerCase())
+    if (new Set(names).size !== names.length) return setProblem('Setiap pasukan perlukan nama berbeza.')
 
     const trimmedFee = feeText.trim()
     const fee = trimmedFee === '' ? null : Number(trimmedFee)
@@ -177,9 +187,11 @@ export function SessionForm({ initial, submitLabel, busy, onSubmit }: SessionFor
         <Field id="team-c" label="Pasukan C">
           <input id="team-c" value={values.teamCName} onChange={(e) => set('teamCName', e.target.value)} className={inputClass} />
         </Field>
-        <Field id="team-d" label="Pasukan D">
-          <input id="team-d" value={values.teamDName} onChange={(e) => set('teamDName', e.target.value)} className={inputClass} />
-        </Field>
+        {teamCount === 4 && (
+          <Field id="team-d" label="Pasukan D">
+            <input id="team-d" value={values.teamDName} onChange={(e) => set('teamDName', e.target.value)} className={inputClass} />
+          </Field>
+        )}
       </div>
 
       {problem !== null && <p className="font-sans text-xs text-merah-soft md:col-span-2">{problem}</p>}

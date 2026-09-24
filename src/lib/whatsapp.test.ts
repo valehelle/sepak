@@ -34,7 +34,7 @@ function input(overrides: Partial<WhatsAppInput> = {}): WhatsAppInput {
     venue: 'Padang Presint 8',
     feeMyr: 27,
     feeGkMyr: null,
-    teamNames: { A: 'Merah', B: 'Putih', C: 'Kuning', D: 'Kuning' },
+    teamNames: { A: 'Merah', B: 'Putih', C: 'Kuning', D: 'Hijau' },
     slots: slots(),
     ...overrides,
   }
@@ -46,7 +46,7 @@ const EXPECTED = `Sesi 005 Geng Turun Peluh
 🏟️ Tempat: Padang Presint 8
 💵 Yuran: RM 27/pax
 
-Team A Merah
+Team Merah
 GK-
 LB- kimie
 CB- amie
@@ -59,7 +59,7 @@ LWF- yasin
 RWF- Hazmi
 ST- Zulazhar
 
-Team B Putih
+Team Putih
 GK- Isaac
 LB- zairul
 CB- Amad
@@ -72,7 +72,7 @@ LWF- Ajim
 RWF- Amir
 ST- Joe J
 
-Team C Kuning
+Team Kuning
 GK-
 LB- ardee
 CB- Raze
@@ -99,7 +99,7 @@ describe('buildWhatsAppMessage', () => {
   it('omits the Yuran line for a free session', () => {
     const free = buildWhatsAppMessage(input({ feeMyr: null }))
     expect(free).not.toContain('Yuran')
-    expect(free).toContain('🏟️ Tempat: Padang Presint 8\n\nTeam A Merah')
+    expect(free).toContain('🏟️ Tempat: Padang Presint 8\n\nTeam Merah')
   })
 
   it('leaves an unclaimed slot as a bare dash', () => {
@@ -114,23 +114,37 @@ describe('buildWhatsAppMessage', () => {
   it('emits every position of a team even when only some of its slots are recorded', () => {
     const partial = slots().filter((s) => s.team !== 'B' || s.position === 'GK')
     const message = buildWhatsAppMessage(input({ slots: partial }))
-    expect(message).toContain('Team B Putih\nGK- Isaac\nLB-\nCB-\nCB-\nRB-\nDM-\nMC-\nAM-\nLWF-\nRWF-\nST-')
+    expect(message).toContain('Team Putih\nGK- Isaac\nLB-\nCB-\nCB-\nRB-\nDM-\nMC-\nAM-\nLWF-\nRWF-\nST-')
   })
 
   it('leaves out a team the session does not have', () => {
     // The three-team fixture: an empty Team D block would read as eleven
     // open places.
-    expect(buildWhatsAppMessage(input())).not.toContain('Team D')
+    expect(buildWhatsAppMessage(input())).not.toContain('Team Hijau')
   })
 
-  it('adds Team D after Team C for a four-team session', () => {
+  it('adds the fourth team after the third for a four-team session', () => {
     const withD = [
       ...slots(),
       ...POSITIONS.map((position): WhatsAppSlot => ({ team: 'D', position, playerName: position === 'GK' ? 'Baru' : null })),
     ]
     const message = buildWhatsAppMessage(input({ slots: withD }))
-    expect(message).toContain('\n\nTeam D Kuning\nGK- Baru\nLB-\n')
-    expect(message.indexOf('Team C Kuning')).toBeLessThan(message.indexOf('Team D Kuning'))
+    expect(message).toContain('\n\nTeam Hijau\nGK- Baru\nLB-\n')
+    expect(message.indexOf('Team Kuning')).toBeLessThan(message.indexOf('Team Hijau'))
+  })
+
+  it('names teams by name only, so two teams sharing a bib read apart', () => {
+    const four = [
+      ...slots(),
+      ...POSITIONS.map((position): WhatsAppSlot => ({ team: 'D', position, playerName: null })),
+    ]
+    const message = buildWhatsAppMessage(
+      input({ slots: four, teamNames: { A: 'Merah A', B: 'Merah B', C: 'Kuning A', D: 'Kuning B' } }),
+    )
+    expect(message).toContain('\n\nTeam Merah A\nGK-')
+    expect(message).toContain('\n\nTeam Merah B\nGK- Isaac')
+    expect(message).toContain('\n\nTeam Kuning B\nGK-')
+    expect(message).not.toMatch(/Team [ABCD] /)
   })
 
   it('says what a goalkeeper pays when it differs', () => {
@@ -175,7 +189,7 @@ describe('buildWhatsAppMessage', () => {
         s.team === 'A' && s.position === 'GK' ? { ...s, paid: true } : s,
       )
       // Team A's GK is unclaimed in the fixture, so the line stays a bare dash.
-      expect(buildWhatsAppMessage(input({ slots: paid }))).toContain('Team A Merah\nGK-\n')
+      expect(buildWhatsAppMessage(input({ slots: paid }))).toContain('Team Merah\nGK-\n')
     })
 
     it('changes nothing when nobody has paid', () => {
@@ -199,13 +213,13 @@ describe('buildWhatsAppMessage', () => {
 
   describe('the change line', () => {
     it('leads the message, because WhatsApp previews the first line only', () => {
-      const message = buildWhatsAppMessage(input({ change: '🔴 Team A Merah — GK: Amir → kosong' }))
-      expect(message.startsWith('🔴 Team A Merah — GK: Amir → kosong\n\nSesi 005')).toBe(true)
+      const message = buildWhatsAppMessage(input({ change: '🔴 Team Merah — GK: Amir → kosong' }))
+      expect(message.startsWith('🔴 Team Merah — GK: Amir → kosong\n\nSesi 005')).toBe(true)
     })
 
     it('carries the warning with it, above the link', () => {
       const message = buildWhatsAppMessage(input({
-        change: '🔴 Team A Merah — GK: Amir → kosong',
+        change: '🔴 Team Merah — GK: Amir → kosong',
         shareUrl: 'https://valehelle.github.io/sepak/s/abc',
       }))
       expect(message.endsWith(
@@ -225,13 +239,13 @@ describe('buildWhatsAppMessage', () => {
 
     it('names the position that opened up', () => {
       const change: RosterChange = { kind: 'release', at, playerName: 'Amir', takenBy: null }
-      expect(describeChange(change)).toBe('🔴 Team A Merah — GK: Amir → kosong')
+      expect(describeChange(change)).toBe('🔴 Team Merah — GK: Amir → kosong')
     })
 
     it('says so on one line when the queue took it straight away', () => {
       const change: RosterChange = { kind: 'release', at, playerName: 'Amir', takenBy: 'Isaac' }
       expect(describeChange(change)).toBe(
-        '🔄 Team A Merah — GK: Amir → Isaac (naik dari senarai tunggu)',
+        '🔄 Team Merah — GK: Amir → Isaac (naik dari senarai tunggu)',
       )
     })
 
@@ -242,12 +256,12 @@ describe('buildWhatsAppMessage', () => {
         at,
         to: { team: 'C', teamName: 'Kuning', position: 'ST' },
       }
-      expect(describeChange(change)).toBe('🔄 Amir: Team A Merah GK → Team C Kuning ST')
+      expect(describeChange(change)).toBe('🔄 Amir: Team Merah GK → Team Kuning ST')
     })
 
     it('announces a payment without an arrow, since nothing moved', () => {
       const change: RosterChange = { kind: 'paid', at, playerName: 'Amir' }
-      expect(describeChange(change)).toBe('✅ Team A Merah — GK: Amir dah bayar')
+      expect(describeChange(change)).toBe('✅ Team Merah — GK: Amir dah bayar')
     })
 
     it('has nothing to announce when a tick is taken back', () => {

@@ -1,6 +1,6 @@
 import { POSITIONS, positionLabel } from '../lib/positions'
 import { SlotChip } from './SlotChip'
-import { bibFor } from '../lib/bibs'
+import { bibFor, teamLabel } from '../lib/bibs'
 import { SWATCH, toViews, type TeamViewProps } from './PitchTeam'
 
 export function ListTeam({
@@ -20,7 +20,7 @@ export function ListTeam({
       <div className="mb-2 flex items-center gap-2">
         <span className={`h-3 w-3 rounded-sm ${SWATCH[bib] ?? ''}`} aria-hidden="true" />
         <h3 className="font-kit text-base font-semibold tracking-wide text-white">
-          {`Team ${team} ${teamName}`}
+          {teamLabel(teamName)}
         </h3>
       </div>
       <ul className="grid grid-cols-4 gap-x-1 gap-y-3">

@@ -89,6 +89,18 @@ export async function createSession(input: NewSessionInput): Promise<Session> {
   return parseSession(data)
 }
 
+/** 3 for sessions made before Team D existed (0016_four_teams.sql), 4 since.
+ *  The admin form needs it to know whether Team D's name means anything. */
+export async function sessionTeamCount(id: string): Promise<3 | 4> {
+  const { count, error } = await supabase
+    .from('slots')
+    .select('id', { count: 'exact', head: true })
+    .eq('session_id', id)
+    .eq('team', 'D')
+  if (error !== null) boom('sessionTeamCount', error.message)
+  return (count ?? 0) > 0 ? 4 : 3
+}
+
 export async function updateSession(id: string, patch: SessionPatch): Promise<Session> {
   const row: Record<string, string | number | null | undefined> = {}
   if (patch.sessionNo !== undefined) row['session_no'] = patch.sessionNo

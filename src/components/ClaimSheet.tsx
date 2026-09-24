@@ -15,7 +15,7 @@ type ClaimSheetProps = {
   busy: boolean
   duplicateName: boolean
   isAdmin: boolean
-  /** Where this device already is, as "Team A Merah — GK", when it holds a
+  /** Where this device already is, as "Team Merah A — GK", when it holds a
    *  slot in this session. Set only then, and only that changes what an
    *  empty slot offers: moving there instead of claiming it. */
   currentLabel: string | null

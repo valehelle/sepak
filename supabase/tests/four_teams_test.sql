@@ -17,8 +17,8 @@ begin
   v_session := sepak.create_session(
     920, 'Four Teams', '2026-12-01', '21:00:00', 120, 'Padang', 25,
     '', '', '', '', 15);
-  assert v_session.team_a_name = 'Merah' and v_session.team_b_name = 'Merah'
-     and v_session.team_c_name = 'Kuning' and v_session.team_d_name = 'Kuning',
+  assert v_session.team_a_name = 'Merah A' and v_session.team_b_name = 'Merah B'
+     and v_session.team_c_name = 'Kuning A' and v_session.team_d_name = 'Kuning B',
     format('unexpected default names %s/%s/%s/%s', v_session.team_a_name, v_session.team_b_name,
       v_session.team_c_name, v_session.team_d_name);
   assert v_session.fee_gk_myr = 15, 'the goalkeeper fee should be stored';
@@ -45,7 +45,7 @@ begin
   perform set_config('sepak.actor', '', true);
   select max(id) into v_act from sepak.activity where slot_id = v_gk_d and kind = 'autofill';
   select body into v_body from sepak.promotion_text(v_act);
-  assert v_body like 'Team D Kuning Dua — GK%', format('unexpected promotion body %s', v_body);
+  assert v_body like 'Team Kuning Dua — GK%', format('unexpected promotion body %s', v_body);
 
   -- A fifth team is still refused.
   begin

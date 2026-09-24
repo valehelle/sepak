@@ -25,7 +25,7 @@ test('refreshing a session page keeps it working', async ({ page }) => {
   await expect(page.getByText('E2E Geng')).toBeVisible()
   await page.reload()
   await expect(page.getByText('E2E Geng')).toBeVisible()
-  await expect(page.getByText('Team A Merah')).toBeVisible()
+  await expect(page.getByText('Team Merah')).toBeVisible()
 })
 
 test('a link with a trailing slash opens the same session', async ({ page }) => {

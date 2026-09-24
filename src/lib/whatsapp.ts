@@ -1,3 +1,4 @@
+import { teamLabel } from './bibs'
 import { formatFees, formatPlayDate, formatStartTime } from './format'
 import { POSITIONS, TEAM_KEYS, formatPositions, positionLabel, type Position, type TeamKey } from './positions'
 
@@ -55,8 +56,8 @@ export type RosterChange =
   | { kind: 'paid'; at: ChangeAt; playerName: string }
   | { kind: 'unpaid'; at: ChangeAt; playerName: string }
 
-const where = (at: ChangeAt): string => `Team ${at.team} ${at.teamName} — ${positionLabel(at.position)}`
-const bare = (at: ChangeAt): string => `Team ${at.team} ${at.teamName} ${positionLabel(at.position)}`
+const where = (at: ChangeAt): string => `${teamLabel(at.teamName)} — ${positionLabel(at.position)}`
+const bare = (at: ChangeAt): string => `${teamLabel(at.teamName)} ${positionLabel(at.position)}`
 
 /** The one line, or null when there is nothing worth telling the group.
  *
@@ -114,7 +115,7 @@ function teamBlock(team: TeamKey, teamName: string, roster: Roster): string {
     if (!name) return `${label}-`
     return entry?.paid === true ? `${label}- ${name} ${PAID_MARK}` : `${label}- ${name}`
   })
-  return [`Team ${team} ${teamName}`, ...lines].join('\n')
+  return [teamLabel(teamName), ...lines].join('\n')
 }
 
 /** Appended only when the queue is non-empty -- omitted entirely otherwise,

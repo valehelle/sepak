@@ -14,14 +14,14 @@ begin
     'duration_mins should default to 120';
   assert (select status from sepak.sessions where id = v_session_id) = 'open',
     'status should default to open';
-  assert (select team_a_name from sepak.sessions where id = v_session_id) = 'Merah',
-    'team_a_name should default to Merah';
-  assert (select team_b_name from sepak.sessions where id = v_session_id) = 'Merah',
-    'team_b_name should default to Merah';
-  assert (select team_c_name from sepak.sessions where id = v_session_id) = 'Kuning',
-    'team_c_name should default to Kuning';
-  assert (select team_d_name from sepak.sessions where id = v_session_id) = 'Kuning',
-    'team_d_name should default to Kuning';
+  assert (select team_a_name from sepak.sessions where id = v_session_id) = 'Merah A',
+    'team_a_name should default to Merah A';
+  assert (select team_b_name from sepak.sessions where id = v_session_id) = 'Merah B',
+    'team_b_name should default to Merah B';
+  assert (select team_c_name from sepak.sessions where id = v_session_id) = 'Kuning A',
+    'team_c_name should default to Kuning A';
+  assert (select team_d_name from sepak.sessions where id = v_session_id) = 'Kuning B',
+    'team_d_name should default to Kuning B';
   assert (select fee_gk_myr from sepak.sessions where id = v_session_id) is null,
     'fee_gk_myr should default to null (same as fee_myr)';
 

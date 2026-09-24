@@ -15,7 +15,7 @@ const INITIAL: SessionFormValues = {
   teamAName: 'Merah',
   teamBName: 'Putih',
   teamCName: 'Kuning',
-  teamDName: 'Kuning',
+  teamDName: 'Hijau',
 }
 
 describe('SessionForm', () => {
@@ -49,7 +49,27 @@ describe('SessionForm', () => {
     await userEvent.type(screen.getByLabelText('Yuran GK (RM)'), '15')
     await userEvent.type(screen.getByLabelText('Pasukan D'), ' 2')
     await userEvent.click(screen.getByRole('button', { name: 'Simpan' }))
-    expect(onSubmit).toHaveBeenLastCalledWith(expect.objectContaining({ feeGkMyr: 15, teamDName: 'Kuning 2' }))
+    expect(onSubmit).toHaveBeenLastCalledWith(expect.objectContaining({ feeGkMyr: 15, teamDName: 'Hijau 2' }))
+  })
+
+  it('refuses two teams with the same name', async () => {
+    const onSubmit = vi.fn()
+    render(<SessionForm initial={INITIAL} submitLabel="Simpan" busy={false} onSubmit={onSubmit} />)
+    await userEvent.clear(screen.getByLabelText('Pasukan B'))
+    await userEvent.type(screen.getByLabelText('Pasukan B'), 'merah ')
+    await userEvent.click(screen.getByRole('button', { name: 'Simpan' }))
+    expect(onSubmit).not.toHaveBeenCalled()
+    expect(screen.getByText('Setiap pasukan perlukan nama berbeza.')).toBeTruthy()
+  })
+
+  it('ignores the unused Team D name on a three-team session', async () => {
+    const onSubmit = vi.fn()
+    render(
+      <SessionForm initial={{ ...INITIAL, teamDName: 'Kuning' }} teamCount={3} submitLabel="Simpan" busy={false} onSubmit={onSubmit} />,
+    )
+    expect(screen.queryByLabelText('Pasukan D')).toBeNull()
+    await userEvent.click(screen.getByRole('button', { name: 'Simpan' }))
+    expect(onSubmit).toHaveBeenCalled()
   })
 
   it('refuses a negative goalkeeper fee', async () => {
