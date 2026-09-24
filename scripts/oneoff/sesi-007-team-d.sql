@@ -3,8 +3,9 @@
 -- Run once, in the Supabase SQL editor, AFTER 0016_four_teams.sql is applied
 -- and the frontend that knows about Team D is live.
 --
--- Everything is one DO block, so it is all or nothing: any failed check
--- below raises, and nothing at all is saved.
+-- Every write is inside the one DO block, so it is all or nothing: any
+-- failed check below raises, and nothing at all is saved. The statements
+-- before it only set up temporary scratch space.
 --
 -- What it does NOT touch: the 33 existing slots (names, device tokens,
 -- claim times, paid ticks) and their phone numbers. That is checked, not
@@ -13,6 +14,41 @@
 -- Nobody is sent a promotion notification. Those go out only for activity
 -- lines of kind 'autofill', which the queue trigger writes. The moves here
 -- are logged as ordinary claims instead.
+
+-- Scratch space for the seat matching below. Temporary: gone when the SQL
+-- editor's connection closes, and never visible to anyone else.
+create temp table if not exists q_people (idx int primary key, waitlist_id uuid not null, positions text[] not null);
+create temp table if not exists q_open   (position text primary key);
+create temp table if not exists q_match  (position text primary key, idx int not null);
+create temp table if not exists q_seen   (position text primary key);
+
+-- Seats person p_idx, moving people already seated to another of their own
+-- positions if that frees one up (an augmenting path). Returns false when
+-- no arrangement of the people already in has room for them.
+create or replace function pg_temp.seat(p_idx int) returns boolean
+language plpgsql as $f$
+declare
+  v_pos   text;
+  v_owner int;
+begin
+  for v_pos in
+    select unnest(positions) from pg_temp.q_people where idx = p_idx
+  loop
+    continue when not exists (select 1 from pg_temp.q_open where position = v_pos);
+    continue when exists (select 1 from pg_temp.q_seen where position = v_pos);
+    insert into pg_temp.q_seen (position) values (v_pos);
+
+    v_owner := null;
+    select idx into v_owner from pg_temp.q_match where position = v_pos;
+    if v_owner is null or pg_temp.seat(v_owner) then
+      insert into pg_temp.q_match (position, idx) values (v_pos, p_idx)
+        on conflict (position) do update set idx = excluded.idx;
+      return true;
+    end if;
+  end loop;
+  return false;
+end;
+$f$;
 
 do $$
 declare
@@ -29,6 +65,8 @@ declare
   v_wait         sepak.waitlist;
   v_slot         sepak.slots;
   v_mark         bigint;
+  v_idx          int;
+  v_position     text;
 begin
   ---------------------------------------------------------------------------
   -- Preconditions. Any surprise stops the whole thing before a single write.
@@ -93,24 +131,44 @@ begin
                  ('MC'),('AM'),('LWF'),('RWF'),('ST')) as p(position);
 
   ---------------------------------------------------------------------------
-  -- The queue, oldest first. Each person gets the first open Team D slot
-  -- they said they would play, in pitch order. Someone whose positions are
-  -- all taken stays in the queue, in the same place.
+  -- Who goes where. Queue order decides who gets in; positions are then
+  -- shuffled among those already in whenever that makes room for the next
+  -- person in line. Slot-by-slot filling would let a flexible early player
+  -- take the one position a later player can play, and push that later
+  -- player out in favour of someone further back.
+  --
+  -- The first person the matching cannot fit is skipped, not the end of
+  -- the run: someone further back may want a position still open.
   ---------------------------------------------------------------------------
-  for v_wait in
-    select * from sepak.waitlist where session_id = v_session.id order by created_at
+  truncate pg_temp.q_people, pg_temp.q_open, pg_temp.q_match;
+
+  insert into pg_temp.q_people (idx, waitlist_id, positions)
+  select row_number() over (order by created_at, id), id, positions
+    from sepak.waitlist where session_id = v_session.id;
+
+  insert into pg_temp.q_open (position)
+  select position from sepak.slots
+   where session_id = v_session.id and team = 'D' and player_name is null;
+
+  for v_idx in select idx from pg_temp.q_people order by idx loop
+    truncate pg_temp.q_seen;
+    perform pg_temp.seat(v_idx);
+  end loop;
+
+  -- The moves themselves, in queue order.
+  for v_idx, v_position in
+    select m.idx, m.position from pg_temp.q_match m order by m.idx
   loop
+    select w.* into v_wait
+      from sepak.waitlist w join pg_temp.q_people p on p.waitlist_id = w.id
+     where p.idx = v_idx;
     select * into v_slot
       from sepak.slots
-     where session_id = v_session.id
-       and team = 'D'
-       and player_name is null
-       and position = any(v_wait.positions)
-     order by array_position(
-       array['GK','LB','CB1','CB2','RB','DM','MC','AM','LWF','RWF','ST'], position)
-     limit 1;
+     where session_id = v_session.id and team = 'D' and position = v_position;
 
-    continue when not found;
+    if v_slot.player_name is not null or not (v_position = any(v_wait.positions)) then
+      raise exception 'matching produced a bad seat for % -- nothing saved', v_wait.player_name;
+    end if;
 
     -- Phone first: the activity trigger on slots reads it off this row.
     update sepak.contacts set slot_id = v_slot.id, waitlist_id = null where waitlist_id = v_wait.id;
@@ -126,8 +184,20 @@ begin
     perform set_config('sepak.actor', '', true);
 
     v_placed := v_placed + 1;
-    raise notice 'Team D %: % (queued %)', v_slot.position, v_wait.player_name, v_wait.created_at;
+    raise notice 'Team D %: % (queue #%)', v_slot.position, v_wait.player_name, v_idx;
   end loop;
+
+  -- Nobody got in ahead of someone earlier in the queue who could have
+  -- been seated: everyone placed is in the queue's first v_placed places,
+  -- unless an earlier person could not fit any open position at all.
+  select count(*) into v_count
+    from pg_temp.q_people p
+   where p.idx < (select max(idx) from pg_temp.q_match)
+     and not exists (select 1 from pg_temp.q_match m where m.idx = p.idx)
+     and exists (select 1 from pg_temp.q_open o where o.position = any(p.positions));
+  if v_count <> 0 then
+    raise notice '% earlier queued players were skipped because every position they chose went to someone ahead of them', v_count;
+  end if;
 
   ---------------------------------------------------------------------------
   -- Postconditions. Any failure here undoes everything above.
