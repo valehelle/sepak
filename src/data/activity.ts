@@ -10,6 +10,7 @@ export const ACTIVITY_KINDS = [
   'unpaid',
   'waitlist_join',
   'waitlist_leave',
+  'opens_changed',
 ] as const
 
 export type ActivityKind = (typeof ACTIVITY_KINDS)[number]
@@ -32,6 +33,9 @@ export type ActivityEvent = {
   /** Null for queue lines, which belong to no position yet. */
   team: TeamKey | null
   position: Position | null
+  /** Only on opens_changed lines: the opening time before and after. */
+  opensFrom: string | null
+  opensTo: string | null
   createdAt: string
 }
 
@@ -94,6 +98,15 @@ function parseEvent(row: unknown): ActivityEvent {
     throw new Error(`position: unknown value ${String(position)}`)
   }
 
+  const opensFrom = r.opens_from
+  const opensTo = r.opens_to
+  if (opensFrom !== null && opensFrom !== undefined && typeof opensFrom !== 'string') {
+    throw new Error('opens_from: expected a string or null')
+  }
+  if (opensTo !== null && opensTo !== undefined && typeof opensTo !== 'string') {
+    throw new Error('opens_to: expected a string or null')
+  }
+
   return {
     id,
     sessionId,
@@ -104,6 +117,8 @@ function parseEvent(row: unknown): ActivityEvent {
     phone: phone ?? null,
     team: team ?? null,
     position: position ?? null,
+    opensFrom: opensFrom ?? null,
+    opensTo: opensTo ?? null,
     createdAt,
   }
 }

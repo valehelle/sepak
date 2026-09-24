@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useParams } from 'react-router'
 import { AdminContactToggle } from '../components/AdminContact'
 import { Button } from '../components/Button'
@@ -7,6 +7,7 @@ import { CopyButton } from '../components/CopyButton'
 import { ListTeam } from '../components/ListTeam'
 import { PitchTeam } from '../components/PitchTeam'
 import { NotifySheet } from '../components/NotifySheet'
+import { OpeningCountdown } from '../components/OpeningCountdown'
 import { SessionMeta } from '../components/SessionMeta'
 import type { SlotView } from '../components/SlotChip'
 import { useToast } from '../components/Toast'
@@ -23,6 +24,8 @@ import {
   setSlotPaid,
 } from '../data/slots'
 import type { Slot } from '../data/types'
+import { useOpening } from '../data/useOpening'
+import { useServerClock } from '../data/useServerClock'
 import { useSessionRealtime } from '../data/useSessionRealtime'
 import { hasTelegramChat } from '../data/telegram'
 import {
@@ -34,6 +37,7 @@ import {
 import { teamLabel } from '../lib/bibs'
 import { TEAM_KEYS, formatPositions, positionLabel, type Position, type TeamKey } from '../lib/positions'
 import { rememberSession } from '../lib/lastSession'
+import { formatOpensAt } from '../lib/opening'
 import { rememberPlayer } from '../lib/playerMemory'
 import { ShareChangeSheet } from '../components/ShareChangeSheet'
 import { buildWhatsAppMessage, describeChange, type RosterChange } from '../lib/whatsapp'
@@ -53,6 +57,22 @@ type OwnershipChange = readonly [slotId: string, owned: boolean]
 
 /** What an action changes optimistically, and what undoes it if the write
  *  fails. */
+/** A tap that lands a hair before the server's opening moment is refused
+ *  with not_open_yet even though this page had already unlocked -- the two
+ *  clocks agree to within a fraction of a second, not exactly. One quiet
+ *  retry covers that without the player noticing. */
+const EARLY_RETRY_MS = 800
+
+async function retryIfEarly<T>(action: () => Promise<T>): Promise<T> {
+  try {
+    return await action()
+  } catch (cause: unknown) {
+    if (!(cause instanceof SlotActionError) || cause.code !== 'not_open_yet') throw cause
+    await new Promise((resolve) => setTimeout(resolve, EARLY_RETRY_MS))
+    return action()
+  }
+}
+
 type OptimisticChange = {
   slot: Slot | null
   owned: readonly OwnershipChange[]
@@ -77,12 +97,31 @@ export default function SessionPage() {
     removeWaitlistLocal,
     setMyWaitlistEntry,
     refetch,
+    reloadSession,
   } = useSessionRealtime(id)
   const { show } = useToast()
   const { role } = useAuthUser()
   // Being signed in is not enough any more -- a signed-in non-admin must not
   // get the organiser override, only someone with a row in sepak.admins.
   const isAdmin = role !== null
+
+  const clock = useServerClock()
+  const isOpen = useOpening(session?.opensAt ?? null, clock, reloadSession)
+  // Before opening, only an admin may book (0018_opens_at.sql). The server
+  // enforces it; this is what keeps the page from offering what it refuses.
+  const locked = !isOpen && !isAdmin
+
+  // The time an admin moved the opening to while this page was open, so the
+  // countdown can say so rather than silently jumping.
+  const [movedTo, setMovedTo] = useState<string | null>(null)
+  const seenOpensAt = useRef<string | null>(null)
+  useEffect(() => {
+    const current = session?.opensAt ?? null
+    if (current === null) return
+    const previous = seenOpensAt.current
+    seenOpensAt.current = current
+    if (previous !== null && previous !== current) setMovedTo(current)
+  }, [session?.opensAt])
 
   const [selected, setSelected] = useState<SlotView | null>(null)
   const [busy, setBusy] = useState(false)
@@ -151,6 +190,7 @@ export default function SessionPage() {
         venue: session.venue,
         feeMyr: session.feeMyr,
         feeGkMyr: session.feeGkMyr,
+        ...(isOpen ? {} : { opensAt: formatOpensAt(session.opensAt) }),
         teamNames: session.teamNames,
         slots: slots.map(({ team, position, playerName, paid }) => ({ team, position, playerName, paid })),
         waitlist: waitlist.map(({ playerName, positions }) => ({ playerName, positions })),
@@ -160,7 +200,7 @@ export default function SessionPage() {
         change: line ?? '',
       })
     },
-    [session, slots, waitlist],
+    [session, slots, waitlist, isOpen],
   )
 
   const whatsappText = useMemo(() => buildMessage(null), [buildMessage])
@@ -207,7 +247,7 @@ export default function SessionPage() {
     if (slot === undefined || slot === null) return
     const claimed: Slot = { ...slot, playerName: name, claimedAt: new Date().toISOString() }
     void run(
-      () => claimSlot(slot.id, name, phone),
+      () => retryIfEarly(() => claimSlot(slot.id, name, phone)),
       {
         slot: claimed,
         owned: [[slot.id, true]],
@@ -349,7 +389,7 @@ export default function SessionPage() {
     setOwned(to.id, true)
     setSelected(null)
 
-    moveSlot(from.id, to.id)
+    retryIfEarly(() => moveSlot(from.id, to.id))
       .then((result) => {
         applyLocal(result)
         if (from.playerName !== null && session !== null) {
@@ -465,6 +505,10 @@ export default function SessionPage() {
       <div className="space-y-4 lg:sticky lg:top-8">
         <SessionMeta session={session} filled={filled} total={slots.length} />
 
+        {!isOpen && (
+          <OpeningCountdown opensAt={session.opensAt} clock={clock} isAdmin={isAdmin} movedTo={movedTo} />
+        )}
+
         {mySlot !== null ? (
           <div className="space-y-1 rounded-lg border border-white/20 bg-white/10 px-3 py-2">
             <p className="font-kit text-[15px]">
@@ -486,8 +530,10 @@ export default function SessionPage() {
           </div>
         ) : (
           // Without this, nothing on the page says what to do — every slot looks
-          // like a label rather than a thing you can take.
-          !closed && (
+          // like a label rather than a thing you can take. Not before opening:
+          // the countdown says what to do then, and the queue is locked too,
+          // since joining it while a position is empty would seat you.
+          !closed && !locked && (
             <div className="space-y-2 rounded-lg border border-turf-lit/50 bg-turf/25 px-3 py-2">
               {open > 0 && (
                 <p className="font-kit text-[15px] text-white">
@@ -564,7 +610,8 @@ export default function SessionPage() {
               teamName={session.teamNames[team]}
               slots={slots.filter((slot) => slot.team === team)}
               mySlotIds={mySlotIds}
-              disabled={closed || busy}
+              disabled={closed || busy || locked}
+              locked={closed || locked}
               adminOverride={isAdmin}
               onSelect={setSelected}
             />

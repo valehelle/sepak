@@ -15,6 +15,7 @@ const SESSION_ROW = {
   team_c_name: 'Kuning',
   team_d_name: 'Kuning',
   fee_gk_myr: null,
+  opens_at: '2026-09-01T12:00:00Z',
   status: 'open',
   created_at: '2026-09-10T04:00:00Z',
 }

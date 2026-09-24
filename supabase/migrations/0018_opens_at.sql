@@ -11,6 +11,10 @@
 -- nothing already running changes. The admin form requires the time for
 -- new sessions; the column default exists only for direct inserts
 -- (tests, seeding), which then open straight away.
+--
+-- Once the time passes it is locked (guard_opens_at below), and every
+-- change before then is logged. Design: docs/superpowers/specs/
+-- 2026-09-25-sepak-opening-time-design.md.
 
 alter table sepak.sessions add column opens_at timestamptz;
 update sepak.sessions set opens_at = created_at where opens_at is null;
@@ -53,6 +57,164 @@ $$;
 
 revoke all on function sepak.server_now() from public;
 grant execute on function sepak.server_now() to anon, authenticated;
+
+---------------------------------------------------------------------------
+-- create_session takes the opening time. Dropped and recreated rather than
+-- overloaded, for the same reason as in 0016_four_teams.sql.
+---------------------------------------------------------------------------
+drop function sepak.create_session(int, text, date, time, int, text, numeric, text, text, text, text, numeric);
+
+create function sepak.create_session(
+  p_session_no    int,
+  p_title         text,
+  p_play_date     date,
+  p_start_time    time,
+  p_duration_mins int,
+  p_venue         text,
+  p_fee_myr       numeric,
+  p_team_a_name   text,
+  p_team_b_name   text,
+  p_team_c_name   text,
+  p_team_d_name   text    default null,
+  p_fee_gk_myr    numeric default null,
+  p_opens_at      timestamptz default null
+)
+returns sepak.sessions
+language plpgsql
+set search_path = sepak, pg_temp
+as $$
+declare
+  v_session sepak.sessions;
+begin
+  insert into sepak.sessions (
+    session_no, title, play_date, start_time, duration_mins,
+    venue, fee_myr, fee_gk_myr, team_a_name, team_b_name, team_c_name, team_d_name,
+    opens_at
+  ) values (
+    p_session_no, btrim(p_title), p_play_date, p_start_time, coalesce(p_duration_mins, 120),
+    btrim(p_venue), p_fee_myr, p_fee_gk_myr,
+    coalesce(nullif(btrim(p_team_a_name), ''), 'Merah A'),
+    coalesce(nullif(btrim(p_team_b_name), ''), 'Merah B'),
+    coalesce(nullif(btrim(p_team_c_name), ''), 'Kuning A'),
+    coalesce(nullif(btrim(p_team_d_name), ''), 'Kuning B'),
+    -- The admin form always sends one; a caller that does not opens now.
+    coalesce(p_opens_at, now())
+  )
+  returning * into v_session;
+
+  -- All 44 slots in the same transaction: a session is never half-built.
+  insert into sepak.slots (session_id, team, position)
+  select v_session.id, t.team, p.position
+    from (values ('A'), ('B'), ('C'), ('D')) as t(team)
+   cross join (values ('GK'),('LB'),('CB1'),('CB2'),('RB'),('DM'),
+                     ('MC'),('AM'),('LWF'),('RWF'),('ST')) as p(position);
+
+  return v_session;
+end;
+$$;
+
+revoke all on function sepak.create_session(int, text, date, time, int, text, numeric, text, text, text, text, numeric, timestamptz) from public;
+grant execute on function sepak.create_session(int, text, date, time, int, text, numeric, text, text, text, text, numeric, timestamptz) to authenticated, service_role;
+
+---------------------------------------------------------------------------
+-- The opening time is a one-way door. It can move freely until it passes;
+-- after that nobody can change it, admins and direct edits included. Without
+-- this an admin could open a session, let friends book, and close it again.
+--
+-- A trigger on the table rather than a check in an RPC: the admin form
+-- updates sessions directly (0002_rls.sql), and so does the SQL editor.
+--
+-- Every change that is allowed is written to the activity log with who made
+-- it, so any other admin can see that the time moved.
+---------------------------------------------------------------------------
+alter table sepak.activity add column opens_from timestamptz;
+alter table sepak.activity add column opens_to   timestamptz;
+
+alter table sepak.activity drop constraint activity_kind_check;
+alter table sepak.activity add constraint activity_kind_check check (kind in (
+  'claim', 'autofill', 'release', 'admin_clear',
+  'paid', 'unpaid', 'waitlist_join', 'waitlist_leave', 'opens_changed'));
+
+comment on column sepak.activity.player_name is
+  'The player the line is about. For opens_changed, who changed the time: the admin''s email, or "SQL editor".';
+
+create or replace function sepak.guard_opens_at()
+returns trigger
+language plpgsql
+security definer
+set search_path = sepak, pg_temp
+as $$
+begin
+  if NEW.opens_at is not distinct from OLD.opens_at then
+    return NEW;
+  end if;
+
+  if OLD.opens_at <= now() then
+    raise exception 'opens_locked';
+  end if;
+
+  insert into sepak.activity (kind, actor, session_id, player_name, opens_from, opens_to)
+  values (
+    'opens_changed',
+    case when sepak.is_admin() then 'admin' else 'system' end,
+    NEW.id,
+    coalesce(nullif(auth.jwt() ->> 'email', ''), 'SQL editor'),
+    OLD.opens_at,
+    NEW.opens_at
+  );
+
+  return NEW;
+end;
+$$;
+
+revoke all on function sepak.guard_opens_at() from public;
+
+create trigger sessions_guard_opens_at
+  before update on sepak.sessions
+  for each row
+  execute function sepak.guard_opens_at();
+
+-- The feed carries the two times. The return type changes, so it is
+-- dropped and recreated; otherwise as in 0012_activity.sql.
+drop function sepak.activity_feed(int);
+
+create function sepak.activity_feed(p_limit int default 100)
+returns table (
+  id          bigint,
+  session_id  uuid,
+  session_no  int,
+  kind        text,
+  actor       text,
+  player_name text,
+  phone       text,
+  team        text,
+  "position"  text,
+  opens_from  timestamptz,
+  opens_to    timestamptz,
+  created_at  timestamptz
+)
+language plpgsql
+stable
+security definer
+set search_path = sepak, pg_temp
+as $$
+begin
+  if not sepak.is_admin() then
+    raise exception 'not_admin';
+  end if;
+
+  return query
+  select a.id, a.session_id, s.session_no, a.kind, a.actor,
+         a.player_name, a.phone, a.team, a.position, a.opens_from, a.opens_to, a.created_at
+    from sepak.activity a
+    join sepak.sessions s on s.id = a.session_id
+   order by a.created_at desc, a.id desc
+   limit least(greatest(coalesce(p_limit, 100), 1), 500);
+end;
+$$;
+
+revoke all on function sepak.activity_feed(int) from public;
+grant execute on function sepak.activity_feed(int) to authenticated;
 
 ---------------------------------------------------------------------------
 -- The three booking functions, each otherwise exactly as last defined

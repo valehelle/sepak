@@ -15,6 +15,8 @@ export type NewSessionInput = {
   teamBName: string
   teamCName: string
   teamDName: string
+  /** ISO timestamp. */
+  opensAt: string
 }
 
 export type SessionPatch = Partial<Omit<NewSessionInput, 'sessionNo'>> & { sessionNo?: number }
@@ -84,9 +86,18 @@ export async function createSession(input: NewSessionInput): Promise<Session> {
     p_team_c_name: input.teamCName,
     p_team_d_name: input.teamDName,
     p_fee_gk_myr: input.feeGkMyr,
+    p_opens_at: input.opensAt,
   })
   if (error !== null) boom('createSession', error.message)
   return parseSession(data)
+}
+
+/** Just the session row, for the countdown's check at zero: cheaper than
+ *  getSessionWithSlots, and it must not disturb the pitch. */
+export async function getSession(id: string): Promise<Session | null> {
+  const { data, error } = await supabase.from('sessions').select('*').eq('id', id).maybeSingle()
+  if (error !== null) boom('getSession', error.message)
+  return data === null ? null : parseSession(data)
 }
 
 /** 3 for sessions made before Team D existed (0016_four_teams.sql), 4 since.
@@ -115,6 +126,10 @@ export async function updateSession(id: string, patch: SessionPatch): Promise<Se
   if (patch.teamBName !== undefined) row['team_b_name'] = patch.teamBName
   if (patch.teamCName !== undefined) row['team_c_name'] = patch.teamCName
   if (patch.teamDName !== undefined) row['team_d_name'] = patch.teamDName
+  // Sent only when it changed: once the time has passed the database refuses
+  // any write to it (opens_locked), even one that repeats the same moment
+  // with the seconds rounded off by the form.
+  if (patch.opensAt !== undefined) row['opens_at'] = patch.opensAt
 
   const { data, error } = await supabase.from('sessions').update(row).eq('id', id).select('*').single()
   if (error !== null) boom('updateSession', error.message)

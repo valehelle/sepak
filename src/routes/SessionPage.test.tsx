@@ -19,6 +19,7 @@ const SESSION: Session = {
   feeGkMyr: null,
   teamNames: { A: 'Merah', B: 'Putih', C: 'Kuning', D: 'Hijau' },
   status: 'open',
+  opensAt: '2026-09-01T12:00:00Z',
   createdAt: '2026-09-10T00:00:00Z',
 }
 
@@ -77,6 +78,7 @@ const state = {
   removeWaitlistLocal: vi.fn((id: string) => { state.waitlist = removeWaitlist(state.waitlist, id) }),
   setMyWaitlistEntry: vi.fn((entry: MyWaitlistEntry | null) => { state.myWaitlistEntry = entry }),
   refetch: vi.fn(),
+  reloadSession: vi.fn(() => Promise.resolve(state.session)),
 }
 
 const claimSlot = vi.fn()
@@ -92,6 +94,8 @@ const writeText = vi.fn()
 const authState = { email: null as string | null, role: null as 'super' | 'admin' | null, loading: false }
 
 vi.mock('../data/useSessionRealtime', () => ({ useSessionRealtime: () => state }))
+// The server clock agrees with this one, so tests can reason in Date.now().
+vi.mock('../data/clock', () => ({ measureClockOffset: () => Promise.resolve(0) }))
 vi.mock('../data/auth', () => ({ useAuthUser: () => authState }))
 vi.mock('../data/slots', () => ({
   claimSlot: (...args: unknown[]) => claimSlot(...args),
@@ -1035,5 +1039,65 @@ describe('SessionPage', () => {
       expect(copied.startsWith('Sesi 005')).toBe(true)
       expect(copied).not.toContain('Jangan edit')
     })
+  })
+
+  describe('before the opening time', () => {
+    const soon = (ms: number) => new Date(Date.now() + ms).toISOString()
+
+    it('shows the countdown and locks every slot and the queue for a player', () => {
+      state.session = { ...SESSION, opensAt: soon(60 * 60 * 1000) }
+      view()
+      expect(screen.getByText('Dibuka dalam')).toBeTruthy()
+      expect(screen.getByText(/Tak perlu refresh/)).toBeTruthy()
+      expect(screen.queryByRole('button', { name: 'Sertai senarai tunggu' })).toBeNull()
+      expect(screen.queryByText(/Tekan posisi kosong/)).toBeNull()
+      const gk = firstOf(screen.getAllByRole('button', { name: /^GK/ }))
+      expect(gk.hasAttribute('disabled')).toBe(true)
+    })
+
+    it('lets an admin book early, and says so', () => {
+      authState.role = 'admin'
+      authState.email = 'admin@example.com'
+      state.session = { ...SESSION, opensAt: soon(60 * 60 * 1000) }
+      view()
+      expect(screen.getByText(/Anda admin — boleh daftar awal/)).toBeTruthy()
+      const gk = firstOf(screen.getAllByRole('button', { name: /^GK/ }))
+      expect(gk.hasAttribute('disabled')).toBe(false)
+    })
+
+    it('opens by itself at the time, without a reload', async () => {
+      state.session = { ...SESSION, opensAt: soon(1200) }
+      view()
+      expect(screen.getByText('Dibuka dalam')).toBeTruthy()
+      await waitFor(() => expect(screen.getByRole('button', { name: 'Sertai senarai tunggu' })).toBeTruthy(), {
+        timeout: 4000,
+      })
+      expect(screen.queryByText('Dibuka dalam')).toBeNull()
+      // It asked the server first, in case the time had moved.
+      expect(state.reloadSession).toHaveBeenCalled()
+      const gk = firstOf(screen.getAllByRole('button', { name: /^GK/ }))
+      expect(gk.hasAttribute('disabled')).toBe(false)
+    })
+
+    it('puts the opening time in the WhatsApp message until it opens', async () => {
+      state.session = { ...SESSION, opensAt: soon(60 * 60 * 1000) }
+      view()
+      await userEvent.click(screen.getByRole('button', { name: 'Salin untuk WhatsApp' }))
+      expect(writeText).toHaveBeenCalledWith(expect.stringContaining('⏰ Dibuka: *'))
+    })
+  })
+
+  it('retries a claim once when it lands a moment before the server opens', async () => {
+    const { SlotActionError } = await import('../data/slots')
+    claimSlot
+      .mockRejectedValueOnce(new SlotActionError('Belum dibuka. Tunggu kiraan tamat.', 'not_open_yet'))
+      .mockResolvedValueOnce({ ...firstOf(state.slots), playerName: 'Hazmi', claimedAt: 'now' })
+    view()
+    await userEvent.click(firstOf(screen.getAllByRole('button', { name: /^GK/ })))
+    await userEvent.type(screen.getByLabelText('Nama'), 'Hazmi')
+    await userEvent.type(screen.getByLabelText('Nombor telefon'), '012-345 6789')
+    await userEvent.click(screen.getByRole('button', { name: 'Ambil slot' }))
+    await waitFor(() => expect(claimSlot).toHaveBeenCalledTimes(2), { timeout: 3000 })
+    expect(screen.queryByText('Belum dibuka. Tunggu kiraan tamat.')).toBeNull()
   })
 })

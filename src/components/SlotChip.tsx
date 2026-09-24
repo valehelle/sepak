@@ -18,6 +18,9 @@ type SlotChipProps = {
   label: string
   bib: Bib
   disabled: boolean
+  /** Not bookable at all right now (not open yet, or closed), as opposed to
+   *  briefly disabled while an action is in flight: only this dims it. */
+  locked?: boolean
   adminOverride?: boolean
   onSelect: (view: SlotView) => void
 }
@@ -27,6 +30,7 @@ export function SlotChip({
   label,
   bib,
   disabled,
+  locked = false,
   adminOverride = false,
   onSelect,
 }: SlotChipProps) {
@@ -61,7 +65,11 @@ export function SlotChip({
             : // An open slot is the only thing a player can act on, so it is
               // drawn to be found: bright, dashed, and the one thing on the
               // pitch that is lighter than the turf.
-              'border-2 border-dashed border-white/85 bg-white/20 text-lg text-white group-active:bg-white/35',
+              // Unless it is locked (not open yet, or closed): then it must
+              // not look like the thing to tap.
+              locked
+                ? 'border-2 border-dashed border-white/30 bg-white/5 text-lg text-white/40'
+                : 'border-2 border-dashed border-white/85 bg-white/20 text-lg text-white group-active:bg-white/35',
           view.mine ? 'ring-2 ring-white ring-offset-2 ring-offset-black/40' : '',
         ].join(' ')}
       >

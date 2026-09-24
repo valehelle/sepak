@@ -147,6 +147,12 @@ describe('buildWhatsAppMessage', () => {
     expect(message).not.toMatch(/Team [ABCD] /)
   })
 
+  it('says when booking opens, under the fee, while it is not open yet', () => {
+    const message = buildWhatsAppMessage(input({ opensAt: 'Khamis 24/09, 9:00 PM' }))
+    expect(message).toContain('💵 Yuran: RM 27/pax\n⏰ Dibuka: *Khamis 24/09, 9:00 PM*')
+    expect(buildWhatsAppMessage(input())).not.toContain('⏰')
+  })
+
   it('says what a goalkeeper pays when it differs', () => {
     expect(buildWhatsAppMessage(input({ feeGkMyr: 15 }))).toContain('💵 Yuran: RM 27/pax (GK RM 15)')
     expect(buildWhatsAppMessage(input({ feeGkMyr: 27 }))).toContain('💵 Yuran: RM 27/pax\n')

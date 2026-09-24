@@ -60,7 +60,7 @@ export function adminClient(): SupabaseClient<any, 'sepak'> {
 }
 
 export async function seedSession(
-  overrides: Partial<{ sessionNo: number; playDate: string; status: 'open' | 'closed'; feeMyr: number | null }> = {},
+  overrides: Partial<{ sessionNo: number; playDate: string; status: 'open' | 'closed'; feeMyr: number | null; opensAt: string }> = {},
 ): Promise<{ sessionId: string; slotIds: Record<string, string | undefined> }> {
   const admin = adminClient()
   const { data, error } = await admin
@@ -73,6 +73,8 @@ export async function seedSession(
       venue: 'Padang Presint 8',
       fee_myr: overrides.feeMyr === undefined ? 27 : overrides.feeMyr,
       status: overrides.status ?? 'open',
+      // Omitted, the column default opens it at once.
+      ...(overrides.opensAt === undefined ? {} : { opens_at: overrides.opensAt }),
     })
     .select('id')
     .single()

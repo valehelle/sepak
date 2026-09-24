@@ -16,6 +16,7 @@ const SESSION: Session = {
   feeGkMyr: null,
   teamNames: { A: 'Merah', B: 'Putih', C: 'Kuning', D: 'Kuning' },
   status: 'open',
+  opensAt: '2026-09-01T12:00:00Z',
   createdAt: '2026-09-10T00:00:00Z',
 }
 

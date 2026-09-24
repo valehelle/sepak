@@ -25,6 +25,9 @@ export type WhatsAppInput = {
   feeMyr: number | null
   /** Optional, so a caller with one price produces the message unchanged. */
   feeGkMyr?: number | null
+  /** When booking opens, already formatted ("Khamis 25/09, 9:00 PM"). Only
+   *  passed while the session is not open yet: after that the line is noise. */
+  opensAt?: string
   teamNames: Record<TeamKey, string>
   slots: readonly WhatsAppSlot[]
   // Optional and defaulting to empty so every existing call site -- and the
@@ -140,6 +143,7 @@ export function buildWhatsAppMessage(input: WhatsAppInput): string {
     `🕒 Masa: ${formatStartTime(input.startTime)}`,
     `🏟️ Tempat: ${input.venue}`,
     ...(fee === null ? [] : [`💵 Yuran: ${fee}`]),
+    ...(input.opensAt === undefined ? [] : [`⏰ Dibuka: *${input.opensAt}*`]),
   ].join('\n')
 
   // Only the teams the session has: an older session has three, and an

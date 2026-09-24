@@ -16,6 +16,7 @@ const INITIAL: SessionFormValues = {
   teamBName: 'Putih',
   teamCName: 'Kuning',
   teamDName: 'Hijau',
+  opensAt: '2026-09-20T21:00',
 }
 
 describe('SessionForm', () => {

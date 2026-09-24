@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter } from 'react-router'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
@@ -16,6 +16,7 @@ const SESSION: Session = {
   feeGkMyr: null,
   teamNames: { A: 'Merah', B: 'Putih', C: 'Kuning', D: 'Kuning' },
   status: 'open',
+  opensAt: '2026-09-01T12:00:00Z',
   createdAt: '2026-09-10T00:00:00Z',
 }
 
@@ -71,6 +72,12 @@ const { default: Admin } = await import('./Admin')
 
 function view() {
   return render(<MemoryRouter><ToastProvider><Admin /></ToastProvider></MemoryRouter>)
+}
+
+/** datetime-local takes its value whole; typing into it is not how a
+ *  person sets one either. */
+function setOpensAt(value: string) {
+  fireEvent.change(screen.getByLabelText('Dibuka pada'), { target: { value } })
 }
 
 describe('Admin', () => {
@@ -186,10 +193,57 @@ describe('Admin', () => {
     await userEvent.type(screen.getByLabelText('Nama sesi'), 'Geng Turun Peluh')
     await userEvent.type(screen.getByLabelText('Tarikh'), '2026-09-23')
     await userEvent.type(screen.getByLabelText('Tempat'), 'Padang Presint 8')
+    setOpensAt('2026-09-22T21:00')
     await userEvent.click(screen.getByRole('button', { name: 'Cipta sesi' }))
 
     await waitFor(() => expect(createSession).toHaveBeenCalledWith(
-      expect.objectContaining({ sessionNo: 6, venue: 'Padang Presint 8' }),
+      expect.objectContaining({
+        sessionNo: 6,
+        venue: 'Padang Presint 8',
+        opensAt: '2026-09-22T13:00:00.000Z',
+      }),
+    ))
+  })
+
+  it('will not create a session without an opening time', async () => {
+    auth.email = 'hazmi@example.com'
+    auth.role = 'admin'
+    view()
+    await userEvent.click(await waitFor(() => screen.getByRole('button', { name: 'Sesi baru' })))
+    await waitFor(() => expect(screen.getByLabelText<HTMLInputElement>('Sesi no.').value).toBe('6'))
+    await userEvent.type(screen.getByLabelText('Nama sesi'), 'Geng Turun Peluh')
+    await userEvent.type(screen.getByLabelText('Tarikh'), '2026-09-23')
+    await userEvent.type(screen.getByLabelText('Tempat'), 'Padang Presint 8')
+    await userEvent.click(screen.getByRole('button', { name: 'Cipta sesi' }))
+    expect(screen.getByText('Pilih masa dibuka.')).toBeTruthy()
+    expect(createSession).not.toHaveBeenCalled()
+  })
+
+  it('locks the opening time of a session that has opened, and never resends it', async () => {
+    auth.email = 'hazmi@example.com'
+    auth.role = 'admin'
+    view()
+    await userEvent.click(await waitFor(() => screen.getByRole('button', { name: 'Sunting' })))
+    await waitFor(() => expect(screen.getByLabelText<HTMLInputElement>('Dibuka pada').disabled).toBe(true))
+    expect(screen.getByText('Dah dibuka. Masa dibuka tak boleh ditukar lagi.')).toBeTruthy()
+    await userEvent.click(screen.getByRole('button', { name: 'Simpan perubahan' }))
+    await waitFor(() => expect(updateSession).toHaveBeenCalled())
+    const [, patch] = updateSession.mock.calls[0] ?? []
+    expect(patch).not.toHaveProperty('opensAt')
+  })
+
+  it('sends a moved opening time for a session that has not opened', async () => {
+    auth.email = 'hazmi@example.com'
+    auth.role = 'admin'
+    listSessions.mockResolvedValue([{ ...SESSION, opensAt: '2099-01-01T13:00:00Z' }])
+    view()
+    await userEvent.click(await waitFor(() => screen.getByRole('button', { name: 'Sunting' })))
+    await waitFor(() => expect(screen.getByLabelText<HTMLInputElement>('Dibuka pada').disabled).toBe(false))
+    setOpensAt('2099-01-02T21:00')
+    await userEvent.click(screen.getByRole('button', { name: 'Simpan perubahan' }))
+    await waitFor(() => expect(updateSession).toHaveBeenCalledWith(
+      'session-1',
+      expect.objectContaining({ opensAt: '2099-01-02T13:00:00.000Z' }),
     ))
   })
 
@@ -286,6 +340,7 @@ describe('Admin', () => {
     await userEvent.type(screen.getByLabelText('Nama sesi'), 'Sesi Baharu')
     await userEvent.type(screen.getByLabelText('Tarikh'), '2026-09-30')
     await userEvent.type(screen.getByLabelText('Tempat'), 'Padang Baharu')
+    setOpensAt('2026-09-22T21:00')
     await userEvent.click(screen.getByRole('button', { name: 'Cipta sesi' }))
 
     await waitFor(() => expect(createSession).toHaveBeenCalledWith(
@@ -320,6 +375,7 @@ describe('Admin', () => {
     })
 
     await userEvent.type(screen.getByLabelText('Tarikh'), '2026-09-30')
+    setOpensAt('2026-09-22T21:00')
     await userEvent.click(screen.getByRole('button', { name: 'Cipta sesi' }))
 
     await waitFor(() => expect(createSession).toHaveBeenCalledWith(

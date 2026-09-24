@@ -1,3 +1,5 @@
+import { fromLocalInput, toLocalInput } from '../lib/opening'
+import { RPC_MESSAGES } from '../data/types'
 import { useCallback, useEffect, useState } from 'react'
 import { Link } from 'react-router'
 import { ActivityFeed } from '../components/ActivityFeed'
@@ -25,6 +27,9 @@ const DEFAULTS: SessionFormValues = {
   teamBName: 'Merah B',
   teamCName: 'Kuning A',
   teamDName: 'Kuning B',
+  // Required, and never carried over from a duplicated session: each week's
+  // opening is its own decision.
+  opensAt: '',
 }
 
 /** The duplicated session's team names, if they still work for four teams.
@@ -214,6 +219,7 @@ export default function Admin() {
         feeMyr: last.feeMyr,
         feeGkMyr: last.feeGkMyr,
         ...teamNamesFrom(last),
+        opensAt: '',
       })
     } catch {
       show('Gagal menyediakan borang duplikasi.', 'error')
@@ -244,6 +250,7 @@ export default function Admin() {
       teamBName: session.teamNames.B,
       teamCName: session.teamNames.C,
       teamDName: session.teamNames.D,
+      opensAt: toLocalInput(session.opensAt),
     })
   }
 
@@ -252,6 +259,8 @@ export default function Admin() {
   async function submit(values: SessionFormValues) {
     setBusy(true)
     try {
+      const opensAt = fromLocalInput(values.opensAt)
+      if (opensAt === null) throw new Error('opensAt: the form let an empty opening time through')
       const payload = {
         sessionNo: values.sessionNo,
         title: values.title,
@@ -268,18 +277,26 @@ export default function Admin() {
       }
 
       if (editing !== null) {
-        await updateSession(editing.id, payload)
+        // Only a real change is sent: the form works in whole minutes, the
+        // database keeps seconds, and after opening even an identical
+        // rewrite of the time is refused (opens_locked).
+        const moved = values.opensAt !== toLocalInput(editing.opensAt)
+        await updateSession(editing.id, moved ? { ...payload, opensAt } : payload)
         show('Sesi dikemas kini.')
       } else {
-        await createSession(payload)
+        await createSession({ ...payload, opensAt })
         show('Sesi dicipta.')
       }
 
       setFormValues(null)
       setEditing(null)
       await reload()
-    } catch {
-      show(editing !== null ? 'Gagal mengemas kini sesi.' : 'Gagal mencipta sesi.', 'error')
+    } catch (cause: unknown) {
+      if (cause instanceof Error && cause.message.includes('opens_locked')) {
+        show(RPC_MESSAGES.opens_locked, 'error')
+      } else {
+        show(editing !== null ? 'Gagal mengemas kini sesi.' : 'Gagal mencipta sesi.', 'error')
+      }
     } finally {
       setBusy(false)
     }
@@ -385,6 +402,7 @@ export default function Admin() {
             key={formKey}
             initial={formValues}
             teamCount={editing !== null ? teamCount : 4}
+            opensLocked={editing !== null && Date.parse(editing.opensAt) <= Date.now()}
             submitLabel={editing !== null ? 'Simpan perubahan' : 'Cipta sesi'}
             busy={busy}
             onSubmit={(v) => void submit(v)}

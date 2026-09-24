@@ -33,7 +33,7 @@ export function admin(): SupabaseClient<any, 'sepak'> {
   return createClient(url, serviceKey, { db: { schema: 'sepak' }, auth: { persistSession: false } })
 }
 
-export async function createTestSession(sessionNo: number): Promise<string> {
+export async function createTestSession(sessionNo: number, opensAt?: Date): Promise<string> {
   const { data, error } = await admin().rpc('create_session', {
     p_session_no: sessionNo,
     p_title: 'E2E Geng',
@@ -45,6 +45,8 @@ export async function createTestSession(sessionNo: number): Promise<string> {
     p_team_a_name: 'Merah',
     p_team_b_name: 'Putih',
     p_team_c_name: 'Kuning',
+    // Omitted, create_session opens it at once.
+    ...(opensAt === undefined ? {} : { p_opens_at: opensAt.toISOString() }),
   })
   if (error !== null) throw new Error(`create_session failed: ${error.message}`)
 

@@ -1,6 +1,6 @@
 # Opening time (Dibuka pada) — design
 
-Status: agreed, not built. Agreed with the organiser on 2026-09-25.
+Status: built on branch `feat/opening-time`, not merged. Agreed with the organiser on 2026-09-25.
 
 ## Problem
 
@@ -105,12 +105,10 @@ ships (see the deploy order note in memory).
 - `create_session` gets a `p_opens_at` parameter.
 - `sepak.sessions` added to the `supabase_realtime` publication.
 
-Draft SQL from a first pass is in `drafts/opening-time/`: the migration
-(column, backfill, `open_to_caller`, `server_now`, the three gated functions,
-realtime publication) and its test. It does not yet have the lock-once-open
-trigger, the activity line or the `create_session` parameter. Check it
-against the latest migrations before reuse, since later migrations may have
-redefined the same functions.
+The migration is `supabase/migrations/0018_opens_at.sql`, tested by `supabase/tests/opens_test.sql`.
+
+Shown and entered in Malaysia time (UTC+8, no daylight saving) whatever the
+phone's own time zone, like the session's date and start time.
 
 ## Frontend changes
 

@@ -38,12 +38,28 @@ function event(overrides: Partial<ActivityEvent> = {}): ActivityEvent {
     phone: '60123456789',
     team: 'A',
     position: 'ST',
+    opensFrom: null,
+    opensTo: null,
     createdAt: EVENING,
     ...overrides,
   }
 }
 
 describe('describeActivity', () => {
+  it('says who moved the opening time, and from when to when', () => {
+    const line = describeActivity(event({
+      kind: 'opens_changed',
+      actor: 'admin',
+      playerName: 'hazmi@example.com',
+      phone: null,
+      team: null,
+      position: null,
+      opensFrom: '2026-09-24T13:00:00Z',
+      opensTo: '2026-09-24T14:00:00Z',
+    }))
+    expect(line).toBe('Masa dibuka ditukar: Khamis 24/09, 9:00 PM → Khamis 24/09, 10:00 PM (hazmi@example.com)')
+  })
+
   it('names the position for the lines that have one', () => {
     expect(describeActivity(event({ kind: 'claim' }))).toBe('Hazmi ambil A ST')
     expect(describeActivity(event({ kind: 'release' }))).toBe('Hazmi lepaskan A ST')

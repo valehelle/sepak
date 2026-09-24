@@ -16,12 +16,16 @@ export type SessionFormValues = {
   teamBName: string
   teamCName: string
   teamDName: string
+  /** `datetime-local` text in local time, e.g. "2026-09-25T21:00". */
+  opensAt: string
 }
 
 type SessionFormProps = {
   initial: SessionFormValues
   /** 3 for a session made before Team D: its D name is kept but not shown. */
   teamCount?: 3 | 4
+  /** The opening time has passed, so the database will refuse a change. */
+  opensLocked?: boolean
   submitLabel: string
   busy: boolean
   onSubmit: (values: SessionFormValues) => void
@@ -46,7 +50,7 @@ function Field({
   )
 }
 
-export function SessionForm({ initial, teamCount = 4, submitLabel, busy, onSubmit }: SessionFormProps) {
+export function SessionForm({ initial, teamCount = 4, opensLocked = false, submitLabel, busy, onSubmit }: SessionFormProps) {
   const [values, setValues] = useState(initial)
   // Fee is held as text so an empty box stays empty rather than snapping to 0.
   const [feeText, setFeeText] = useState(initial.feeMyr === null ? '' : String(initial.feeMyr))
@@ -63,6 +67,7 @@ export function SessionForm({ initial, teamCount = 4, submitLabel, busy, onSubmi
     if (values.venue.trim() === '') return setProblem('Isi tempat.')
     if (values.playDate === '') return setProblem('Pilih tarikh.')
     if (values.startTime === '') return setProblem('Pilih masa.')
+    if (values.opensAt === '') return setProblem('Pilih masa dibuka.')
 
     // Teams are told apart by name alone (see teamLabel), so two teams with
     // the same name would be two identical headings and two identical
@@ -119,6 +124,23 @@ export function SessionForm({ initial, teamCount = 4, submitLabel, busy, onSubmi
           onChange={(e) => set('startTime', e.target.value)}
           className={inputClass}
         />
+      </Field>
+
+      <Field id="opens-at" label="Dibuka pada" className="md:col-span-2">
+        <input
+          id="opens-at"
+          type="datetime-local"
+          required
+          disabled={opensLocked}
+          value={values.opensAt}
+          onChange={(e) => set('opensAt', e.target.value)}
+          className={inputClass}
+        />
+        <p className="font-sans text-xs text-white/45">
+          {opensLocked
+            ? 'Dah dibuka. Masa dibuka tak boleh ditukar lagi.'
+            : 'Sebelum masa ini, hanya admin boleh daftar. Boleh ditukar sehingga masa ini tiba.'}
+        </p>
       </Field>
 
       <Field id="duration" label="Tempoh (minit)">

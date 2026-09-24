@@ -36,6 +36,7 @@ describe('createSession wrapper against local postgres', () => {
         teamBName: 'Putih',
         teamCName: 'Kuning',
         teamDName: 'Kuning',
+        opensAt: '2026-09-01T12:00:00Z',
       }),
     ).rejects.toThrow()
   })
@@ -103,6 +104,7 @@ describe('createSession wrapper as an authenticated organiser', () => {
       teamBName: 'Putih',
       teamCName: 'Kuning',
       teamDName: 'Hijau',
+      opensAt: '2026-09-01T12:00:00Z',
     })
     sessionId = session.id
     expect(session.feeGkMyr).toBe(15)

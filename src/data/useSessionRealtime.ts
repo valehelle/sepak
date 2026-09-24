@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { supabase } from '../lib/supabase'
-import { getSessionWithSlots } from './sessions'
+import { getSession, getSessionWithSlots } from './sessions'
 import { getMySlotIds } from './slots'
-import { parseSlot, type Session, type Slot } from './types'
+import { parseSession, parseSlot, type Session, type Slot } from './types'
 import { getMyWaitlistEntry, listWaitlist, parseWaitlistEntry, type MyWaitlistEntry, type WaitlistEntry } from './waitlist'
 
 export type SessionRealtimeState = {
@@ -20,6 +20,10 @@ export type SessionRealtimeState = {
   removeWaitlistLocal: (id: string) => void
   setMyWaitlistEntry: (entry: MyWaitlistEntry | null) => void
   refetch: () => void
+  /** Re-reads the session row alone -- no loading state, pitch untouched --
+   *  and returns it. The countdown calls this at zero, in case a changed
+   *  opening time never reached this page over the socket. */
+  reloadSession: () => Promise<Session | null>
 }
 
 function replace(slots: readonly Slot[], next: Slot): Slot[] {
@@ -73,6 +77,12 @@ export function useSessionRealtime(sessionId: string | undefined): SessionRealti
   const [nonce, setNonce] = useState(0)
 
   const refetch = useCallback(() => setNonce((n) => n + 1), [])
+  const reloadSession = useCallback(async (): Promise<Session | null> => {
+    if (sessionId === undefined) return null
+    const next = await getSession(sessionId)
+    if (next !== null) setSession(next)
+    return next
+  }, [sessionId])
   const applyLocal = useCallback((slot: Slot) => setSlots((current) => replace(current, slot)), [])
   const setOwned = useCallback(
     (slotId: string, owned: boolean) => setMySlotIds((current) => withOwned(current, slotId, owned)),
@@ -174,6 +184,19 @@ export function useSessionRealtime(sessionId: string | undefined): SessionRealti
       )
       .on(
         'postgres_changes',
+        // The session row itself: an admin moving the opening time has to
+        // reach every countdown already on screen.
+        { event: 'UPDATE', schema: 'sepak', table: 'sessions', filter: `id=eq.${sessionId}` },
+        (payload: { new: unknown }) => {
+          try {
+            setSession(parseSession(payload.new))
+          } catch {
+            // ignore a malformed payload, same as the handlers around it
+          }
+        },
+      )
+      .on(
+        'postgres_changes',
         { event: '*', schema: 'sepak', table: 'waitlist', filter: `session_id=eq.${sessionId}` },
         (payload: { eventType: string; new: unknown; old: unknown }) => {
           // Auto-fill deletes the placed entry's row in the same transaction
@@ -242,5 +265,6 @@ export function useSessionRealtime(sessionId: string | undefined): SessionRealti
     removeWaitlistLocal,
     setMyWaitlistEntry,
     refetch,
+    reloadSession,
   }
 }

@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import { ActivityError, listActivity, type ActivityEvent } from '../data/activity'
 import { formatEventTime } from '../lib/format'
+import { formatOpensAt } from '../lib/opening'
 import { formatPhone, whatsappLink } from '../lib/phone'
 import { positionLabel } from '../lib/positions'
 import { Button } from './Button'
@@ -39,6 +40,13 @@ export function describeActivity(event: ActivityEvent): string {
       return `${name} masuk senarai tunggu`
     case 'waitlist_leave':
       return `${name} keluar senarai tunggu`
+    // The subject is the change, and the name is who made it: an admin's
+    // email, or "SQL editor" for a change made in the dashboard.
+    case 'opens_changed': {
+      const from = event.opensFrom === null ? '?' : formatOpensAt(event.opensFrom)
+      const to = event.opensTo === null ? '?' : formatOpensAt(event.opensTo)
+      return `Masa dibuka ditukar: ${from} → ${to} (${name})`
+    }
   }
 }
 
@@ -53,6 +61,8 @@ const TONE: Record<ActivityEvent['kind'], string | undefined> = {
   unpaid: 'text-kuning',
   waitlist_join: undefined,
   waitlist_leave: undefined,
+  // Worth noticing: this is the line that shows an opening was moved.
+  opens_changed: 'text-kuning',
 }
 
 export function ActivityFeed() {

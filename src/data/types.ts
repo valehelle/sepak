@@ -15,6 +15,8 @@ export type Session = {
   feeGkMyr: number | null
   teamNames: Record<TeamKey, string>
   status: SessionStatus
+  /** ISO timestamp. Before it, only admins can book (0018_opens_at.sql). */
+  opensAt: string
   createdAt: string
 }
 
@@ -112,6 +114,7 @@ export function parseSession(row: unknown): Session {
       D: str(r, 'team_d_name'),
     },
     status,
+    opensAt: str(r, 'opens_at'),
     createdAt: str(r, 'created_at'),
   }
 }
@@ -161,6 +164,9 @@ export const RPC_ERROR_CODES = [
   // RPC is public and a generic fallback would hide a real bug.
   'same_slot',
   'cross_session',
+  // Opening time (0018_opens_at.sql).
+  'not_open_yet',
+  'opens_locked',
 ] as const
 
 export type RpcErrorCode = (typeof RPC_ERROR_CODES)[number]
@@ -192,6 +198,8 @@ export const RPC_MESSAGES: Record<RpcErrorCode, string> = {
   invalid_paid: 'Status bayaran tak sah.',
   same_slot: 'Anda dah berada di posisi ini.',
   cross_session: 'Posisi itu bukan dalam sesi ini.',
+  not_open_yet: 'Belum dibuka. Tunggu kiraan tamat.',
+  opens_locked: 'Masa dibuka dah lepas, jadi tak boleh ditukar lagi.',
 }
 
 export const FALLBACK_ERROR_MESSAGE = 'Ada masalah. Cuba lagi.'
