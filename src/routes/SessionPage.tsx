@@ -555,7 +555,7 @@ export default function SessionPage() {
       </div>
 
       <div className="space-y-4">
-        <div className={`grid gap-4 ${teams.length === 4 ? 'md:grid-cols-2 xl:grid-cols-4' : 'md:grid-cols-3'}`}>
+        <div className={`grid gap-4 ${teams.length === 4 ? 'md:grid-cols-2' : 'md:grid-cols-3'}`}>
           {teams.map((team: TeamKey) => (
             <TeamView
               key={team}
