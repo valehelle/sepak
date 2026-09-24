@@ -20,9 +20,11 @@ const DEFAULTS: SessionFormValues = {
   durationMins: 120,
   venue: '',
   feeMyr: null,
+  feeGkMyr: null,
   teamAName: 'Merah',
-  teamBName: 'Putih',
+  teamBName: 'Merah',
   teamCName: 'Kuning',
+  teamDName: 'Kuning',
 }
 
 /** Supabase error strings the form can explain better than "Cuba lagi".
@@ -195,9 +197,11 @@ export default function Admin() {
         durationMins: last.durationMins,
         venue: last.venue,
         feeMyr: last.feeMyr,
+        feeGkMyr: last.feeGkMyr,
         teamAName: last.teamNames.A,
         teamBName: last.teamNames.B,
         teamCName: last.teamNames.C,
+        teamDName: last.teamNames.D,
       })
     } catch {
       show('Gagal menyediakan borang duplikasi.', 'error')
@@ -215,9 +219,11 @@ export default function Admin() {
       durationMins: session.durationMins,
       venue: session.venue,
       feeMyr: session.feeMyr,
+      feeGkMyr: session.feeGkMyr,
       teamAName: session.teamNames.A,
       teamBName: session.teamNames.B,
       teamCName: session.teamNames.C,
+      teamDName: session.teamNames.D,
     })
   }
 
@@ -234,9 +240,11 @@ export default function Admin() {
         durationMins: values.durationMins,
         venue: values.venue,
         feeMyr: values.feeMyr,
+        feeGkMyr: values.feeGkMyr,
         teamAName: values.teamAName,
         teamBName: values.teamBName,
         teamCName: values.teamCName,
+        teamDName: values.teamDName,
       }
 
       if (editing !== null) {

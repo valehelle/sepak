@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { formatEventTime, formatFee, formatPlayDate, formatStartTime } from './format'
+import { formatEventTime, formatFee, formatFees, formatPlayDate, formatStartTime } from './format'
 
 describe('formatPlayDate', () => {
   it('formats with the Malay day name', () => {
@@ -54,6 +54,25 @@ describe('formatFee', () => {
   it('treats zero and null as free', () => {
     expect(formatFee(0)).toBeNull()
     expect(formatFee(null)).toBeNull()
+  })
+})
+
+describe('formatFees', () => {
+  it('reads as one price when the goalkeeper pays the same or nothing is set', () => {
+    expect(formatFees(25, null)).toBe('RM 25/pax')
+    expect(formatFees(25, 25)).toBe('RM 25/pax')
+  })
+
+  it('adds the goalkeeper price when it differs', () => {
+    expect(formatFees(25, 15)).toBe('RM 25/pax (GK RM 15)')
+    expect(formatFees(25, 12.5)).toBe('RM 25/pax (GK RM 12.50)')
+    expect(formatFees(25, 0)).toBe('RM 25/pax (GK percuma)')
+  })
+
+  it('handles a free session where only the goalkeeper pays', () => {
+    expect(formatFees(null, 10)).toBe('Percuma (GK RM 10)')
+    expect(formatFees(null, null)).toBeNull()
+    expect(formatFees(0, 0)).toBeNull()
   })
 })
 

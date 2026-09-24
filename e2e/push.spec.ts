@@ -28,7 +28,7 @@ test('queueing offers notifications, and Telegram opens a link carrying a fresh 
   await page.getByLabel('Nama').fill('Hazmi')
   await page.getByLabel('Nombor telefon').fill('012-345 6789')
   await page.getByRole('button', { name: 'Ambil slot' }).click()
-  await expect(page.getByText('33/33 penuh')).toBeVisible()
+  await expect(page.getByText('44/44 penuh')).toBeVisible()
 
   // A second browser: this device holds a slot now and cannot also queue.
   const second = await browser.newContext()

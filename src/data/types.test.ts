@@ -13,6 +13,8 @@ const SESSION_ROW = {
   team_a_name: 'Merah',
   team_b_name: 'Putih',
   team_c_name: 'Kuning',
+  team_d_name: 'Kuning',
+  fee_gk_myr: null,
   status: 'open',
   created_at: '2026-09-10T04:00:00Z',
 }
@@ -35,7 +37,9 @@ describe('parseSession', () => {
     expect(session.sessionNo).toBe(5)
     expect(session.feeMyr).toBe(27)
     expect(session.status).toBe('open')
-    expect(session.teamNames).toEqual({ A: 'Merah', B: 'Putih', C: 'Kuning' })
+    expect(session.teamNames).toEqual({ A: 'Merah', B: 'Putih', C: 'Kuning', D: 'Kuning' })
+    expect(session.feeGkMyr).toBeNull()
+    expect(parseSession({ ...SESSION_ROW, fee_gk_myr: '15.00' }).feeGkMyr).toBe(15)
   })
 
   it('keeps a null fee null rather than coercing it to zero', () => {
@@ -71,7 +75,7 @@ describe('parseSlot', () => {
   })
 
   it('rejects an unknown team or position', () => {
-    expect(() => parseSlot({ ...SLOT_ROW, team: 'D' })).toThrow(/team/)
+    expect(() => parseSlot({ ...SLOT_ROW, team: 'E' })).toThrow(/team/)
     expect(() => parseSlot({ ...SLOT_ROW, position: 'SWEEPER' })).toThrow(/position/)
   })
 })

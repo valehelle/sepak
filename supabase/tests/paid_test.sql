@@ -118,7 +118,7 @@ begin
   ---------------------------------------------------------------------------
   update sepak.slots
      set player_name = 'Filler', claim_token = gen_random_uuid(), claimed_at = now()
-   where id in (v_st_b, v_st_c);
+   where session_id = v_session_id and position = 'ST' and team <> 'A';
 
   set local role anon;
   perform sepak.join_waitlist(v_session_id, 'Queued', '60155556666', array['ST'], gen_random_uuid());

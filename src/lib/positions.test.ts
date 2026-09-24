@@ -60,15 +60,16 @@ describe('positions', () => {
     expect(PITCH_ROWS[PITCH_ROWS.length - 1]).toEqual(['GK'])
   })
 
-  it('has three teams', () => {
-    expect(TEAM_KEYS).toEqual(['A', 'B', 'C'])
+  it('has four teams', () => {
+    expect(TEAM_KEYS).toEqual(['A', 'B', 'C', 'D'])
   })
 
   it('guards unknown values', () => {
     expect(isPosition('GK')).toBe(true)
     expect(isPosition('SWEEPER')).toBe(false)
     expect(isTeamKey('A')).toBe(true)
-    expect(isTeamKey('D')).toBe(false)
+    expect(isTeamKey('D')).toBe(true)
+    expect(isTeamKey('E')).toBe(false)
   })
 
   it('exposes the two waitlist presets', () => {

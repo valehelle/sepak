@@ -31,9 +31,11 @@ describe('createSession wrapper against local postgres', () => {
         durationMins: 120,
         venue: 'Nowhere',
         feeMyr: 10,
+        feeGkMyr: null,
         teamAName: 'Merah',
         teamBName: 'Putih',
         teamCName: 'Kuning',
+        teamDName: 'Kuning',
       }),
     ).rejects.toThrow()
   })
@@ -65,7 +67,7 @@ describe('createSession wrapper as an authenticated organiser', () => {
     }
   })
 
-  it('creates a session with all 33 slots', async () => {
+  it('creates a session with all 44 slots', async () => {
     const email = `organiser-${randomUUID()}@example.test`
     const password = 'wrapper-test-password'
 
@@ -96,16 +98,20 @@ describe('createSession wrapper as an authenticated organiser', () => {
       durationMins: 120,
       venue: 'Padang Wrapper',
       feeMyr: 27,
+      feeGkMyr: 15,
       teamAName: 'Merah',
       teamBName: 'Putih',
       teamCName: 'Kuning',
+      teamDName: 'Hijau',
     })
     sessionId = session.id
+    expect(session.feeGkMyr).toBe(15)
+    expect(session.teamNames.D).toBe('Hijau')
     expect(session.title).toBe('Wrapper Authenticated')
     expect(session.sessionNo).toBe(951)
 
     const slots = await adminClient().from('slots').select('id').eq('session_id', session.id)
     expect(slots.error).toBeNull()
-    expect(slots.data).toHaveLength(33)
+    expect(slots.data).toHaveLength(44)
   })
 })

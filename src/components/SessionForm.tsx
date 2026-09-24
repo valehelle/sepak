@@ -11,9 +11,11 @@ export type SessionFormValues = {
   durationMins: number
   venue: string
   feeMyr: number | null
+  feeGkMyr: number | null
   teamAName: string
   teamBName: string
   teamCName: string
+  teamDName: string
 }
 
 type SessionFormProps = {
@@ -46,6 +48,7 @@ export function SessionForm({ initial, submitLabel, busy, onSubmit }: SessionFor
   const [values, setValues] = useState(initial)
   // Fee is held as text so an empty box stays empty rather than snapping to 0.
   const [feeText, setFeeText] = useState(initial.feeMyr === null ? '' : String(initial.feeMyr))
+  const [gkFeeText, setGkFeeText] = useState(initial.feeGkMyr === null ? '' : String(initial.feeGkMyr))
   const [problem, setProblem] = useState<string | null>(null)
 
   function set<K extends keyof SessionFormValues>(key: K, value: SessionFormValues[K]) {
@@ -63,11 +66,16 @@ export function SessionForm({ initial, submitLabel, busy, onSubmit }: SessionFor
     const fee = trimmedFee === '' ? null : Number(trimmedFee)
     if (fee !== null && (!Number.isFinite(fee) || fee < 0)) return setProblem('Yuran tak sah.')
 
+    const trimmedGkFee = gkFeeText.trim()
+    const gkFee = trimmedGkFee === '' ? null : Number(trimmedGkFee)
+    if (gkFee !== null && (!Number.isFinite(gkFee) || gkFee < 0)) return setProblem('Yuran GK tak sah.')
+
     onSubmit({
       ...values,
       title: values.title.trim(),
       venue: values.venue.trim(),
       feeMyr: fee,
+      feeGkMyr: gkFee,
     })
   }
 
@@ -127,6 +135,19 @@ export function SessionForm({ initial, submitLabel, busy, onSubmit }: SessionFor
         />
       </Field>
 
+      <Field id="fee-gk" label="Yuran GK (RM)">
+        <input
+          id="fee-gk"
+          type="number"
+          inputMode="decimal"
+          step="0.50"
+          placeholder="Kosongkan jika sama"
+          value={gkFeeText}
+          onChange={(e) => { setGkFeeText(e.target.value); setProblem(null) }}
+          className={inputClass}
+        />
+      </Field>
+
       <Field id="session-no" label="Sesi no.">
         <input
           id="session-no"
@@ -146,7 +167,7 @@ export function SessionForm({ initial, submitLabel, busy, onSubmit }: SessionFor
         <input id="venue" value={values.venue} onChange={(e) => set('venue', e.target.value)} className={inputClass} />
       </Field>
 
-      <div className="grid grid-cols-3 gap-2 md:col-span-2">
+      <div className="grid grid-cols-2 gap-2 md:col-span-2 md:grid-cols-4">
         <Field id="team-a" label="Pasukan A">
           <input id="team-a" value={values.teamAName} onChange={(e) => set('teamAName', e.target.value)} className={inputClass} />
         </Field>
@@ -155,6 +176,9 @@ export function SessionForm({ initial, submitLabel, busy, onSubmit }: SessionFor
         </Field>
         <Field id="team-c" label="Pasukan C">
           <input id="team-c" value={values.teamCName} onChange={(e) => set('teamCName', e.target.value)} className={inputClass} />
+        </Field>
+        <Field id="team-d" label="Pasukan D">
+          <input id="team-d" value={values.teamDName} onChange={(e) => set('teamDName', e.target.value)} className={inputClass} />
         </Field>
       </div>
 

@@ -109,7 +109,10 @@ export default function SessionPage() {
 
   const mySlot = slots.find((slot) => mySlotIds.has(slot.id)) ?? null
   const filled = slots.filter((slot) => slot.playerName !== null).length
-  const open = 33 - filled
+  const open = slots.length - filled
+  // The teams this session was built with: three for the older sessions,
+  // four since 0016_four_teams.sql.
+  const teams = TEAM_KEYS.filter((team) => slots.some((slot) => slot.team === team))
   const closed = session?.status === 'closed'
 
   // Only asked when there is something to ask about -- a device holding a
@@ -146,6 +149,7 @@ export default function SessionPage() {
         startTime: session.startTime,
         venue: session.venue,
         feeMyr: session.feeMyr,
+        feeGkMyr: session.feeGkMyr,
         teamNames: session.teamNames,
         slots: slots.map(({ team, position, playerName, paid }) => ({ team, position, playerName, paid })),
         waitlist: waitlist.map(({ playerName, positions }) => ({ playerName, positions })),
@@ -458,7 +462,7 @@ export default function SessionPage() {
   return (
     <div className="mx-auto max-w-6xl space-y-4 p-4 pb-24 md:p-8 lg:grid lg:grid-cols-[340px_1fr] lg:items-start lg:gap-8 lg:space-y-0">
       <div className="space-y-4 lg:sticky lg:top-8">
-        <SessionMeta session={session} filled={filled} total={33} />
+        <SessionMeta session={session} filled={filled} total={slots.length} />
 
         {mySlot !== null ? (
           <div className="space-y-1 rounded-lg border border-white/20 bg-white/10 px-3 py-2">
@@ -551,8 +555,8 @@ export default function SessionPage() {
       </div>
 
       <div className="space-y-4">
-        <div className="grid gap-4 md:grid-cols-3">
-          {TEAM_KEYS.map((team: TeamKey) => (
+        <div className={`grid gap-4 ${teams.length === 4 ? 'md:grid-cols-2 xl:grid-cols-4' : 'md:grid-cols-3'}`}>
+          {teams.map((team: TeamKey) => (
             <TeamView
               key={team}
               team={team}

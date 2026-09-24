@@ -9,9 +9,12 @@ export type NewSessionInput = {
   durationMins: number
   venue: string
   feeMyr: number | null
+  /** Null: goalkeepers pay feeMyr like everyone else. */
+  feeGkMyr: number | null
   teamAName: string
   teamBName: string
   teamCName: string
+  teamDName: string
 }
 
 export type SessionPatch = Partial<Omit<NewSessionInput, 'sessionNo'>> & { sessionNo?: number }
@@ -79,6 +82,8 @@ export async function createSession(input: NewSessionInput): Promise<Session> {
     p_team_a_name: input.teamAName,
     p_team_b_name: input.teamBName,
     p_team_c_name: input.teamCName,
+    p_team_d_name: input.teamDName,
+    p_fee_gk_myr: input.feeGkMyr,
   })
   if (error !== null) boom('createSession', error.message)
   return parseSession(data)
@@ -93,9 +98,11 @@ export async function updateSession(id: string, patch: SessionPatch): Promise<Se
   if (patch.durationMins !== undefined) row['duration_mins'] = patch.durationMins
   if (patch.venue !== undefined) row['venue'] = patch.venue
   if (patch.feeMyr !== undefined) row['fee_myr'] = patch.feeMyr
+  if (patch.feeGkMyr !== undefined) row['fee_gk_myr'] = patch.feeGkMyr
   if (patch.teamAName !== undefined) row['team_a_name'] = patch.teamAName
   if (patch.teamBName !== undefined) row['team_b_name'] = patch.teamBName
   if (patch.teamCName !== undefined) row['team_c_name'] = patch.teamCName
+  if (patch.teamDName !== undefined) row['team_d_name'] = patch.teamDName
 
   const { data, error } = await supabase.from('sessions').update(row).eq('id', id).select('*').single()
   if (error !== null) boom('updateSession', error.message)

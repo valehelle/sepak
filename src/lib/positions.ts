@@ -14,7 +14,7 @@ export const POSITIONS = [
 
 export type Position = (typeof POSITIONS)[number]
 
-export const TEAM_KEYS = ['A', 'B', 'C'] as const
+export const TEAM_KEYS = ['A', 'B', 'C', 'D'] as const
 
 export type TeamKey = (typeof TEAM_KEYS)[number]
 

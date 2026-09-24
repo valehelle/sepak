@@ -13,7 +13,8 @@ const SESSION: Session = {
   durationMins: 120,
   venue: 'Padang Presint 8',
   feeMyr: 27,
-  teamNames: { A: 'Merah', B: 'Putih', C: 'Kuning' },
+  feeGkMyr: null,
+  teamNames: { A: 'Merah', B: 'Putih', C: 'Kuning', D: 'Kuning' },
   status: 'open',
   createdAt: '2026-09-10T00:00:00Z',
 }

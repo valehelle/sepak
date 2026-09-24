@@ -1,5 +1,5 @@
 import type { Session } from '../data/types'
-import { formatFee, formatPlayDate, formatStartTime } from '../lib/format'
+import { formatFees, formatPlayDate, formatStartTime } from '../lib/format'
 
 type SessionMetaProps = { session: Session; filled: number; total: number }
 
@@ -13,7 +13,7 @@ function Row({ label, value }: { label: string; value: string }) {
 }
 
 export function SessionMeta({ session, filled, total }: SessionMetaProps) {
-  const fee = formatFee(session.feeMyr)
+  const fee = formatFees(session.feeMyr, session.feeGkMyr)
   const pct = total === 0 ? 0 : Math.round((filled / total) * 100)
 
   return (

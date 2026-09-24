@@ -11,6 +11,8 @@ export type Session = {
   durationMins: number
   venue: string
   feeMyr: number | null
+  /** What a goalkeeper pays. Null means the same as feeMyr. */
+  feeGkMyr: number | null
   teamNames: Record<TeamKey, string>
   status: SessionStatus
   createdAt: string
@@ -102,10 +104,12 @@ export function parseSession(row: unknown): Session {
     durationMins: int(r, 'duration_mins'),
     venue: str(r, 'venue'),
     feeMyr: nullableNumeric(r, 'fee_myr'),
+    feeGkMyr: nullableNumeric(r, 'fee_gk_myr'),
     teamNames: {
       A: str(r, 'team_a_name'),
       B: str(r, 'team_b_name'),
       C: str(r, 'team_c_name'),
+      D: str(r, 'team_d_name'),
     },
     status,
     createdAt: str(r, 'created_at'),

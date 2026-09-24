@@ -37,6 +37,19 @@ export function formatFee(fee: number | null): string | null {
   return `RM ${amount}/pax`
 }
 
+const ringgit = (amount: number): string =>
+  `RM ${Number.isInteger(amount) ? String(amount) : amount.toFixed(2)}`
+
+/** The fee line when goalkeepers may pay differently: "RM 25/pax (GK RM 15)".
+ *  A null or matching GK fee says nothing extra, so a session with one price
+ *  reads exactly as it did before there were two. Null when nobody pays. */
+export function formatFees(fee: number | null, gkFee: number | null): string | null {
+  const player = formatFee(fee)
+  if (gkFee === null || gkFee === (fee ?? 0)) return player
+  const gk = gkFee === 0 ? 'GK percuma' : `GK ${ringgit(gkFee)}`
+  return `${player ?? 'Percuma'} (${gk})`
+}
+
 /** Malay month abbreviations, matching scripts/sessionPages.mjs. */
 const MONTHS = ['Jan', 'Feb', 'Mac', 'Apr', 'Mei', 'Jun', 'Jul', 'Ogo', 'Sep', 'Okt', 'Nov', 'Dis'] as const
 

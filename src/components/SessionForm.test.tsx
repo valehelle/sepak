@@ -11,9 +11,11 @@ const INITIAL: SessionFormValues = {
   durationMins: 120,
   venue: 'Padang Presint 8',
   feeMyr: 27,
+  feeGkMyr: null,
   teamAName: 'Merah',
   teamBName: 'Putih',
   teamCName: 'Kuning',
+  teamDName: 'Kuning',
 }
 
 describe('SessionForm', () => {
@@ -36,6 +38,27 @@ describe('SessionForm', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Simpan' }))
 
     expect(onSubmit).toHaveBeenCalledWith(expect.objectContaining({ venue: 'Padang Presint 11' }))
+  })
+
+  it('submits a separate goalkeeper fee, and a blank one as the same price', async () => {
+    const onSubmit = vi.fn()
+    render(<SessionForm initial={INITIAL} submitLabel="Simpan" busy={false} onSubmit={onSubmit} />)
+    await userEvent.click(screen.getByRole('button', { name: 'Simpan' }))
+    expect(onSubmit).toHaveBeenLastCalledWith(expect.objectContaining({ feeGkMyr: null }))
+
+    await userEvent.type(screen.getByLabelText('Yuran GK (RM)'), '15')
+    await userEvent.type(screen.getByLabelText('Pasukan D'), ' 2')
+    await userEvent.click(screen.getByRole('button', { name: 'Simpan' }))
+    expect(onSubmit).toHaveBeenLastCalledWith(expect.objectContaining({ feeGkMyr: 15, teamDName: 'Kuning 2' }))
+  })
+
+  it('refuses a negative goalkeeper fee', async () => {
+    const onSubmit = vi.fn()
+    render(<SessionForm initial={INITIAL} submitLabel="Simpan" busy={false} onSubmit={onSubmit} />)
+    await userEvent.type(screen.getByLabelText('Yuran GK (RM)'), '-5')
+    await userEvent.click(screen.getByRole('button', { name: 'Simpan' }))
+    expect(onSubmit).not.toHaveBeenCalled()
+    expect(screen.getByText('Yuran GK tak sah.')).toBeTruthy()
   })
 
   it('treats a blank fee as free rather than as zero-as-text', async () => {

@@ -1,4 +1,4 @@
-import { formatFee, formatPlayDate, formatStartTime } from './format'
+import { formatFees, formatPlayDate, formatStartTime } from './format'
 import { POSITIONS, TEAM_KEYS, formatPositions, positionLabel, type Position, type TeamKey } from './positions'
 
 export type WhatsAppSlot = {
@@ -22,6 +22,8 @@ export type WhatsAppInput = {
   startTime: string
   venue: string
   feeMyr: number | null
+  /** Optional, so a caller with one price produces the message unchanged. */
+  feeGkMyr?: number | null
   teamNames: Record<TeamKey, string>
   slots: readonly WhatsAppSlot[]
   // Optional and defaulting to empty so every existing call site -- and the
@@ -129,7 +131,7 @@ function waitlistBlock(waitlist: readonly WhatsAppWaitlistEntry[]): string | nul
  *  complements the group rather than competing with it. */
 export function buildWhatsAppMessage(input: WhatsAppInput): string {
   const roster = rosterOf(input.slots)
-  const fee = formatFee(input.feeMyr)
+  const fee = formatFees(input.feeMyr, input.feeGkMyr ?? null)
 
   const header = [
     `Sesi ${String(input.sessionNo).padStart(3, '0')} ${input.title}`,
@@ -139,7 +141,12 @@ export function buildWhatsAppMessage(input: WhatsAppInput): string {
     ...(fee === null ? [] : [`💵 Yuran: ${fee}`]),
   ].join('\n')
 
-  const teams = TEAM_KEYS.map((team) => teamBlock(team, input.teamNames[team], roster))
+  // Only the teams the session has: an older session has three, and an
+  // empty Team D block would read as eleven open places.
+  const present = new Set(input.slots.map((slot) => slot.team))
+  const teams = TEAM_KEYS.filter((team) => present.has(team)).map((team) =>
+    teamBlock(team, input.teamNames[team], roster),
+  )
   const waitlist = waitlistBlock(input.waitlist ?? [])
   const link = input.shareUrl === undefined || input.shareUrl === '' ? [] : [input.shareUrl]
   // The warning rides with the change, not with every copy: the organiser

@@ -25,11 +25,11 @@ test('auto-fill reaches a second browser over realtime, without a reload', async
   await pageOne.getByLabel('Nama').fill('Hazmi')
   await pageOne.getByLabel('Nombor telefon').fill('012-345 6789')
   await pageOne.getByRole('button', { name: 'Ambil slot' }).click()
-  await expect(pageOne.getByText('33/33 penuh')).toBeVisible()
+  await expect(pageOne.getByText('44/44 penuh')).toBeVisible()
 
   // The session is now completely full -- the second browser has to queue.
   await pageTwo.goto(`s/${sessionId}`)
-  await expect(pageTwo.getByText('33/33 penuh')).toBeVisible()
+  await expect(pageTwo.getByText('44/44 penuh')).toBeVisible()
   await pageTwo.getByRole('button', { name: 'Sertai senarai tunggu' }).click()
   await pageTwo.getByLabel('Nama').fill('Isaac')
   // Isaac's own number: one booking per phone per session.
@@ -75,7 +75,7 @@ test('a queued player takes an open slot by hand, even one they never asked for'
   await pageOne.getByLabel('Nama').fill('Hazmi')
   await pageOne.getByLabel('Nombor telefon').fill('012-345 6789')
   await pageOne.getByRole('button', { name: 'Ambil slot' }).click()
-  await expect(pageOne.getByText('33/33 penuh')).toBeVisible()
+  await expect(pageOne.getByText('44/44 penuh')).toBeVisible()
 
   // Isaac queues for ST, which is nowhere near the slot that is about to
   // open -- so auto-fill will not hand it to him.
@@ -97,7 +97,7 @@ test('a queued player takes an open slot by hand, even one they never asked for'
   await pageOne.getByRole('button', { name: 'Ya, lepaskan slot' }).click()
 
   // GK opens and stays open: Isaac asked for ST, so nobody is promoted.
-  await expect(pageTwo.getByText('32/33 penuh')).toBeVisible({ timeout: 10_000 })
+  await expect(pageTwo.getByText('43/44 penuh')).toBeVisible({ timeout: 10_000 })
   await expect(pageTwo.getByText(/anda boleh terus ambil mana-mana slot kosong/)).toBeVisible()
 
   // Being queued does not stop him claiming it himself -- claim_slot

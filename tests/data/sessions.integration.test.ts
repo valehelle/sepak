@@ -31,7 +31,7 @@ describe('session access as anon', () => {
     const client = anonClient()
     const slots = await client.from('slots').select('id').eq('session_id', id)
     expect(slots.error).toBeNull()
-    expect(slots.data).toHaveLength(33)
+    expect(slots.data).toHaveLength(44)
 
     const sessions = await client.from('sessions').select('*').eq('id', id)
     expect(sessions.error).toBeNull()

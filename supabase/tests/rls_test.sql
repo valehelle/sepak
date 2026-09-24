@@ -24,9 +24,9 @@ begin
     'Merah', 'Putih', 'Kuning');
 
   select count(*) into v_count from sepak.slots where session_id = v_session_id;
-  assert v_count = 33, format('expected 33 slots, got %s', v_count);
-  assert (select count(distinct team) from sepak.slots where session_id = v_session_id) = 3,
-    'expected three teams';
+  assert v_count = 44, format('expected 44 slots, got %s', v_count);
+  assert (select count(distinct team) from sepak.slots where session_id = v_session_id) = 4,
+    'expected four teams';
   assert (select count(*) from sepak.slots where session_id = v_session_id and team = 'A') = 11,
     'expected eleven positions per team';
 

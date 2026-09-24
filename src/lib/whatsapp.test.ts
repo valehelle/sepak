@@ -8,19 +8,21 @@ import {
   type WhatsAppSlot,
 } from './whatsapp'
 
-const NAMES: Record<TeamKey, readonly (string | null)[]> = {
+/** A three-team session, the shape every session had before Team D: no
+ *  roster for D means no D slots at all. */
+const NAMES: Record<TeamKey, readonly (string | null)[] | undefined> = {
   A: [null, 'kimie', 'amie', 'Zulfadhli', 'haniff mohd', 'Fauzi', 'azim', 'lan', 'yasin', 'Hazmi', 'Zulazhar'],
   B: ['Isaac', 'zairul', 'Amad', 'AA', 'Shah', 'jeeb', 'Kim', 'Syahman', 'Ajim', 'Amir', 'Joe J'],
   C: [null, 'ardee', 'Raze', 'mior', 'mirul', 'Mus', 'Acapsaje', 'Eddy', 'Mat Remy', 'imran', 'Hafiz'],
+  D: undefined,
 }
 
 function slots(): WhatsAppSlot[] {
-  return TEAM_KEYS.flatMap((team) =>
-    POSITIONS.map((position, index): WhatsAppSlot => {
-      const roster = NAMES[team]
-      return { team, position, playerName: roster[index] ?? null }
-    }),
-  )
+  return TEAM_KEYS.flatMap((team) => {
+    const roster = NAMES[team]
+    if (roster === undefined) return []
+    return POSITIONS.map((position, index): WhatsAppSlot => ({ team, position, playerName: roster[index] ?? null }))
+  })
 }
 
 function input(overrides: Partial<WhatsAppInput> = {}): WhatsAppInput {
@@ -31,7 +33,8 @@ function input(overrides: Partial<WhatsAppInput> = {}): WhatsAppInput {
     startTime: '20:00:00',
     venue: 'Padang Presint 8',
     feeMyr: 27,
-    teamNames: { A: 'Merah', B: 'Putih', C: 'Kuning' },
+    feeGkMyr: null,
+    teamNames: { A: 'Merah', B: 'Putih', C: 'Kuning', D: 'Kuning' },
     slots: slots(),
     ...overrides,
   }
@@ -108,10 +111,32 @@ describe('buildWhatsAppMessage', () => {
     expect(buildWhatsAppMessage(input({ slots: messy }))).toContain('ST- Zulazhar')
   })
 
-  it('emits every position even when a team has no slots recorded', () => {
-    const onlyTeamA = slots().filter((s) => s.team === 'A')
-    const message = buildWhatsAppMessage(input({ slots: onlyTeamA }))
-    expect(message).toContain('Team B Putih\nGK-\nLB-\nCB-\nCB-\nRB-\nDM-\nMC-\nAM-\nLWF-\nRWF-\nST-')
+  it('emits every position of a team even when only some of its slots are recorded', () => {
+    const partial = slots().filter((s) => s.team !== 'B' || s.position === 'GK')
+    const message = buildWhatsAppMessage(input({ slots: partial }))
+    expect(message).toContain('Team B Putih\nGK- Isaac\nLB-\nCB-\nCB-\nRB-\nDM-\nMC-\nAM-\nLWF-\nRWF-\nST-')
+  })
+
+  it('leaves out a team the session does not have', () => {
+    // The three-team fixture: an empty Team D block would read as eleven
+    // open places.
+    expect(buildWhatsAppMessage(input())).not.toContain('Team D')
+  })
+
+  it('adds Team D after Team C for a four-team session', () => {
+    const withD = [
+      ...slots(),
+      ...POSITIONS.map((position): WhatsAppSlot => ({ team: 'D', position, playerName: position === 'GK' ? 'Baru' : null })),
+    ]
+    const message = buildWhatsAppMessage(input({ slots: withD }))
+    expect(message).toContain('\n\nTeam D Kuning\nGK- Baru\nLB-\n')
+    expect(message.indexOf('Team C Kuning')).toBeLessThan(message.indexOf('Team D Kuning'))
+  })
+
+  it('says what a goalkeeper pays when it differs', () => {
+    expect(buildWhatsAppMessage(input({ feeGkMyr: 15 }))).toContain('💵 Yuran: RM 27/pax (GK RM 15)')
+    expect(buildWhatsAppMessage(input({ feeGkMyr: 27 }))).toContain('💵 Yuran: RM 27/pax\n')
+    expect(buildWhatsAppMessage(input({ feeGkMyr: null }))).toContain('💵 Yuran: RM 27/pax\n')
   })
 
   it('omits the Senarai Tunggu block entirely for an empty waitlist', () => {

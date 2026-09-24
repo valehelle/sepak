@@ -4,6 +4,7 @@ import { MemoryRouter } from 'react-router'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { firstOf } from '../test-utils'
 import type { Session, Slot } from '../data/types'
+import type { TeamKey } from '../lib/positions'
 import type { MyWaitlistEntry, WaitlistEntry } from '../data/waitlist'
 
 const SESSION: Session = {
@@ -15,14 +16,15 @@ const SESSION: Session = {
   durationMins: 120,
   venue: 'Padang Presint 8',
   feeMyr: 27,
-  teamNames: { A: 'Merah', B: 'Putih', C: 'Kuning' },
+  feeGkMyr: null,
+  teamNames: { A: 'Merah', B: 'Putih', C: 'Kuning', D: 'Kuning' },
   status: 'open',
   createdAt: '2026-09-10T00:00:00Z',
 }
 
-function emptySlots(): Slot[] {
+function emptySlots(teams: readonly TeamKey[] = ['A', 'B', 'C']): Slot[] {
   const positions = ['GK', 'LB', 'CB1', 'CB2', 'RB', 'DM', 'MC', 'AM', 'LWF', 'RWF', 'ST'] as const
-  return (['A', 'B', 'C'] as const).flatMap((team) =>
+  return teams.flatMap((team) =>
     positions.map((position): Slot => ({
       id: `${team}-${position}`,
       sessionId: 'session-1',
@@ -213,6 +215,18 @@ describe('SessionPage', () => {
     expect(screen.getByText('Team B Putih')).toBeTruthy()
     expect(screen.getByText('Team C Kuning')).toBeTruthy()
     expect(screen.getByText('0/33 penuh')).toBeTruthy()
+    // A three-team session does not grow an empty fourth pitch.
+    expect(screen.queryByText(/^Team D/)).toBeNull()
+  })
+
+  it('shows all four teams, with two sharing a bib, for a four-team session', () => {
+    state.session = { ...SESSION, teamNames: { A: 'Merah', B: 'Merah', C: 'Kuning', D: 'Kuning' } }
+    state.slots = emptySlots(['A', 'B', 'C', 'D'])
+    view()
+    expect(screen.getByText('Team B Merah')).toBeTruthy()
+    expect(screen.getByText('Team D Kuning')).toBeTruthy()
+    expect(screen.getByText('0/44 penuh')).toBeTruthy()
+    expect(screen.getByText('Tekan posisi kosong untuk daftar — 44 lagi kosong.')).toBeTruthy()
   })
 
   it('claims a slot through the name sheet', async () => {

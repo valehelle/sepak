@@ -1,3 +1,4 @@
+import { bibFor, type Bib } from '../lib/bibs'
 import { PITCH_ROWS, positionLabel, type Position, type TeamKey } from '../lib/positions'
 import type { Slot } from '../data/types'
 import { SlotChip, type SlotView } from './SlotChip'
@@ -15,10 +16,10 @@ export type TeamViewProps = {
 
 /** The swatch beside the team name, so the heading and the bibs on the pitch
  *  below it are obviously the same team. */
-const SWATCH: Record<TeamKey, string> = {
-  A: 'bg-merah',
-  B: 'bg-putih',
-  C: 'bg-kuning',
+export const SWATCH: Record<Bib, string | undefined> = {
+  merah: 'bg-merah',
+  putih: 'bg-putih',
+  kuning: 'bg-kuning',
 }
 
 export function toViews(
@@ -46,12 +47,13 @@ export function PitchTeam({
   onSelect,
 }: TeamViewProps) {
   const views = toViews(slots, mySlotIds)
+  const bib = bibFor(team, teamName)
   const filled = slots.filter((slot) => slot.playerName !== null).length
 
   return (
     <section>
       <div className="mb-2 flex items-center gap-2 px-1">
-        <span className={`h-3 w-3 rounded-sm ${SWATCH[team]}`} aria-hidden="true" />
+        <span className={`h-3 w-3 rounded-sm ${SWATCH[bib] ?? ''}`} aria-hidden="true" />
         <h3 className="font-kit text-base font-semibold tracking-wide text-white">
           {`Team ${team} ${teamName}`}
         </h3>
@@ -85,7 +87,7 @@ export function PitchTeam({
                 <SlotChip
                   key={position}
                   label={positionLabel(position)}
-                  team={team}
+                  bib={bib}
                   disabled={disabled}
                   adminOverride={adminOverride}
                   onSelect={onSelect}

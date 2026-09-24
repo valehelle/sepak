@@ -1,8 +1,7 @@
 import { POSITIONS, positionLabel } from '../lib/positions'
 import { SlotChip } from './SlotChip'
-import { toViews, type TeamViewProps } from './PitchTeam'
-
-const SWATCH = { A: 'bg-merah', B: 'bg-putih', C: 'bg-kuning' } as const
+import { bibFor } from '../lib/bibs'
+import { SWATCH, toViews, type TeamViewProps } from './PitchTeam'
 
 export function ListTeam({
   team,
@@ -14,11 +13,12 @@ export function ListTeam({
   onSelect,
 }: TeamViewProps) {
   const views = toViews(slots, mySlotIds)
+  const bib = bibFor(team, teamName)
 
   return (
     <section className="rounded-lg bg-night-2 p-3">
       <div className="mb-2 flex items-center gap-2">
-        <span className={`h-3 w-3 rounded-sm ${SWATCH[team]}`} aria-hidden="true" />
+        <span className={`h-3 w-3 rounded-sm ${SWATCH[bib] ?? ''}`} aria-hidden="true" />
         <h3 className="font-kit text-base font-semibold tracking-wide text-white">
           {`Team ${team} ${teamName}`}
         </h3>
@@ -28,7 +28,7 @@ export function ListTeam({
           <li key={position}>
             <SlotChip
               label={positionLabel(position)}
-              team={team}
+              bib={bib}
               disabled={disabled}
               adminOverride={adminOverride}
               onSelect={onSelect}

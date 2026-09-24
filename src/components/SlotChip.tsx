@@ -1,21 +1,22 @@
-import type { Position, TeamKey } from '../lib/positions'
+import type { Bib } from '../lib/bibs'
+import type { Position } from '../lib/positions'
 import type { Slot } from '../data/types'
 
 export type SlotView = { slot: Slot | null; position: Position; mine: boolean }
 
-/** Bib colours carry team identity, so the chip needs to know whose pitch it
- *  is standing on. Dark text on every bib: red at this saturation and yellow
- *  both fail white text at small sizes. */
-const BIB: Record<TeamKey, string> = {
-  A: 'bg-merah text-white',
-  B: 'bg-putih text-night',
-  C: 'bg-kuning text-night',
+/** Bib colours carry team identity, so the chip needs to know which bib its
+ *  team is wearing. White text on red; dark text on white and on yellow,
+ *  where white fails at small sizes. */
+const BIB_CLASS: Record<Bib, string | undefined> = {
+  merah: 'bg-merah text-white',
+  putih: 'bg-putih text-night',
+  kuning: 'bg-kuning text-night',
 }
 
 type SlotChipProps = {
   view: SlotView
   label: string
-  team: TeamKey
+  bib: Bib
   disabled: boolean
   adminOverride?: boolean
   onSelect: (view: SlotView) => void
@@ -24,7 +25,7 @@ type SlotChipProps = {
 export function SlotChip({
   view,
   label,
-  team,
+  bib,
   disabled,
   adminOverride = false,
   onSelect,
@@ -56,7 +57,7 @@ export function SlotChip({
           'relative grid h-9 w-9 place-items-center rounded-lg font-kit text-[13px] font-bold leading-none tracking-tight',
           'shadow-[0_2px_6px_rgba(0,0,0,0.45)] transition',
           taken
-            ? BIB[team]
+            ? (BIB_CLASS[bib] ?? '')
             : // An open slot is the only thing a player can act on, so it is
               // drawn to be found: bright, dashed, and the one thing on the
               // pitch that is lighter than the turf.

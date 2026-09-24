@@ -14,7 +14,7 @@ test.afterEach(async () => {
 test('a player claims, sees, and releases a slot', async ({ page }) => {
   await page.goto(`s/${sessionId}`)
   await expect(page.getByText('E2E Geng')).toBeVisible()
-  await expect(page.getByText('0/33 penuh')).toBeVisible()
+  await expect(page.getByText('0/44 penuh')).toBeVisible()
 
   await page.getByRole('button', { name: /^GK/ }).first().click()
   await page.getByLabel('Nama').fill('Hazmi')
@@ -22,14 +22,14 @@ test('a player claims, sees, and releases a slot', async ({ page }) => {
   await page.getByRole('button', { name: 'Ambil slot' }).click()
 
   await expect(page.getByText('Hazmi')).toBeVisible()
-  await expect(page.getByText('1/33 penuh')).toBeVisible()
+  await expect(page.getByText('1/44 penuh')).toBeVisible()
   await expect(page.getByText(/Slot anda: Team A Merah — GK/)).toBeVisible()
 
   await page.getByRole('button', { name: /GK.*Hazmi/ }).click()
   // Emptying a slot arms first: one tap is a mis-tap away from losing it.
   await page.getByRole('button', { name: 'Lepaskan slot' }).click()
   await page.getByRole('button', { name: 'Ya, lepaskan slot' }).click()
-  await expect(page.getByText('0/33 penuh')).toBeVisible()
+  await expect(page.getByText('0/44 penuh')).toBeVisible()
 })
 
 test('a player ticks their own slot as paid, and the tick shows on the pitch', async ({ page }) => {
@@ -116,7 +116,7 @@ test('two players racing one slot: one wins, the other is told', async ({ browse
   expect(oneLost).not.toBe(twoLost)
 
   // Exactly one name landed.
-  await expect(pageOne.getByText('1/33 penuh')).toBeVisible({ timeout: 10_000 })
+  await expect(pageOne.getByText('1/44 penuh')).toBeVisible({ timeout: 10_000 })
 
   await one.close()
   await two.close()
@@ -159,7 +159,7 @@ test('a player switches position, keeping the paid tick', async ({ page }) => {
   // The tick travelled, and the slot left behind is empty again.
   await expect(page.getByRole('button', { name: /ST.*Hazmi.*dah bayar/ })).toBeVisible()
   await expect(page.getByRole('button', { name: /^GK — kosong/ }).first()).toBeVisible()
-  await expect(page.getByText('1/33 penuh')).toBeVisible()
+  await expect(page.getByText('1/44 penuh')).toBeVisible()
 })
 
 test('releasing offers the group message, with the freed position named', async ({ page }) => {
