@@ -36,11 +36,10 @@ export type WhatsAppInput = {
    *  this fixture rather than the site-wide one. Optional, so a caller
    *  without an origin still produces the message unchanged. */
   shareUrl?: string
-  /** One line naming what just happened, from describeChange below. It leads
-   *  the message rather than trailing it: WhatsApp's chat list previews the
-   *  first line, so a change announced anywhere else is invisible until
-   *  somebody opens a message that looks like every other paste. Optional,
-   *  so the organiser's plain copy is unchanged. */
+  /** One line naming what just happened, from describeChange below. It sits
+   *  right under the warning at the top, where it is seen on opening the
+   *  message rather than after scrolling past the list. Optional: the plain
+   *  copy has no change to announce. */
   change?: string
 }
 
@@ -90,9 +89,11 @@ const key = (team: TeamKey, position: Position): string => `${team}:${position}`
  *  phones and desktop, and it survives being pasted anywhere else. */
 const PAID_MARK = '✅'
 
-/** Sent with every announced change, because the list in the group is a
- *  copy and the site is the original -- somebody editing the copy by hand
- *  is how the two drift apart. */
+/** The first line of every copy. The list in the group is a copy and the
+ *  site is the original, and people were still editing the copy by hand --
+ *  which is how the two drift apart. First, because WhatsApp's chat list
+ *  previews the first line, and because whoever goes to edit the list
+ *  starts reading at the top. */
 const NO_EDIT_WARNING =
   '⚠️ Jangan edit senarai ni terus — update kat website, lepas tu copy senarai baru.'
 
@@ -150,19 +151,14 @@ export function buildWhatsAppMessage(input: WhatsAppInput): string {
   )
   const waitlist = waitlistBlock(input.waitlist ?? [])
   const link = input.shareUrl === undefined || input.shareUrl === '' ? [] : [input.shareUrl]
-  // The warning rides with the change, not with every copy: the organiser
-  // pasting a fresh list has not been told off, and telling the group every
-  // time would wear out fast.
-  const announced = input.change === undefined || input.change === ''
-  const lead = announced ? [] : [input.change]
-  const warning = announced ? [] : [NO_EDIT_WARNING]
+  const change = input.change === undefined || input.change === '' ? [] : [input.change]
+  const top = [NO_EDIT_WARNING, ...change].join('\n')
 
   return [
-    ...lead,
+    top,
     header,
     ...teams,
     ...(waitlist === null ? [] : [waitlist]),
-    ...warning,
     ...link,
   ].join('\n\n')
 }

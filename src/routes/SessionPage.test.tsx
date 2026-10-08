@@ -1032,8 +1032,9 @@ describe('SessionPage', () => {
       await userEvent.click(screen.getByRole('button', { name: 'Salin untuk WhatsApp' }))
       await waitFor(() => expect(writeText).toHaveBeenCalled())
       const copied = String(writeText.mock.calls[0]?.[0] ?? '')
-      expect(copied.startsWith('Sesi 005')).toBe(true)
-      expect(copied).not.toContain('Jangan edit')
+      // The warning, then straight into the list: no change line.
+      expect(copied).toMatch(/^⚠️ Jangan edit[^\n]*\n\nSesi 005/)
+      expect(copied).not.toContain('→ kosong')
     })
   })
 })

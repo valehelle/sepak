@@ -40,7 +40,11 @@ function input(overrides: Partial<WhatsAppInput> = {}): WhatsAppInput {
   }
 }
 
-const EXPECTED = `Sesi 005 Geng Turun Peluh
+const WARNING = '⚠️ Jangan edit senarai ni terus — update kat website, lepas tu copy senarai baru.'
+
+const EXPECTED = `${WARNING}
+
+Sesi 005 Geng Turun Peluh
 📅 Tarikh : *16/09/2026 (RABU)*
 🕒 Masa: 8:00 PM
 🏟️ Tempat: Padang Presint 8
@@ -157,7 +161,6 @@ describe('buildWhatsAppMessage', () => {
     const withEmptyArray = buildWhatsAppMessage(input({ waitlist: [] }))
     const withUndefined = buildWhatsAppMessage(input())
     expect(withEmptyArray).not.toContain('Senarai Tunggu')
-    // Byte-identical to the message before the waitlist feature existed.
     expect(withEmptyArray).toBe(EXPECTED)
     expect(withUndefined).toBe(EXPECTED)
   })
@@ -211,21 +214,16 @@ describe('buildWhatsAppMessage', () => {
     })
   })
 
-  describe('the change line', () => {
-    it('leads the message, because WhatsApp previews the first line only', () => {
-      const message = buildWhatsAppMessage(input({ change: '🔴 Team Merah — GK: Amir → kosong' }))
-      expect(message.startsWith('🔴 Team Merah — GK: Amir → kosong\n\nSesi 005')).toBe(true)
-    })
+  it('opens every copy with the warning, so the chat preview shows it', () => {
+    expect(buildWhatsAppMessage(input()).split('\n')[0]).toBe(WARNING)
+    // Once, not again at the bottom.
+    expect(buildWhatsAppMessage(input()).split(WARNING).length).toBe(2)
+  })
 
-    it('carries the warning with it, above the link', () => {
-      const message = buildWhatsAppMessage(input({
-        change: '🔴 Team Merah — GK: Amir → kosong',
-        shareUrl: 'https://valehelle.github.io/sepak/s/abc',
-      }))
-      expect(message.endsWith(
-        '\n\n⚠️ Jangan edit senarai ni terus — update kat website, lepas tu copy senarai baru.' +
-        '\n\nhttps://valehelle.github.io/sepak/s/abc',
-      )).toBe(true)
+  describe('the change line', () => {
+    it('sits right under the warning, at the top', () => {
+      const message = buildWhatsAppMessage(input({ change: '🔴 Team Merah — GK: Amir → kosong' }))
+      expect(message.startsWith(`${WARNING}\n🔴 Team Merah — GK: Amir → kosong\n\nSesi 005`)).toBe(true)
     })
 
     it('changes nothing at all when there is no change to announce', () => {
