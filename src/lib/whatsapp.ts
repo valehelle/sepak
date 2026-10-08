@@ -95,7 +95,7 @@ const PAID_MARK = '✅'
  *  previews the first line, and because whoever goes to edit the list
  *  starts reading at the top. */
 const NO_EDIT_WARNING =
-  '⚠️ Jangan edit senarai ni terus — update kat website, lepas tu copy senarai baru.'
+  '⚠️ Jangan copy & edit mesej ni — daftar, tukar posisi & tanda bayar kat link.'
 
 function rosterOf(slots: readonly WhatsAppSlot[]): Roster {
   const roster: Roster = new Map()
@@ -129,19 +129,73 @@ function waitlistBlock(waitlist: readonly WhatsAppWaitlistEntry[]): string | nul
   return ['Senarai Tunggu', ...lines].join('\n')
 }
 
-/** Regenerates the organiser's existing WhatsApp message so the site
- *  complements the group rather than competing with it. */
-export function buildWhatsAppMessage(input: WhatsAppInput): string {
-  const roster = rosterOf(input.slots)
+function headerBlock(input: WhatsAppInput): string {
   const fee = formatFees(input.feeMyr, input.feeGkMyr ?? null)
-
-  const header = [
+  return [
     `Sesi ${String(input.sessionNo).padStart(3, '0')} ${input.title}`,
     `📅 Tarikh : *${formatPlayDate(input.playDate)}*`,
     `🕒 Masa: ${formatStartTime(input.startTime)}`,
     `🏟️ Tempat: ${input.venue}`,
     ...(fee === null ? [] : [`💵 Yuran: ${fee}`]),
   ].join('\n')
+}
+
+/** The warning, and under it the change being announced, if any. */
+function topBlock(input: WhatsAppInput): string {
+  const change = input.change === undefined || input.change === '' ? [] : [input.change]
+  return [NO_EDIT_WARNING, ...change].join('\n')
+}
+
+/** Beyond this many open slots the breakdown is a wall of "×3", and the
+ *  useful fact is simply that there is plenty of room. */
+const OPEN_LISTED_UP_TO = 6
+
+/** "GK, CB ×2, ST": the open positions, in pitch order, by the label people
+ *  use. Which team each is on is the page's job. */
+function openPositions(slots: readonly WhatsAppSlot[]): string {
+  const counts = new Map<string, number>()
+  for (const position of POSITIONS) {
+    const open = slots.filter((slot) => slot.position === position && !slot.playerName?.trim()).length
+    if (open === 0) continue
+    const label = positionLabel(position)
+    counts.set(label, (counts.get(label) ?? 0) + open)
+  }
+  return [...counts].map(([label, count]) => (count === 1 ? label : `${label} ×${count}`)).join(', ')
+}
+
+/** What the group gets: the state of the session, not the list. A pasted
+ *  list of names looked like the record and got edited by hand; this has
+ *  nothing in it to edit, and sends people to the link for the real one. */
+export function buildSummaryMessage(input: WhatsAppInput): string {
+  const filled = input.slots.filter((slot) => slot.playerName?.trim()).length
+  const total = input.slots.length
+  const open = total - filled
+  const paid = input.slots.filter((slot) => slot.playerName?.trim() && slot.paid === true).length
+  const fee = formatFees(input.feeMyr, input.feeGkMyr ?? null)
+  const queued = input.waitlist?.length ?? 0
+
+  const status = [
+    open === 0
+      ? `📋 ${filled}/${total} penuh`
+      : open <= OPEN_LISTED_UP_TO
+        ? `📋 ${filled}/${total} penuh · ${open} kosong: ${openPositions(input.slots)}`
+        : `📋 ${filled}/${total} penuh · ${open} kosong`,
+    ...(fee !== null && filled > 0
+      ? [`💵 ${paid}/${filled} dah bayar — dah transfer? Buka link, tekan "Tandakan dah bayar"`]
+      : []),
+    ...(queued > 0 ? [`⏳ Senarai tunggu: ${queued} orang`] : []),
+  ].join('\n')
+
+  const link = input.shareUrl === undefined || input.shareUrl === '' ? [] : [`Senarai penuh & daftar 👉 ${input.shareUrl}`]
+
+  return [topBlock(input), headerBlock(input), status, ...link].join('\n\n')
+}
+
+/** The full list, names and ticks included. Admin-only on the page now: the
+ *  group gets buildSummaryMessage. */
+export function buildWhatsAppMessage(input: WhatsAppInput): string {
+  const roster = rosterOf(input.slots)
+  const header = headerBlock(input)
 
   // Only the teams the session has: an older session has three, and an
   // empty Team D block would read as eleven open places.
@@ -151,14 +205,38 @@ export function buildWhatsAppMessage(input: WhatsAppInput): string {
   )
   const waitlist = waitlistBlock(input.waitlist ?? [])
   const link = input.shareUrl === undefined || input.shareUrl === '' ? [] : [input.shareUrl]
-  const change = input.change === undefined || input.change === '' ? [] : [input.change]
-  const top = [NO_EDIT_WARNING, ...change].join('\n')
-
   return [
-    top,
+    topBlock(input),
     header,
     ...teams,
     ...(waitlist === null ? [] : [waitlist]),
     ...link,
   ].join('\n\n')
+}
+
+/** For an admin chasing payment: who has a place and has not ticked paid,
+ *  numbered, with where they play so two Amirs are told apart. */
+export function buildUnpaidMessage(input: WhatsAppInput): string {
+  const title = `Sesi ${String(input.sessionNo).padStart(3, '0')}, ${formatShortDate(input.playDate)}`
+  const unpaid = TEAM_KEYS.flatMap((team) =>
+    POSITIONS.flatMap((position) =>
+      input.slots
+        .filter((slot) => slot.team === team && slot.position === position && slot.playerName?.trim() && slot.paid !== true)
+        .map((slot) => `${slot.playerName?.trim() ?? ''} (${teamLabel(input.teamNames[team])} — ${positionLabel(position)})`),
+    ),
+  )
+  if (unpaid.length === 0) return `✅ Semua dah bayar — ${title}`
+
+  const link = input.shareUrl === undefined || input.shareUrl === '' ? '' : ` 👉 ${input.shareUrl}`
+  return [
+    `💵 Belum bayar — ${title}`,
+    unpaid.map((line, index) => `${index + 1}. ${line}`).join('\n'),
+    `Dah transfer? Buka link, tekan "Tandakan dah bayar"${link}`,
+  ].join('\n\n')
+}
+
+/** "14/10", from the session's YYYY-MM-DD. */
+function formatShortDate(playDate: string): string {
+  const [, month, day] = playDate.split('-')
+  return month === undefined || day === undefined ? playDate : `${day}/${month}`
 }

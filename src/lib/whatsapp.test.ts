@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest'
 import { POSITIONS, TEAM_KEYS, type TeamKey } from './positions'
 import {
+  buildSummaryMessage,
+  buildUnpaidMessage,
   buildWhatsAppMessage,
   describeChange,
   type RosterChange,
@@ -40,7 +42,7 @@ function input(overrides: Partial<WhatsAppInput> = {}): WhatsAppInput {
   }
 }
 
-const WARNING = '⚠️ Jangan edit senarai ni terus — update kat website, lepas tu copy senarai baru.'
+const WARNING = '⚠️ Jangan copy & edit mesej ni — daftar, tukar posisi & tanda bayar kat link.'
 
 const EXPECTED = `${WARNING}
 
@@ -265,6 +267,70 @@ describe('buildWhatsAppMessage', () => {
     it('has nothing to announce when a tick is taken back', () => {
       const change: RosterChange = { kind: 'unpaid', at, playerName: 'Amir' }
       expect(describeChange(change)).toBeNull()
+    })
+  })
+
+  describe('the summary the group gets', () => {
+    const full = () => slots().map((slot) => ({ ...slot, playerName: slot.playerName ?? 'Ganti' }))
+
+    it('has no names in it, only the state of the session and the link', () => {
+      const message = buildSummaryMessage(input({ shareUrl: 'https://valehelle.github.io/sepak/s/abc' }))
+      expect(message).not.toContain('Zulazhar')
+      expect(message.split('\n')[0]).toBe(WARNING)
+      expect(message).toContain('Sesi 005 Geng Turun Peluh')
+      expect(message.endsWith('Senarai penuh & daftar 👉 https://valehelle.github.io/sepak/s/abc')).toBe(true)
+    })
+
+    it('names the open positions when only a few are left', () => {
+      const message = buildSummaryMessage(input())
+      // The fixture leaves A-GK and C-GK empty.
+      expect(message).toContain('📋 31/33 penuh · 2 kosong: GK ×2')
+    })
+
+    it('just counts them when there is plenty of room', () => {
+      const empty = slots().map((slot) => ({ ...slot, playerName: null }))
+      const message = buildSummaryMessage(input({ slots: empty }))
+      expect(message).toContain('📋 0/33 penuh · 33 kosong')
+      expect(message).not.toContain('kosong:')
+    })
+
+    it('says full when it is full', () => {
+      expect(buildSummaryMessage(input({ slots: full() }))).toContain('📋 33/33 penuh\n')
+    })
+
+    it('counts who has paid, and says how to tick', () => {
+      const someonePaid = full().map((slot, index) => ({ ...slot, paid: index < 5 }))
+      expect(buildSummaryMessage(input({ slots: someonePaid }))).toContain(
+        '💵 5/33 dah bayar — dah transfer? Buka link, tekan "Tandakan dah bayar"',
+      )
+      expect(buildSummaryMessage(input({ slots: someonePaid, feeMyr: null }))).not.toContain('dah bayar')
+    })
+
+    it('counts the queue, and leaves it out when nobody is waiting', () => {
+      const queued = buildSummaryMessage(input({ waitlist: [{ playerName: 'Faiz', positions: ['ST'] }] }))
+      expect(queued).toContain('⏳ Senarai tunggu: 1 orang')
+      expect(buildSummaryMessage(input())).not.toContain('Senarai tunggu')
+    })
+
+    it('puts an announced change under the warning', () => {
+      const message = buildSummaryMessage(input({ change: '🔴 Team Merah — GK: Amir → kosong' }))
+      expect(message.startsWith(`${WARNING}\n🔴 Team Merah — GK: Amir → kosong\n\nSesi 005`)).toBe(true)
+    })
+  })
+
+  describe('the unpaid list for admins', () => {
+    it('numbers who has not paid, with where they play, and ends with the link', () => {
+      const someonePaid = slots().map((slot) => ({ ...slot, paid: slot.team !== 'A' }))
+      const message = buildUnpaidMessage(input({ slots: someonePaid, shareUrl: 'https://x.test/s/1' }))
+      expect(message.startsWith('💵 Belum bayar — Sesi 005, 16/09\n\n1. kimie (Team Merah — LB)\n')).toBe(true)
+      expect(message).toContain('10. Zulazhar (Team Merah — ST)')
+      expect(message).not.toContain('Isaac')
+      expect(message.endsWith('Dah transfer? Buka link, tekan "Tandakan dah bayar" 👉 https://x.test/s/1')).toBe(true)
+    })
+
+    it('says so when everyone has paid', () => {
+      const allPaid = slots().map((slot) => ({ ...slot, paid: true }))
+      expect(buildUnpaidMessage(input({ slots: allPaid }))).toBe('✅ Semua dah bayar — Sesi 005, 16/09')
     })
   })
 })

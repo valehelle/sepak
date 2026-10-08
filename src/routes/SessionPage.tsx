@@ -36,7 +36,14 @@ import { TEAM_KEYS, formatPositions, positionLabel, type Position, type TeamKey 
 import { rememberSession } from '../lib/lastSession'
 import { rememberPlayer } from '../lib/playerMemory'
 import { ShareChangeSheet } from '../components/ShareChangeSheet'
-import { buildWhatsAppMessage, describeChange, type RosterChange } from '../lib/whatsapp'
+import {
+  buildSummaryMessage,
+  buildUnpaidMessage,
+  buildWhatsAppMessage,
+  describeChange,
+  type RosterChange,
+  type WhatsAppInput,
+} from '../lib/whatsapp'
 
 const VIEW_MODE_KEY = 'sepak.viewMode'
 
@@ -137,34 +144,47 @@ export default function SessionPage() {
   // Null when there is nothing worth telling the group -- an un-tick, say.
   const changeLine = change === null ? null : describeChange(change)
 
-  /** The group message. `line` leads it when a change is being announced;
-   *  the organiser's own copy button passes nothing and gets exactly the
-   *  message it always did. */
-  const buildMessage = useCallback(
-    (line: string | null): string => {
-      if (session === null) return ''
-      return buildWhatsAppMessage({
-        sessionNo: session.sessionNo,
-        title: session.title,
-        playDate: session.playDate,
-        startTime: session.startTime,
-        venue: session.venue,
-        feeMyr: session.feeMyr,
-        feeGkMyr: session.feeGkMyr,
-        teamNames: session.teamNames,
-        slots: slots.map(({ team, position, playerName, paid }) => ({ team, position, playerName, paid })),
-        waitlist: waitlist.map(({ playerName, positions }) => ({ playerName, positions })),
-        // The path form, not the fragment one in the address bar: only the
-        // path has a page of its own carrying this session's Open Graph tags.
-        shareUrl: `${window.location.origin}${import.meta.env.BASE_URL}s/${session.id}`,
-        change: line ?? '',
-      })
-    },
+  /** Everything the group messages are built from. `line` is the change
+   *  being announced, when there is one. */
+  const messageInput = useCallback(
+    (line: string | null): WhatsAppInput => ({
+      sessionNo: session?.sessionNo ?? 0,
+      title: session?.title ?? '',
+      playDate: session?.playDate ?? '',
+      startTime: session?.startTime ?? '',
+      venue: session?.venue ?? '',
+      feeMyr: session?.feeMyr ?? null,
+      feeGkMyr: session?.feeGkMyr ?? null,
+      teamNames: session?.teamNames ?? { A: '', B: '', C: '', D: '' },
+      slots: slots.map(({ team, position, playerName, paid }) => ({ team, position, playerName, paid })),
+      waitlist: waitlist.map(({ playerName, positions }) => ({ playerName, positions })),
+      // The path form, not the fragment one in the address bar: only the
+      // path has a page of its own carrying this session's Open Graph tags.
+      shareUrl: session === null ? '' : `${window.location.origin}${import.meta.env.BASE_URL}s/${session.id}`,
+      change: line ?? '',
+    }),
     [session, slots, waitlist],
+  )
+
+  /** The group message: a summary that sends people to the link, never the
+   *  list itself (see buildSummaryMessage). */
+  const buildMessage = useCallback(
+    (line: string | null): string => (session === null ? '' : buildSummaryMessage(messageInput(line))),
+    [session, messageInput],
   )
 
   const whatsappText = useMemo(() => buildMessage(null), [buildMessage])
   const changeText = useMemo(() => buildMessage(changeLine), [buildMessage, changeLine])
+  // Admin-only copies: the full list with names and ticks, and who has not
+  // paid yet, for chasing.
+  const fullListText = useMemo(
+    () => (isAdmin && session !== null ? buildWhatsAppMessage(messageInput(null)) : ''),
+    [isAdmin, session, messageInput],
+  )
+  const unpaidText = useMemo(
+    () => (isAdmin && session !== null ? buildUnpaidMessage(messageInput(null)) : ''),
+    [isAdmin, session, messageInput],
+  )
 
   function toggleViewMode() {
     const next = viewMode === 'pitch' ? 'list' : 'pitch'
@@ -271,10 +291,15 @@ export default function SessionPage() {
    *  carries its own snapshot of the slot, so it is updated alongside the
    *  list or the checkbox would not move until the sheet was reopened. */
   function onTogglePaid(paid: boolean) {
-    const view = selected
-    const slot = view?.slot
-    if (view === null || view === undefined || slot === undefined || slot === null) return
+    const slot = selected?.slot
+    if (slot === undefined || slot === null) return
+    markPaid(slot, paid)
+  }
 
+  /** The tick, from the slot's sheet or from the button in "Slot anda".
+   *  `selected` carries its own snapshot of the slot, so it is kept in step
+   *  too, or a checkbox in an open sheet would not move until reopened. */
+  function markPaid(slot: Slot, paid: boolean) {
     const withPaid = (next: Slot) => {
       applyLocal(next)
       setSelected((current) =>
@@ -476,13 +501,33 @@ export default function SessionPage() {
             <p className="font-sans text-[13px] text-white/60">
               Nak tukar posisi? Tekan mana-mana slot kosong.
             </p>
-            {/* Nothing else on the page says where the tick lives, so the
-                panel that already names your slot points at it. */}
-            <p className="font-sans text-[13px] text-white/60">
-              {mySlot.paid
-                ? '✓ Dah bayar.'
-                : 'Belum bayar — tekan slot anda untuk tandakan bila dah bayar.'}
-            </p>
+            {/* The most asked question was how to tick, so the tick is a
+                button here, at the top of the page, rather than inside the
+                slot's sheet on the pitch. */}
+            {session.feeMyr !== null && session.feeMyr > 0 && (
+              mySlot.paid ? (
+                <div className="flex items-center gap-3 pt-1">
+                  <p className="font-kit text-[15px] text-turf-lit">✓ Dah bayar</p>
+                  <button
+                    type="button"
+                    disabled={busy || closed}
+                    onClick={() => markPaid(mySlot, false)}
+                    className="font-kit text-[13px] text-white/50 underline decoration-white/20 underline-offset-4"
+                  >
+                    Batal
+                  </button>
+                </div>
+              ) : (
+                <Button
+                  variant="primary"
+                  disabled={busy || closed}
+                  onClick={() => markPaid(mySlot, true)}
+                  className="mt-1 w-full"
+                >
+                  💵 Tandakan dah bayar
+                </Button>
+              )
+            )}
           </div>
         ) : (
           // Without this, nothing on the page says what to do — every slot looks
@@ -553,6 +598,12 @@ export default function SessionPage() {
         </button>
 
         <CopyButton text={whatsappText} label="Salin untuk WhatsApp" />
+        {isAdmin && (
+          <>
+            <CopyButton text={fullListText} label="Salin senarai penuh" />
+            <CopyButton text={unpaidText} label="Salin senarai belum bayar" />
+          </>
+        )}
       </div>
 
       <div className="space-y-4">

@@ -720,7 +720,7 @@ describe('SessionPage', () => {
     await waitFor(() => expect(screen.queryByText(/Faiz/)).toBeNull())
   })
 
-  it('carries the paid tick into the WhatsApp text', async () => {
+  it('copies a summary for the group, with no names in it', async () => {
     state.slots = state.slots.map((slot) =>
       slot.id === 'A-ST' ? { ...slot, playerName: 'Hazmi', claimedAt: 'now', paid: true } : slot,
     )
@@ -728,17 +728,59 @@ describe('SessionPage', () => {
     view()
     await userEvent.click(screen.getByRole('button', { name: /Salin untuk WhatsApp/ }))
     await waitFor(() => expect(writeText).toHaveBeenCalled())
-    expect(String(firstOf(firstOf(writeText.mock.calls)))).toContain('ST- Hazmi ✅')
+    const copied = String(firstOf(firstOf(writeText.mock.calls)))
+    expect(copied).toContain('💵 1/1 dah bayar')
+    expect(copied).not.toContain('Hazmi')
   })
 
-  it('includes the waitlist in the WhatsApp text', async () => {
+  it('gives players no full-list or unpaid copy, and gives admins both', () => {
+    view()
+    expect(screen.queryByRole('button', { name: 'Salin senarai penuh' })).toBeNull()
+    expect(screen.queryByRole('button', { name: 'Salin senarai belum bayar' })).toBeNull()
+  })
+
+  it('lets an admin copy the full list and the unpaid list', async () => {
+    authState.role = 'admin'
+    authState.email = 'admin@example.com'
+    state.slots = state.slots.map((slot) =>
+      slot.id === 'A-ST'
+        ? { ...slot, playerName: 'Hazmi', claimedAt: 'now', paid: true }
+        : slot.id === 'A-GK'
+          ? { ...slot, playerName: 'Amir', claimedAt: 'now', paid: false }
+          : slot,
+    )
+    writeText.mockResolvedValue(undefined)
+    view()
+    await userEvent.click(screen.getByRole('button', { name: 'Salin senarai penuh' }))
+    await waitFor(() => expect(writeText).toHaveBeenCalledTimes(1))
+    expect(String(writeText.mock.calls[0]?.[0])).toContain('ST- Hazmi ✅')
+
+    await userEvent.click(screen.getByRole('button', { name: 'Salin senarai belum bayar' }))
+    await waitFor(() => expect(writeText).toHaveBeenCalledTimes(2))
+    const unpaid = String(writeText.mock.calls[1]?.[0])
+    expect(unpaid).toContain('1. Amir (Team Merah — GK)')
+    expect(unpaid).not.toContain('Hazmi')
+  })
+
+  it('ticks paid from the button at the top, without opening the slot', async () => {
+    state.slots = withClaim(state.slots, 'A-ST')
+    state.mySlotIds = new Set(['A-ST'])
+    setSlotPaid.mockResolvedValue({ ...findSlot(state.slots, 'A-ST'), paid: true })
+    view()
+    await userEvent.click(screen.getByRole('button', { name: '💵 Tandakan dah bayar' }))
+    await waitFor(() => expect(setSlotPaid).toHaveBeenCalledWith('A-ST', true))
+    expect(screen.queryByRole('dialog', { name: /Team Merah/ })).toBeNull()
+  })
+
+  it('counts the queue in the WhatsApp text, without names', async () => {
     state.waitlist = [{ id: 'wait-1', sessionId: 'session-1', playerName: 'Faiz', positions: ['GK'], createdAt: 't1' }]
     writeText.mockResolvedValue(undefined)
     view()
     await userEvent.click(screen.getByRole('button', { name: /Salin untuk WhatsApp/ }))
     await waitFor(() => expect(writeText).toHaveBeenCalled())
     const copied = String(firstOf(firstOf(writeText.mock.calls)))
-    expect(copied).toContain('Senarai Tunggu\n1. Faiz (GK)')
+    expect(copied).toContain('⏳ Senarai tunggu: 1 orang')
+    expect(copied).not.toContain('Faiz')
   })
   it('marks your own slot paid and keeps the sheet open, so a mis-tap can be undone', async () => {
     state.slots = withClaim(state.slots, 'A-ST')
@@ -1032,8 +1074,8 @@ describe('SessionPage', () => {
       await userEvent.click(screen.getByRole('button', { name: 'Salin untuk WhatsApp' }))
       await waitFor(() => expect(writeText).toHaveBeenCalled())
       const copied = String(writeText.mock.calls[0]?.[0] ?? '')
-      // The warning, then straight into the list: no change line.
-      expect(copied).toMatch(/^⚠️ Jangan edit[^\n]*\n\nSesi 005/)
+      // The warning, then straight into the session: no change line.
+      expect(copied).toMatch(/^⚠️ Jangan copy[^\n]*\n\nSesi 005/)
       expect(copied).not.toContain('→ kosong')
     })
   })
