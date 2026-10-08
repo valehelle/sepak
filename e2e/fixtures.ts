@@ -1,4 +1,5 @@
 import { execFileSync } from 'node:child_process'
+import { expect, type Page } from '@playwright/test'
 import { createClient, type SupabaseClient } from '@supabase/supabase-js'
 
 function asRecord(value: unknown): Record<string, unknown> {
@@ -85,4 +86,30 @@ export async function fillAllSlotsExcept(
     .update({ player_name: 'Filler', claim_token: crypto.randomUUID(), claimed_at: new Date().toISOString() })
     .in('id', targets)
   if (error !== null) throw new Error(`fillAllSlotsExcept update failed: ${error.message}`)
+}
+
+const players: string[] = []
+
+/** Opens the session as a freshly signed-in player, signing in through the
+ *  page itself with email and password. Every booking needs an account
+ *  since 0019_accounts.sql; Google cannot be driven in a test, and the
+ *  email path ends in the same signed-in state. */
+export async function openSignedIn(page: Page, sessionId: string): Promise<void> {
+  const email = `e2e-${crypto.randomUUID()}@example.test`
+  const password = 'e2e-player-password'
+  const { data, error } = await admin().auth.admin.createUser({ email, password, email_confirm: true })
+  if (error !== null || data.user === null) throw new Error(`createUser failed: ${error?.message ?? 'no user'}`)
+  players.push(data.user.id)
+
+  await page.goto(`s/${sessionId}`)
+  await page.getByRole('button', { name: 'Log masuk', exact: true }).click()
+  const sheet = page.getByRole('dialog')
+  await sheet.getByLabel('Emel').fill(email)
+  await sheet.getByLabel('Kata laluan').fill(password)
+  await sheet.getByRole('button', { name: 'Log masuk', exact: true }).click()
+  await expect(page.getByRole('button', { name: 'Akaun' })).toBeVisible()
+}
+
+export async function dropTestPlayers(): Promise<void> {
+  for (const id of players.splice(0)) await admin().auth.admin.deleteUser(id)
 }

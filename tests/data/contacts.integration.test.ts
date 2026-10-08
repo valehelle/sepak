@@ -1,6 +1,16 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
-import { adminClient, anonClient, deleteSession, seedSession, slotId } from '../helpers/localSupabase'
-import { resetClaimTokenCache } from '../../src/lib/claimToken'
+import {
+  adminClient,
+  anonClient,
+  deletePlayer,
+  deleteSession,
+  newPlayer,
+  seedSession,
+  signInAppClientAs,
+  slotId,
+  type Player,
+} from '../helpers/localSupabase'
+import { supabase } from '../../src/lib/supabase'
 import { SlotActionError, claimSlot } from '../../src/data/slots'
 import { ContactError, getContactPhone } from '../../src/data/contacts'
 
@@ -8,15 +18,20 @@ describe('contacts against local postgres', () => {
   let sessionId = ''
   let ids: Record<string, string | undefined> = {}
 
+  let me: Player
+
   beforeEach(async () => {
-    resetClaimTokenCache()
+    me = await newPlayer('me')
+    await signInAppClientAs(supabase, me)
     const seeded = await seedSession()
     sessionId = seeded.sessionId
     ids = seeded.slotIds
   })
 
   afterEach(async () => {
+    await supabase.auth.signOut()
     await deleteSession(sessionId)
+    await deletePlayer(me)
   })
 
   it('claimSlot stores the phone where only service_role can see it', async () => {
@@ -47,11 +62,11 @@ describe('contacts against local postgres', () => {
     expect(error).not.toBeNull()
   })
 
-  it('anon cannot call contact_phone (no execute grant)', async () => {
+  it('a signed-in player who is not an admin cannot read a phone through contact_phone', async () => {
     const gk = slotId(ids, 'A', 'GK')
     await claimSlot(gk, 'Hazmi', '60123456789')
-    // The app's client is anon here: the RPC must be refused outright, so
-    // the wrapper surfaces an error rather than a number.
+    // The app's client is a plain player here: contact_phone raises
+    // not_admin, so the wrapper surfaces an error rather than a number.
     await expect(getContactPhone({ slotId: gk })).rejects.toBeInstanceOf(ContactError)
   })
 

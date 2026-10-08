@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test'
-import { admin, createTestSession, dropTestSession } from './fixtures'
+import { admin, createTestSession, dropTestSession, dropTestPlayers, openSignedIn } from './fixtures'
 
 let sessionId = ''
 
@@ -8,11 +8,12 @@ test.beforeEach(async () => {
 })
 
 test.afterEach(async () => {
+  await dropTestPlayers()
   await dropTestSession(sessionId)
 })
 
 test('a player claims, sees, and releases a slot', async ({ page }) => {
-  await page.goto(`s/${sessionId}`)
+  await openSignedIn(page, sessionId)
   await expect(page.getByText('E2E Geng')).toBeVisible()
   await expect(page.getByText('0/44 penuh')).toBeVisible()
 
@@ -33,7 +34,7 @@ test('a player claims, sees, and releases a slot', async ({ page }) => {
 })
 
 test('a player ticks their own slot as paid, and the tick shows on the pitch', async ({ page }) => {
-  await page.goto(`s/${sessionId}`)
+  await openSignedIn(page, sessionId)
   await page.getByRole('button', { name: /^GK/ }).first().click()
   await page.getByLabel('Nama').fill('Hazmi')
   await page.getByLabel('Nombor telefon').fill('012-345 6789')
@@ -60,8 +61,8 @@ test('a claim appears live in another browser', async ({ browser }) => {
   const pageOne = await one.newPage()
   const pageTwo = await two.newPage()
 
-  await pageOne.goto(`s/${sessionId}`)
-  await pageTwo.goto(`s/${sessionId}`)
+  await openSignedIn(pageOne, sessionId)
+  await openSignedIn(pageTwo, sessionId)
 
   await pageOne.getByRole('button', { name: /^ST/ }).first().click()
   await pageOne.getByLabel('Nama').fill('Zulazhar')
@@ -81,8 +82,8 @@ test('two players racing one slot: one wins, the other is told', async ({ browse
   const pageOne = await one.newPage()
   const pageTwo = await two.newPage()
 
-  await pageOne.goto(`s/${sessionId}`)
-  await pageTwo.goto(`s/${sessionId}`)
+  await openSignedIn(pageOne, sessionId)
+  await openSignedIn(pageTwo, sessionId)
 
   // Distinct numbers, because these are two different people: one booking
   // per phone per session (0010_one_booking_per_person.sql). Sharing one
@@ -126,13 +127,13 @@ test('a closed session is read-only', async ({ page }) => {
   const { error } = await admin().from('sessions').update({ status: 'closed' }).eq('id', sessionId)
   if (error !== null) throw new Error(`failed to close session: ${error.message}`)
 
-  await page.goto(`s/${sessionId}`)
+  await openSignedIn(page, sessionId)
   await expect(page.getByText('Sesi ditutup')).toBeVisible()
   await expect(page.getByRole('button', { name: /^GK/ }).first()).toBeDisabled()
 })
 
 test('a player switches position, keeping the paid tick', async ({ page }) => {
-  await page.goto(`s/${sessionId}`)
+  await openSignedIn(page, sessionId)
 
   await page.getByRole('button', { name: /^GK/ }).first().click()
   await page.getByLabel('Nama').fill('Hazmi')
@@ -163,7 +164,7 @@ test('a player switches position, keeping the paid tick', async ({ page }) => {
 })
 
 test('releasing offers the group message, with the freed position named', async ({ page }) => {
-  await page.goto(`s/${sessionId}`)
+  await openSignedIn(page, sessionId)
 
   await page.getByRole('button', { name: /^GK/ }).first().click()
   await page.getByLabel('Nama').fill('Hazmi')
@@ -186,7 +187,7 @@ test('releasing offers the group message, with the freed position named', async 
 })
 
 test('the paid tick can still be undone before the group prompt appears', async ({ page }) => {
-  await page.goto(`s/${sessionId}`)
+  await openSignedIn(page, sessionId)
   await page.getByRole('button', { name: /^GK/ }).first().click()
   await page.getByLabel('Nama').fill('Hazmi')
   await page.getByLabel('Nombor telefon').fill('012-345 6789')
@@ -204,4 +205,32 @@ test('the paid tick can still be undone before the group prompt appears', async 
 
   // Ticked then un-ticked is a no-op, so the group is told nothing at all.
   await expect(page.getByText('Senarai dah berubah')).not.toBeVisible()
+})
+
+test('a signed-out tap asks for sign-in, then carries on to the booking', async ({ page }) => {
+  const email = `e2e-${crypto.randomUUID()}@example.test`
+  const password = 'e2e-player-password'
+  const created = await admin().auth.admin.createUser({ email, password, email_confirm: true })
+  expect(created.error).toBeNull()
+
+  await page.goto(`s/${sessionId}`)
+  await page.getByRole('button', { name: /^GK/ }).first().click()
+
+  const sheet = page.getByRole('dialog')
+  await expect(sheet.getByRole('button', { name: 'Log masuk dengan Google' })).toBeVisible()
+  await sheet.getByLabel('Emel').fill(email)
+  await sheet.getByLabel('Kata laluan').fill(password)
+  await sheet.getByRole('button', { name: 'Log masuk', exact: true }).click()
+
+  // Straight on to the slot that was tapped, without tapping it again.
+  await expect(page.getByRole('dialog').getByRole('button', { name: 'Ambil slot' })).toBeVisible()
+  await page.getByLabel('Nama').fill('Baru')
+  await page.getByLabel('Nombor telefon').fill('012-999 8888')
+  await page.getByRole('button', { name: 'Ambil slot' }).click()
+  await expect(page.getByText(/Slot anda: Team Merah — GK/)).toBeVisible()
+
+  // The account remembers the name: the header now shows it.
+  await expect(page.getByRole('button', { name: 'Baru' })).toBeVisible()
+
+  if (created.data.user !== null) await admin().auth.admin.deleteUser(created.data.user.id)
 })

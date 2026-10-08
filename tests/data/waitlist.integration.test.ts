@@ -1,7 +1,9 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { WAITLIST_COLUMNS } from '../../src/data/waitlist'
-import { adminClient, anonClient, deleteSession, seedSession, slotId } from '../helpers/localSupabase'
+import { adminClient, anonClient, deletePlayer, deleteSession, newPlayer, seedSession, slotId, type Player } from '../helpers/localSupabase'
 
+// Raw owner ids for rows seeded straight into the table. No account holds
+// them, which is fine: the trigger tests only care that somebody is queued.
 const TOKEN_A = '11111111-1111-4111-8111-111111111111'
 const TOKEN_B = '22222222-2222-4222-8222-222222222222'
 const FILLER_TOKEN = '99999999-9999-4999-8999-999999999999'
@@ -41,23 +43,26 @@ async function seedWaitlistEntry(sessionId: string, name: string, positions: str
 
 
 /** One booking per phone per session (0010_one_booking_per_person.sql), so
- *  every test "device" needs its own number. Derived from the token, which
- *  is what the rule treats as the device, keeping the two consistent
- *  without a lookup table to forget to update. */
-function phoneFor(token: string): string {
-  return `601${token.replace(/\D/g, '').padEnd(8, '0').slice(0, 8)}`
+ *  every test player needs its own number. Derived from the account id,
+ *  which is what the rule now treats as the person. */
+function phoneFor(player: Player): string {
+  return `601${player.userId.replace(/\D/g, '').padEnd(8, '0').slice(0, 8)}`
 }
 
-function join(client: ReturnType<typeof anonClient>, sessionId: string, name: string, positions: string[], token: string) {
-  return client.rpc('join_waitlist', { p_session_id: sessionId, p_name: name, p_phone: phoneFor(token), p_positions: positions, p_token: token })
+function join(player: Player, sessionId: string, name: string, positions: string[]) {
+  return player.client.rpc('join_waitlist', { p_session_id: sessionId, p_name: name, p_phone: phoneFor(player), p_positions: positions })
 }
 
 describe('waitlist RPCs against local postgres', () => {
   let sessionId = ''
   let ids: Record<string, string | undefined> = {}
   const client = anonClient()
+  let playerA: Player
+  let playerB: Player
 
   beforeEach(async () => {
+    playerA = await newPlayer('a')
+    playerB = await newPlayer('b')
     const seeded = await seedSession()
     sessionId = seeded.sessionId
     ids = seeded.slotIds
@@ -65,6 +70,8 @@ describe('waitlist RPCs against local postgres', () => {
 
   afterEach(async () => {
     await deleteSession(sessionId)
+    await deletePlayer(playerA)
+    await deletePlayer(playerB)
   })
 
   it('lets exactly one of two concurrent join_waitlist calls claim the one free slot; the other queues', async () => {
@@ -72,8 +79,8 @@ describe('waitlist RPCs against local postgres', () => {
     await fillAllExcept(sessionId, gk)
 
     const [first, second] = await Promise.all([
-      join(anonClient(), sessionId, 'Hazmi', ['GK'], TOKEN_A),
-      join(anonClient(), sessionId, 'Isaac', ['GK'], TOKEN_B),
+      join(playerA, sessionId, 'Hazmi', ['GK']),
+      join(playerB, sessionId, 'Isaac', ['GK']),
     ])
 
     expect(first.error).toBeNull()
@@ -103,7 +110,7 @@ describe('waitlist RPCs against local postgres', () => {
     // CB2) must pick CB1.
     await adminClient().from('slots').update({ player_name: null, claim_token: null, claimed_at: null }).eq('id', cb2)
 
-    const result = await join(client, sessionId, 'Hazmi', ['CB1', 'CB2'], TOKEN_A)
+    const result = await join(playerA, sessionId, 'Hazmi', ['CB1', 'CB2'])
     expect(result.error).toBeNull()
     expect(result.data).toMatchObject({ placed: true, slot_id: cb1 })
   })
@@ -112,10 +119,10 @@ describe('waitlist RPCs against local postgres', () => {
     const gk = slotId(ids, 'A', 'GK')
     await fillAll(sessionId)
 
-    const first = await join(client, sessionId, 'Faiz', ['GK'], TOKEN_A)
+    const first = await join(playerA, sessionId, 'Faiz', ['GK'])
     expect(first.data).toMatchObject({ placed: false })
     await new Promise((resolve) => setTimeout(resolve, 5))
-    const second = await join(anonClient(), sessionId, 'Nabil', ['GK'], TOKEN_B)
+    const second = await join(playerB, sessionId, 'Nabil', ['GK'])
     expect(second.data).toMatchObject({ placed: false })
 
     // Release GK: the trigger must place Faiz, not Nabil.
@@ -134,10 +141,10 @@ describe('waitlist RPCs against local postgres', () => {
 
     // Faiz is broad (any position, GK included) and first; Nabil is
     // GK-specific and later.
-    const first = await join(client, sessionId, 'Faiz', ['GK', 'ST', 'MC'], TOKEN_A)
+    const first = await join(playerA, sessionId, 'Faiz', ['GK', 'ST', 'MC'])
     expect(first.data).toMatchObject({ placed: false })
     await new Promise((resolve) => setTimeout(resolve, 5))
-    const second = await join(anonClient(), sessionId, 'Nabil', ['GK'], TOKEN_B)
+    const second = await join(playerB, sessionId, 'Nabil', ['GK'])
     expect(second.data).toMatchObject({ placed: false })
 
     await adminClient().from('slots').update({ player_name: null, claim_token: null, claimed_at: null }).eq('id', gk)
@@ -211,16 +218,16 @@ describe('waitlist RPCs against local postgres', () => {
   })
 
   it('join_waitlist rejects an invalid positions array with invalid_positions', async () => {
-    const result = await join(client, sessionId, 'Hazmi', [], TOKEN_A)
+    const result = await join(playerA, sessionId, 'Hazmi', [])
     expect(result.error?.message).toContain('invalid_positions')
 
-    const bogus = await join(client, sessionId, 'Hazmi', ['SWEEPER'], TOKEN_A)
+    const bogus = await join(playerA, sessionId, 'Hazmi', ['SWEEPER'])
     expect(bogus.error?.message).toContain('invalid_positions')
   })
 
   it('join_waitlist rejects a closed session with session_closed', async () => {
     await adminClient().from('sessions').update({ status: 'closed' }).eq('id', sessionId)
-    const result = await join(client, sessionId, 'Hazmi', ['GK'], TOKEN_A)
+    const result = await join(playerA, sessionId, 'Hazmi', ['GK'])
     expect(result.error?.message).toContain('session_closed')
   })
 
@@ -256,10 +263,9 @@ describe('waitlist RPCs against local postgres', () => {
     }
 
     // release_slot
-    const releaseToken = '55555555-5555-4555-8555-555555555555'
-    await occupy(gk, releaseToken)
+    await occupy(gk, playerA.userId)
     await seedWaitlistEntry(sessionId, 'Faiz', ['GK'], TOKEN_A)
-    const released = await client.rpc('release_slot', { p_slot_id: gk, p_token: releaseToken })
+    const released = await playerA.client.rpc('release_slot', { p_slot_id: gk })
     expect(released.error).toBeNull()
     const { data: gkRow } = await adminClient().from('slots').select('player_name').eq('id', gk).single()
     expect(gkRow).toMatchObject({ player_name: 'Faiz' })
@@ -275,17 +281,16 @@ describe('waitlist RPCs against local postgres', () => {
 
   it('does not recurse: the trigger fires once per release even with two matching queued entries', async () => {
     const gk = slotId(ids, 'A', 'GK')
-    const holderToken = '55555555-5555-4555-8555-555555555555'
     await adminClient()
       .from('slots')
-      .update({ player_name: 'Holder', claim_token: holderToken, claimed_at: new Date().toISOString() })
+      .update({ player_name: 'Holder', claim_token: playerA.userId, claimed_at: new Date().toISOString() })
       .eq('id', gk)
 
     await seedWaitlistEntry(sessionId, 'Faiz', ['GK'], TOKEN_A)
     await new Promise((resolve) => setTimeout(resolve, 5))
     await seedWaitlistEntry(sessionId, 'Nabil', ['GK'], TOKEN_B)
 
-    await client.rpc('release_slot', { p_slot_id: gk, p_token: holderToken })
+    await playerA.client.rpc('release_slot', { p_slot_id: gk })
 
     // If the trigger recursed, its own write (null -> non-null) would fire
     // itself again looking for a second match, and Nabil would also be

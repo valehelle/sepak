@@ -1,8 +1,18 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { hasPushSubscription } from '../../src/data/push'
 import { claimSlot } from '../../src/data/slots'
-import { getClaimToken, resetClaimTokenCache } from '../../src/lib/claimToken'
-import { adminClient, anonClient, deleteSession, seedSession, slotId } from '../helpers/localSupabase'
+import { supabase } from '../../src/lib/supabase'
+import {
+  adminClient,
+  anonClient,
+  deletePlayer,
+  deleteSession,
+  newPlayer,
+  seedSession,
+  signInAppClientAs,
+  slotId,
+  type Player,
+} from '../helpers/localSupabase'
 
 // subscribeToPush() itself cannot run here -- it needs Notification,
 // a service worker and a real push service, none of which exist in node.
@@ -14,27 +24,31 @@ describe('push subscriptions against local postgres', () => {
   let sessionId = ''
   let ids: Record<string, string | undefined> = {}
 
+  let me: Player
+
   beforeEach(async () => {
-    resetClaimTokenCache()
+    me = await newPlayer('me')
+    await signInAppClientAs(supabase, me)
     const seeded = await seedSession()
     sessionId = seeded.sessionId
     ids = seeded.slotIds
   })
 
   afterEach(async () => {
+    await supabase.auth.signOut()
     await adminClient().from('push_subscriptions').delete().eq('endpoint', ENDPOINT)
     await deleteSession(sessionId)
+    await deletePlayer(me)
   })
 
-  it('reports no subscription for a fresh device', async () => {
+  it('reports no subscription for a fresh account', async () => {
     expect(await hasPushSubscription()).toBe(false)
   })
 
-  it('stores a subscription for a device that holds a slot, and reads it back', async () => {
+  it('stores a subscription for an account that holds a slot, and reads it back', async () => {
     await claimSlot(slotId(ids, 'A', 'GK'), 'Hazmi', '60123456789')
 
-    const saved = await anonClient().rpc('save_push_subscription', {
-      p_token: getClaimToken(),
+    const saved = await me.client.rpc('save_push_subscription', {
       p_endpoint: ENDPOINT,
       p_p256dh: 'p256dh-key',
       p_auth: 'auth-key',
@@ -45,9 +59,8 @@ describe('push subscriptions against local postgres', () => {
     expect(await hasPushSubscription()).toBe(true)
   })
 
-  it('refuses a device that has booked nothing', async () => {
-    const { error } = await anonClient().rpc('save_push_subscription', {
-      p_token: '55555555-5555-4555-8555-555555555555',
+  it('refuses an account that has booked nothing', async () => {
+    const { error } = await me.client.rpc('save_push_subscription', {
       p_endpoint: ENDPOINT,
       p_p256dh: 'k',
       p_auth: 'a',

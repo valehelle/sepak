@@ -1,8 +1,7 @@
-import { randomUUID } from 'node:crypto'
 import { afterEach, describe, expect, it } from 'vitest'
 import { createSession } from '../../src/data/sessions'
 import { supabase } from '../../src/lib/supabase'
-import { adminClient } from '../helpers/localSupabase'
+import { adminClient, deletePlayer, newPlayer, signInAppClientAs, type Player } from '../helpers/localSupabase'
 
 // createSession() always runs through the anon-keyed src/lib/supabase.ts
 // singleton (service_role must never be referenced from src/, and there is
@@ -42,9 +41,8 @@ describe('createSession wrapper against local postgres', () => {
 })
 
 describe('createSession wrapper as an authenticated organiser', () => {
-  let userId: string | null = null
+  let organiser: Player | null = null
   let sessionId: string | null = null
-  let adminEmail: string | null = null
 
   afterEach(async () => {
     // Always sign the shared singleton back out first, even if an
@@ -57,38 +55,25 @@ describe('createSession wrapper as an authenticated organiser', () => {
       await adminClient().from('sessions').delete().eq('id', sessionId)
       sessionId = null
     }
-    if (userId !== null) {
-      await adminClient().auth.admin.deleteUser(userId)
-      userId = null
-    }
-    if (adminEmail !== null) {
-      await adminClient().from('admins').delete().eq('email', adminEmail)
-      adminEmail = null
+    if (organiser !== null) {
+      await adminClient().from('admins').delete().eq('email', organiser.email)
+      await deletePlayer(organiser)
+      organiser = null
     }
   })
 
   it('creates a session with all 44 slots', async () => {
-    const email = `organiser-${randomUUID()}@example.test`
-    const password = 'wrapper-test-password'
-
-    const created = await adminClient().auth.admin.createUser({
-      email,
-      password,
-      email_confirm: true,
-    })
-    expect(created.error).toBeNull()
-    userId = created.data.user?.id ?? null
-    expect(userId).not.toBeNull()
+    organiser = await newPlayer('organiser')
 
     // Being authenticated grants nothing on its own (migration
-    // 0006_admins.sql) -- createSession now also needs this user on the
-    // allowlist, so it is added here as setup and removed in afterEach.
-    adminEmail = email
-    const allowlisted = await adminClient().from('admins').insert({ email, role: 'admin' })
+    // 0006_admins.sql) -- createSession also needs this account on the
+    // allowlist. The row binds to the account holding the email
+    // (0019_accounts.sql), so the account is created first; the row is
+    // added here as setup and removed in afterEach.
+    const allowlisted = await adminClient().from('admins').insert({ email: organiser.email, role: 'admin' })
     expect(allowlisted.error).toBeNull()
 
-    const signedIn = await supabase.auth.signInWithPassword({ email, password })
-    expect(signedIn.error).toBeNull()
+    await signInAppClientAs(supabase, organiser)
 
     const session = await createSession({
       sessionNo: 951,

@@ -1,10 +1,17 @@
-import { randomUUID } from 'node:crypto'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { ActivityError, listActivity } from '../../src/data/activity'
 import { supabase } from '../../src/lib/supabase'
-import { adminClient, anonClient, deleteSession, seedSession, slotId } from '../helpers/localSupabase'
-
-const PLAYER_TOKEN = '66666666-6666-4666-8666-666666666666'
+import {
+  adminClient,
+  anonClient,
+  deletePlayer,
+  deleteSession,
+  newPlayer,
+  seedSession,
+  signInAppClientAs,
+  slotId,
+  type Player,
+} from '../helpers/localSupabase'
 
 describe('activity against local postgres', () => {
   let sessionId = ''
@@ -34,56 +41,50 @@ describe('activity against local postgres', () => {
 describe('activity as an allowlisted admin', () => {
   let sessionId = ''
   let ids: Record<string, string | undefined> = {}
-  let userId: string | null = null
-  let adminEmail: string | null = null
+  let player: Player
+  let organiser: Player
 
   beforeEach(async () => {
     const seeded = await seedSession()
     sessionId = seeded.sessionId
     ids = seeded.slotIds
+    player = await newPlayer('player')
+    organiser = await newPlayer('organiser')
   })
+
+  /** An admin is an account: the allowlist row is bound to the account that
+   *  holds the email (0019_accounts.sql), so the account must exist first. */
+  async function signInAsOrganiser(): Promise<void> {
+    const allowlisted = await adminClient().from('admins').insert({ email: organiser.email, role: 'admin' })
+    expect(allowlisted.error).toBeNull()
+    await signInAppClientAs(supabase, organiser)
+  }
 
   afterEach(async () => {
     await supabase.auth.signOut()
     await deleteSession(sessionId)
-    if (userId !== null) {
-      await adminClient().auth.admin.deleteUser(userId)
-      userId = null
-    }
-    if (adminEmail !== null) {
-      await adminClient().from('admins').delete().eq('email', adminEmail)
-      adminEmail = null
-    }
+    await adminClient().from('admins').delete().eq('email', organiser.email)
+    await deletePlayer(player)
+    await deletePlayer(organiser)
   })
 
   it('reads back what a player did, newest first, with the number kept', async () => {
     const gk = slotId(ids, 'A', 'GK')
 
-    // The player acts as a genuine visitor on its own anon client: doing this
-    // through the signed-in singleton would log an admin, not a player.
-    const anon = anonClient()
-    const claimed = await anon.rpc('claim_slot', {
+    // The player acts on its own client: doing this through the app's
+    // singleton, signed in below as the admin, would log an admin action.
+    const claimed = await player.client.rpc('claim_slot', {
       p_slot_id: gk,
       p_name: 'Hazmi',
       p_phone: '60123456789',
-      p_token: PLAYER_TOKEN,
     })
     expect(claimed.error).toBeNull()
-    const ticked = await anon.rpc('set_slot_paid', { p_slot_id: gk, p_token: PLAYER_TOKEN, p_paid: true })
+    const ticked = await player.client.rpc('set_slot_paid', { p_slot_id: gk, p_paid: true })
     expect(ticked.error).toBeNull()
-    const released = await anon.rpc('release_slot', { p_slot_id: gk, p_token: PLAYER_TOKEN })
+    const released = await player.client.rpc('release_slot', { p_slot_id: gk })
     expect(released.error).toBeNull()
 
-    const email = `organiser-${randomUUID()}@example.test`
-    const password = 'activity-test-password'
-    const created = await adminClient().auth.admin.createUser({ email, password, email_confirm: true })
-    expect(created.error).toBeNull()
-    userId = created.data.user?.id ?? null
-    adminEmail = email
-    const allowlisted = await adminClient().from('admins').insert({ email, role: 'admin' })
-    expect(allowlisted.error).toBeNull()
-    const signedIn = await supabase.auth.signInWithPassword({ email, password })
-    expect(signedIn.error).toBeNull()
+    await signInAsOrganiser()
 
     // The feed spans every session, so this one's lines are picked out.
     const mine = (await listActivity()).filter((e) => e.sessionId === sessionId)
@@ -106,22 +107,14 @@ describe('activity as an allowlisted admin', () => {
 
   it('records the organiser emptying a slot as an admin action', async () => {
     const st = slotId(ids, 'A', 'ST')
-    const claimed = await anonClient().rpc('claim_slot', {
+    const claimed = await player.client.rpc('claim_slot', {
       p_slot_id: st,
       p_name: 'Amir',
       p_phone: '60198765432',
-      p_token: PLAYER_TOKEN,
     })
     expect(claimed.error).toBeNull()
 
-    const email = `organiser-${randomUUID()}@example.test`
-    const password = 'activity-test-password'
-    const created = await adminClient().auth.admin.createUser({ email, password, email_confirm: true })
-    userId = created.data.user?.id ?? null
-    adminEmail = email
-    await adminClient().from('admins').insert({ email, role: 'admin' })
-    const signedIn = await supabase.auth.signInWithPassword({ email, password })
-    expect(signedIn.error).toBeNull()
+    await signInAsOrganiser()
 
     // adminClearSlot's own write path: a direct update as the signed-in admin.
     const cleared = await supabase

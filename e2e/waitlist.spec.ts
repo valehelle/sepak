@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test'
-import { createTestSession, dropTestSession, fillAllSlotsExcept } from './fixtures'
+import { createTestSession, dropTestSession, fillAllSlotsExcept, dropTestPlayers, openSignedIn } from './fixtures'
 
 let sessionId = ''
 
@@ -11,6 +11,7 @@ test.beforeEach(async () => {
 })
 
 test.afterEach(async () => {
+  await dropTestPlayers()
   await dropTestSession(sessionId)
 })
 
@@ -20,7 +21,7 @@ test('auto-fill reaches a second browser over realtime, without a reload', async
   const pageOne = await one.newPage()
   const pageTwo = await two.newPage()
 
-  await pageOne.goto(`s/${sessionId}`)
+  await openSignedIn(pageOne, sessionId)
   await pageOne.getByRole('button', { name: /^GK/ }).first().click()
   await pageOne.getByLabel('Nama').fill('Hazmi')
   await pageOne.getByLabel('Nombor telefon').fill('012-345 6789')
@@ -28,7 +29,7 @@ test('auto-fill reaches a second browser over realtime, without a reload', async
   await expect(pageOne.getByText('44/44 penuh')).toBeVisible()
 
   // The session is now completely full -- the second browser has to queue.
-  await pageTwo.goto(`s/${sessionId}`)
+  await openSignedIn(pageTwo, sessionId)
   await expect(pageTwo.getByText('44/44 penuh')).toBeVisible()
   await pageTwo.getByRole('button', { name: 'Sertai senarai tunggu' }).click()
   await pageTwo.getByLabel('Nama').fill('Isaac')
@@ -54,7 +55,8 @@ test('auto-fill reaches a second browser over realtime, without a reload', async
 
   // No reload on pageTwo: realtime must deliver both the slot filling and
   // the queue shrinking.
-  await expect(pageTwo.getByText('Isaac')).toBeVisible({ timeout: 10_000 })
+  // The pitch, not the header: the account button there carries the name too.
+  await expect(pageTwo.getByRole('button', { name: /^GK.*Isaac/ })).toBeVisible({ timeout: 10_000 })
   await expect(pageTwo.getByText('Anda dalam senarai tunggu')).not.toBeVisible()
   await expect(pageTwo.getByText(/Slot anda: Team Merah — GK/)).toBeVisible()
 
@@ -70,7 +72,7 @@ test('a queued player takes an open slot by hand, even one they never asked for'
   const pageOne = await one.newPage()
   const pageTwo = await two.newPage()
 
-  await pageOne.goto(`s/${sessionId}`)
+  await openSignedIn(pageOne, sessionId)
   await pageOne.getByRole('button', { name: /^GK/ }).first().click()
   await pageOne.getByLabel('Nama').fill('Hazmi')
   await pageOne.getByLabel('Nombor telefon').fill('012-345 6789')
@@ -79,7 +81,7 @@ test('a queued player takes an open slot by hand, even one they never asked for'
 
   // Isaac queues for ST, which is nowhere near the slot that is about to
   // open -- so auto-fill will not hand it to him.
-  await pageTwo.goto(`s/${sessionId}`)
+  await openSignedIn(pageTwo, sessionId)
   await pageTwo.getByRole('button', { name: 'Sertai senarai tunggu' }).click()
   await pageTwo.getByLabel('Nama').fill('Isaac')
   await pageTwo.getByLabel('Nombor telefon').fill('019-876 5432')

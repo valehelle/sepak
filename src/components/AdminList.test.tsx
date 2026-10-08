@@ -84,7 +84,7 @@ describe('AdminList', () => {
     expect(superRow && within(superRow).queryByRole('button', { name: 'Buang' })).toBeNull()
   })
 
-  it('adds an admin and tells the caller what happens next', async () => {
+  it('adds an admin who already has an account', async () => {
     listAdmins.mockResolvedValue([SUPER])
     addAdmin.mockResolvedValue({ ...PLAIN })
     view(SUPER.email)
@@ -95,9 +95,21 @@ describe('AdminList', () => {
 
     await waitFor(() => expect(addAdmin).toHaveBeenCalledWith('new-admin@example.com', 'admin'))
     await waitFor(() =>
-      expect(screen.getByRole('status').textContent).toContain(
-        'Minta dia daftar dengan e-mel ini untuk tetapkan kata laluan.',
-      ),
+      expect(screen.getByRole('status').textContent).toContain('Admin ditambah.'),
+    )
+  })
+
+  it('explains that the person must sign in once before being added', async () => {
+    listAdmins.mockResolvedValue([SUPER])
+    addAdmin.mockRejectedValue(new Error('addAdmin: admin_needs_account'))
+    view(SUPER.email)
+    await screen.findByText(SUPER.email)
+
+    await userEvent.type(screen.getByLabelText('E-mel'), 'not-yet@example.com')
+    await userEvent.click(screen.getByRole('button', { name: 'Tambah admin' }))
+
+    await waitFor(() =>
+      expect(screen.getByRole('status').textContent).toContain('Orang itu perlu log masuk sekali dulu'),
     )
   })
 

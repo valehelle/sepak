@@ -1,3 +1,4 @@
+import { RPC_MESSAGES } from '../data/types'
 import { useCallback, useEffect, useState } from 'react'
 import { addAdmin, listAdmins, removeAdmin, type Admin, type AdminRole } from '../data/admins'
 import { Button } from './Button'
@@ -42,10 +43,13 @@ export function AdminList({ currentEmail }: AdminListProps) {
       await addAdmin(email, role)
       setEmail('')
       setRole('admin')
-      show('Admin ditambah. Minta dia daftar dengan e-mel ini untuk tetapkan kata laluan.')
+      show('Admin ditambah.')
       await load()
-    } catch {
-      show('Gagal menambah admin.', 'error')
+    } catch (cause: unknown) {
+      // Admin rights belong to an account (0019_accounts.sql), so the
+      // person has to have signed in once before they can be added.
+      const needsAccount = cause instanceof Error && cause.message.includes('admin_needs_account')
+      show(needsAccount ? RPC_MESSAGES.admin_needs_account : 'Gagal menambah admin.', 'error')
     } finally {
       setBusy(false)
     }
@@ -159,6 +163,10 @@ export function AdminList({ currentEmail }: AdminListProps) {
             Super
           </button>
         </div>
+
+        <p className="font-sans text-[13px] text-white/45">
+          Orang itu perlu log masuk di laman ini sekali dulu, dengan e-mel yang sama.
+        </p>
 
         <Button type="submit" variant="primary" disabled={busy || email.trim() === ''} className="w-full">
           Tambah admin

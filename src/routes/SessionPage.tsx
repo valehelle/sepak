@@ -623,6 +623,13 @@ export default function SessionPage() {
                   {`Tekan posisi kosong untuk daftar — ${open} lagi kosong.`}
                 </p>
               )}
+              {/* Bookings made before accounts existed show as theirs only
+                  once they sign in on that phone (adopt_device). */}
+              {userId === null && (
+                <p className="font-sans text-[13px] text-white/60">
+                  Dah ambil slot? Log masuk untuk tanda bayar atau tukar posisi.
+                </p>
+              )}
               {myWaitlistEntry !== null ? (
                 <>
                   <p className="font-kit text-[15px] text-white">

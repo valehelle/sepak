@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test'
-import { createTestSession, dropTestSession, fillAllSlotsExcept } from './fixtures'
+import { createTestSession, dropTestSession, fillAllSlotsExcept, dropTestPlayers, openSignedIn } from './fixtures'
 
 let sessionId = ''
 
@@ -9,6 +9,7 @@ test.beforeEach(async () => {
 })
 
 test.afterEach(async () => {
+  await dropTestPlayers()
   await dropTestSession(sessionId)
 })
 
@@ -23,7 +24,7 @@ test('queueing offers notifications, and Telegram opens a link carrying a fresh 
   page,
   browser,
 }) => {
-  await page.goto(`s/${sessionId}`)
+  await openSignedIn(page, sessionId)
   await page.getByRole('button', { name: /^GK/ }).first().click()
   await page.getByLabel('Nama').fill('Hazmi')
   await page.getByLabel('Nombor telefon').fill('012-345 6789')
@@ -34,7 +35,7 @@ test('queueing offers notifications, and Telegram opens a link carrying a fresh 
   const second = await browser.newContext()
   const queued = await second.newPage()
 
-  await queued.goto(`s/${sessionId}`)
+  await openSignedIn(queued, sessionId)
   await queued.getByRole('button', { name: 'Sertai senarai tunggu' }).click()
   await queued.getByLabel('Nama').fill('Isaac')
   await queued.getByLabel('Nombor telefon').fill('019-876 5432')

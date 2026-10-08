@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
-import { getClaimToken, resetClaimTokenCache } from '../../src/lib/claimToken'
+import { supabase } from '../../src/lib/supabase'
 import {
   WaitlistActionError,
   adminRemoveFromWaitlist,
@@ -8,13 +8,22 @@ import {
   leaveWaitlist,
   listWaitlist,
 } from '../../src/data/waitlist'
-import { adminClient, anonClient, deleteSession, seedSession, slotId } from '../helpers/localSupabase'
+import {
+  adminClient,
+  anonClient,
+  deletePlayer,
+  deleteSession,
+  newPlayer,
+  seedSession,
+  signInAppClientAs,
+  slotId,
+  type Player,
+} from '../helpers/localSupabase'
 
-// A second "device": the wrapper functions always act as the current
-// device (via getClaimToken()'s module-level cache), so a genuinely
-// different claimant is modelled with a raw RPC call carrying an explicit
-// token, exactly as slotActions.integration.test.ts does.
-const OTHER_TOKEN = '77777777-7777-4777-8777-777777777777'
+// The wrapper functions always act as whoever the app's singleton client
+// is signed in as, so a genuinely different claimant is a second account
+// on its own client, calling the RPCs directly, exactly as
+// slotActions.integration.test.ts does.
 
 /** Fills every slot except the given one, so it becomes the sole free slot
  *  matching whatever position a test cares about. There are three GK slots
@@ -43,15 +52,24 @@ describe('waitlist wrappers against local postgres', () => {
   let sessionId = ''
   let ids: Record<string, string | undefined> = {}
 
+  let me: Player
+  let other: Player
+
   beforeEach(async () => {
-    resetClaimTokenCache()
+    me = await newPlayer('me')
+    other = await newPlayer('other')
+    await signInAppClientAs(supabase, me)
     const seeded = await seedSession()
     sessionId = seeded.sessionId
     ids = seeded.slotIds
   })
 
   afterEach(async () => {
+    await supabase.auth.signOut()
+    await adminClient().from('admins').delete().eq('email', me.email)
     await deleteSession(sessionId)
+    await deletePlayer(me)
+    await deletePlayer(other)
   })
 
   it('places immediately when a preferred position is already free', async () => {
@@ -80,7 +98,7 @@ describe('waitlist wrappers against local postgres', () => {
     expect(mine).toMatchObject({ positions: ['ST'] })
   })
 
-  it('rejects joining twice from the same device with already_waitlisted', async () => {
+  it('rejects joining twice from the same account with already_waitlisted', async () => {
     await fillAll(sessionId)
     await joinWaitlist(sessionId, 'Hazmi', '60123456789', ['GK'])
 
@@ -98,13 +116,13 @@ describe('waitlist wrappers against local postgres', () => {
 
   it('rejects joining while already holding a slot in the session (both directions of the invariant)', async () => {
     const gk = slotId(ids, 'A', 'GK')
-    // This device (the wrapper's cached token) claims a slot directly first.
-    const claimed = await anonClient().rpc('claim_slot', { p_slot_id: gk, p_name: 'Hazmi', p_phone: '60123456789', p_token: getClaimToken() })
+    // This account claims a slot directly first.
+    const claimed = await me.client.rpc('claim_slot', { p_slot_id: gk, p_name: 'Hazmi', p_phone: '60123456789' })
     expect(claimed.error).toBeNull()
 
     try {
       await joinWaitlist(sessionId, 'Hazmi', '60123456789', ['ST'])
-      expect.unreachable('joinWaitlist should have thrown for a device already in a slot')
+      expect.unreachable('joinWaitlist should have thrown for an account already in a slot')
     } catch (err) {
       expect(err).toBeInstanceOf(WaitlistActionError)
       if (err instanceof WaitlistActionError) {
@@ -136,12 +154,11 @@ describe('waitlist wrappers against local postgres', () => {
 
   it('listWaitlist returns the public queue in FIFO order', async () => {
     await fillAll(sessionId)
-    const first = await anonClient().rpc('join_waitlist', {
+    const first = await other.client.rpc('join_waitlist', {
       p_session_id: sessionId,
       p_name: 'Faiz',
       p_phone: '60133000002',
       p_positions: ['GK'],
-      p_token: OTHER_TOKEN,
     })
     expect(first.error).toBeNull()
 
@@ -156,28 +173,24 @@ describe('waitlist wrappers against local postgres', () => {
 
   it('an admin removes somebody else from the queue; a player cannot', async () => {
     await fillAll(sessionId)
-    const joined = await anonClient().rpc('join_waitlist', {
+    const joined = await other.client.rpc('join_waitlist', {
       p_session_id: sessionId, p_name: 'Amir', p_phone: '60198765432',
-      p_positions: ['GK'], p_token: OTHER_TOKEN,
+      p_positions: ['GK'],
     })
     expect(joined.error).toBeNull()
 
-    // As an anonymous visitor: refused outright. anon holds no delete grant
-    // on the table at all (0007_waitlist.sql revokes then re-grants only
-    // SELECT), so this never even reaches the admin-only RLS policy.
-    try {
-      await adminRemoveFromWaitlist(String(joined.data.waitlist_id))
-      expect.unreachable('a visitor must not be able to empty the queue')
-    } catch (err) {
-      expect(err).toBeInstanceOf(WaitlistActionError)
-    }
+    // As a signed-in player who is not an admin: the delete is filtered out
+    // by the admin-only RLS policy, so it matches no row and the entry
+    // stays. (Authenticated holds the table grant; the policy is the guard.)
+    await adminRemoveFromWaitlist(String(joined.data.waitlist_id))
     expect(await listWaitlist(sessionId)).toHaveLength(1)
 
-    const { error } = await adminClient()
-      .from('waitlist')
-      .delete()
-      .eq('id', String(joined.data.waitlist_id))
-    expect(error).toBeNull()
+    // An admin is an account: the allowlist row binds to the account that
+    // holds the email (0019_accounts.sql). Removed again in afterEach.
+    const allowlisted = await adminClient().from('admins').insert({ email: me.email, role: 'admin' })
+    expect(allowlisted.error).toBeNull()
+
+    await adminRemoveFromWaitlist(String(joined.data.waitlist_id))
     expect(await listWaitlist(sessionId)).toHaveLength(0)
   })
 })

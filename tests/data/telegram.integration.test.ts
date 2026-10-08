@@ -1,38 +1,53 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { claimSlot } from '../../src/data/slots'
 import { TelegramError, createTelegramLink, hasTelegramChat } from '../../src/data/telegram'
-import { getClaimToken, resetClaimTokenCache } from '../../src/lib/claimToken'
-import { adminClient, anonClient, deleteSession, seedSession, slotId } from '../helpers/localSupabase'
+import { supabase } from '../../src/lib/supabase'
+import {
+  adminClient,
+  anonClient,
+  deletePlayer,
+  deleteSession,
+  newPlayer,
+  seedSession,
+  signInAppClientAs,
+  slotId,
+  type Player,
+} from '../helpers/localSupabase'
 
 describe('telegram linking against local postgres', () => {
   let sessionId = ''
   let ids: Record<string, string | undefined> = {}
 
+  let me: Player
+
   beforeEach(async () => {
-    resetClaimTokenCache()
+    me = await newPlayer('me')
+    await signInAppClientAs(supabase, me)
     const seeded = await seedSession()
     sessionId = seeded.sessionId
     ids = seeded.slotIds
   })
 
   afterEach(async () => {
-    await adminClient().from('telegram_chats').delete().eq('claim_token', getClaimToken())
+    await supabase.auth.signOut()
+    await adminClient().from('telegram_chats').delete().eq('claim_token', me.userId)
     await deleteSession(sessionId)
+    await deletePlayer(me)
   })
 
-  it('refuses a device with no place in a session', async () => {
+  it('refuses an account with no place in a session', async () => {
     await expect(createTelegramLink()).rejects.toBeInstanceOf(TelegramError)
   })
 
-  it('builds a t.me link carrying a code that is not the claim token', async () => {
+  it('builds a t.me link carrying a code that is not the account id', async () => {
     await claimSlot(slotId(ids, 'A', 'GK'), 'Hazmi', '60123456789')
 
     const link = await createTelegramLink()
     expect(link).toMatch(/^https:\/\/t\.me\/[A-Za-z0-9_]+\?start=[0-9a-f-]{36}$/)
-    expect(link).not.toContain(getClaimToken())
+    expect(link).not.toContain(me.userId)
   })
 
-  it('reports the device as linked only after the code is claimed', async () => {
+  it('reports the account as linked only after the code is claimed', async () => {
     await claimSlot(slotId(ids, 'A', 'GK'), 'Hazmi', '60123456789')
     const link = await createTelegramLink()
     const code = link.split('start=')[1] ?? ''

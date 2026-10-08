@@ -1,28 +1,29 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
-import { anonClient, deleteSession, seedSession, slotId } from '../helpers/localSupabase'
+import { anonClient, deletePlayer, deleteSession, newPlayer, seedSession, slotId, type Player } from '../helpers/localSupabase'
 import { SLOT_COLUMNS } from '../../src/data/sessions'
 
-const TOKEN_A = '44444444-4444-4444-8444-444444444444'
-const TOKEN_B = '55555555-5555-4555-8555-555555555555'
-
 /** One booking per phone per session (0010_one_booking_per_person.sql), so
- *  every test "device" needs its own number. Derived from the token, which
- *  is what the rule treats as the device, keeping the two consistent
- *  without a lookup table to forget to update. */
-function phoneFor(token: string): string {
-  return `601${token.replace(/\D/g, '').padEnd(8, '0').slice(0, 8)}`
+ *  every test player needs its own number. Derived from the account id,
+ *  which is what the rule now treats as the person, keeping the two
+ *  consistent without a lookup table to forget to update. */
+function phoneFor(player: Player): string {
+  return `601${player.userId.replace(/\D/g, '').padEnd(8, '0').slice(0, 8)}`
 }
 
-async function claim(client: ReturnType<typeof anonClient>, id: string, name: string, token: string) {
-  return client.rpc('claim_slot', { p_slot_id: id, p_name: name, p_phone: phoneFor(token), p_token: token })
+async function claim(player: Player, id: string, name: string) {
+  return player.client.rpc('claim_slot', { p_slot_id: id, p_name: name, p_phone: phoneFor(player) })
 }
 
 describe('slot RPCs against local postgres', () => {
   let sessionId = ''
   let ids: Record<string, string | undefined> = {}
   const client = anonClient()
+  let hazmi: Player
+  let isaac: Player
 
   beforeEach(async () => {
+    hazmi = await newPlayer('hazmi')
+    isaac = await newPlayer('isaac')
     const seeded = await seedSession()
     sessionId = seeded.sessionId
     ids = seeded.slotIds
@@ -30,11 +31,13 @@ describe('slot RPCs against local postgres', () => {
 
   afterEach(async () => {
     await deleteSession(sessionId)
+    await deletePlayer(hazmi)
+    await deletePlayer(isaac)
   })
 
   it('claims an empty slot', async () => {
     const gk = slotId(ids, 'A', 'GK')
-    const { error } = await claim(client, gk, 'Hazmi', TOKEN_A)
+    const { error } = await claim(hazmi, gk, 'Hazmi')
     expect(error).toBeNull()
 
     const { data } = await client.from('slots').select('player_name').eq('id', gk).single()
@@ -45,8 +48,8 @@ describe('slot RPCs against local postgres', () => {
     const gk = slotId(ids, 'A', 'GK')
 
     const [first, second] = await Promise.all([
-      claim(anonClient(), gk, 'Hazmi', TOKEN_A),
-      claim(anonClient(), gk, 'Isaac', TOKEN_B),
+      claim(hazmi, gk, 'Hazmi'),
+      claim(isaac, gk, 'Isaac'),
     ])
 
     const errors = [first.error, second.error].filter((e) => e !== null)
@@ -58,22 +61,22 @@ describe('slot RPCs against local postgres', () => {
     expect(['Hazmi', 'Isaac']).toContain(row['player_name'])
   })
 
-  it("refuses to release another device's slot", async () => {
+  it("refuses to release another account's slot", async () => {
     const gk = slotId(ids, 'A', 'GK')
-    await claim(client, gk, 'Hazmi', TOKEN_A)
+    await claim(hazmi, gk, 'Hazmi')
 
-    const { error } = await client.rpc('release_slot', { p_slot_id: gk, p_token: TOKEN_B })
+    const { error } = await isaac.client.rpc('release_slot', { p_slot_id: gk })
     expect(error?.message).toContain('wrong_token')
 
     const { data } = await client.from('slots').select('player_name').eq('id', gk).single()
     expect(data).toMatchObject({ player_name: 'Hazmi' })
   })
 
-  it('releases with the right token', async () => {
+  it('releases for the account that holds it', async () => {
     const gk = slotId(ids, 'A', 'GK')
-    await claim(client, gk, 'Hazmi', TOKEN_A)
+    await claim(hazmi, gk, 'Hazmi')
 
-    const { error } = await client.rpc('release_slot', { p_slot_id: gk, p_token: TOKEN_A })
+    const { error } = await hazmi.client.rpc('release_slot', { p_slot_id: gk })
     expect(error).toBeNull()
 
     const { data } = await client.from('slots').select('player_name').eq('id', gk).single()
@@ -84,7 +87,7 @@ describe('slot RPCs against local postgres', () => {
     const gk = slotId(ids, 'A', 'GK')
     const { error } = await client
       .from('slots')
-      .update({ player_name: 'Rogue', claim_token: TOKEN_B, claimed_at: new Date().toISOString() })
+      .update({ player_name: 'Rogue', claim_token: isaac.userId, claimed_at: new Date().toISOString() })
       .eq('id', gk)
     expect(error).not.toBeNull()
   })
