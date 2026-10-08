@@ -275,6 +275,9 @@ declare
   v_gk         uuid;
   v_rb         uuid;
   v_faiz_token uuid := gen_random_uuid();
+  -- Set by the test rather than read back: no signed-in role can read a
+  -- token off the table (0018_hide_tokens_from_accounts.sql).
+  v_holder_token uuid := gen_random_uuid();
 begin
   set local role authenticated;
   set local request.jwt.claims = '{"email":"admin@sepak.local","role":"authenticated"}';
@@ -287,11 +290,11 @@ begin
   ---------------------------------------------------------------------------
   -- fires on release_slot
   ---------------------------------------------------------------------------
-  update sepak.slots set player_name = 'Holder', claim_token = gen_random_uuid(), claimed_at = now() where id = v_gk;
+  update sepak.slots set player_name = 'Holder', claim_token = v_holder_token, claimed_at = now() where id = v_gk;
   insert into sepak.waitlist (session_id, player_name, claim_token, positions)
   values (v_session_id, 'Faiz', v_faiz_token, array['GK']);
 
-  perform sepak.release_slot(v_gk, (select claim_token from sepak.slots where id = v_gk));
+  perform sepak.release_slot(v_gk, v_holder_token);
   assert (select player_name from sepak.slots where id = v_gk) = 'Faiz',
     'auto-fill should place Faiz when release_slot frees a matching slot';
   assert (select count(*) from sepak.waitlist where session_id = v_session_id) = 0,
