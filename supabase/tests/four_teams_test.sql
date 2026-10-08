@@ -11,7 +11,7 @@ declare
   v_act     bigint;
 begin
   set local role authenticated;
-  set local request.jwt.claims = '{"email":"admin@sepak.local","role":"authenticated"}';
+  set local request.jwt.claims = '{"sub":"00000000-0000-4000-8000-0000000000ad","email":"admin@sepak.local","role":"authenticated"}';
 
   -- The app's own call: all twelve parameters.
   v_session := sepak.create_session(

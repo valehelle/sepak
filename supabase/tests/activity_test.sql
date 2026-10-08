@@ -14,7 +14,7 @@ declare
   v_row   record;
 begin
   set local role authenticated;
-  set local request.jwt.claims = '{"email":"admin@sepak.local","role":"authenticated"}';
+  set local request.jwt.claims = '{"sub":"00000000-0000-4000-8000-0000000000ad","email":"admin@sepak.local","role":"authenticated"}';
   select id into v_session_id from sepak.create_session(
     906, 'Activity Test', '2026-10-07', '20:00:00', 120, 'Padang Presint 8', 27,
     'Merah', 'Putih', 'Kuning');
@@ -90,7 +90,7 @@ begin
   reset role;
 
   set local role authenticated;
-  set local request.jwt.claims = '{"email":"admin@sepak.local","role":"authenticated"}';
+  set local request.jwt.claims = '{"sub":"00000000-0000-4000-8000-0000000000ad","email":"admin@sepak.local","role":"authenticated"}';
   update sepak.slots set player_name = null, claim_token = null, claimed_at = null
    where id = v_lb_a;
   reset role;
@@ -151,7 +151,7 @@ begin
 
   -- The same suppression when a queued player claims a free slot outright.
   set local role authenticated;
-  set local request.jwt.claims = '{"email":"admin@sepak.local","role":"authenticated"}';
+  set local request.jwt.claims = '{"sub":"00000000-0000-4000-8000-0000000000ad","email":"admin@sepak.local","role":"authenticated"}';
   update sepak.slots set player_name = null, claim_token = null, claimed_at = null
    where id = v_lb_a;
   reset role;
@@ -206,7 +206,7 @@ begin
   reset role;
 
   set local role authenticated;
-  set local request.jwt.claims = '{"email":"admin@sepak.local","role":"authenticated"}';
+  set local request.jwt.claims = '{"sub":"00000000-0000-4000-8000-0000000000ad","email":"admin@sepak.local","role":"authenticated"}';
   select count(*) into v_count from sepak.activity_feed(500);
   assert v_count > 0, 'an admin should see the feed';
   -- Newest first, and the session number comes along for the line's label.
@@ -225,7 +225,7 @@ begin
   -- fail: the cascade fired the leave trigger after the session row was gone.
   ---------------------------------------------------------------------------
   set local role authenticated;
-  set local request.jwt.claims = '{"email":"admin@sepak.local","role":"authenticated"}';
+  set local request.jwt.claims = '{"sub":"00000000-0000-4000-8000-0000000000ad","email":"admin@sepak.local","role":"authenticated"}';
   delete from sepak.sessions where id = v_session_id;
   reset role;
   set local request.jwt.claims = '{}';

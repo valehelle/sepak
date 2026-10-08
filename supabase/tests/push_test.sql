@@ -13,7 +13,7 @@ declare
   v_row record;
 begin
   set local role authenticated;
-  set local request.jwt.claims = '{"email":"admin@sepak.local","role":"authenticated"}';
+  set local request.jwt.claims = '{"sub":"00000000-0000-4000-8000-0000000000ad","email":"admin@sepak.local","role":"authenticated"}';
   select id into v_session_id from sepak.create_session(
     907, 'Push Test', '2026-10-14', '20:00:00', 120, 'Padang Presint 8', 27,
     'Merah', 'Putih', 'Kuning');
@@ -35,7 +35,7 @@ begin
   reset role;
 
   set local role authenticated;
-  set local request.jwt.claims = '{"email":"admin@sepak.local","role":"authenticated"}';
+  set local request.jwt.claims = '{"sub":"00000000-0000-4000-8000-0000000000ad","email":"admin@sepak.local","role":"authenticated"}';
   begin
     perform 1 from sepak.push_subscriptions limit 1;
     raise exception 'not even an admin reads push_subscriptions directly';

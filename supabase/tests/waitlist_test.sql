@@ -10,7 +10,7 @@ declare
   v_token      uuid := gen_random_uuid();
 begin
   set local role authenticated;
-  set local request.jwt.claims = '{"email":"admin@sepak.local","role":"authenticated"}';
+  set local request.jwt.claims = '{"sub":"00000000-0000-4000-8000-0000000000ad","email":"admin@sepak.local","role":"authenticated"}';
   select id into v_session_id from sepak.create_session(
     901, 'Waitlist Test', '2026-09-16', '20:00:00', 120, 'Padang Presint 8', 27,
     'Merah', 'Putih', 'Kuning');
@@ -98,7 +98,7 @@ declare
   v_count      int;
 begin
   set local role authenticated;
-  set local request.jwt.claims = '{"email":"admin@sepak.local","role":"authenticated"}';
+  set local request.jwt.claims = '{"sub":"00000000-0000-4000-8000-0000000000ad","email":"admin@sepak.local","role":"authenticated"}';
   select id into v_session_id from sepak.create_session(
     902, 'Waitlist Test 2', '2026-09-16', '20:00:00', 120, 'Padang Presint 8', 27,
     'Merah', 'Putih', 'Kuning');
@@ -280,7 +280,7 @@ declare
   v_holder_token uuid := gen_random_uuid();
 begin
   set local role authenticated;
-  set local request.jwt.claims = '{"email":"admin@sepak.local","role":"authenticated"}';
+  set local request.jwt.claims = '{"sub":"00000000-0000-4000-8000-0000000000ad","email":"admin@sepak.local","role":"authenticated"}';
   select id into v_session_id from sepak.create_session(
     903, 'Waitlist Trigger Test', '2026-09-16', '20:00:00', 120, 'Padang Presint 8', 27,
     'Merah', 'Putih', 'Kuning');
@@ -370,7 +370,7 @@ declare
   v_claimed    sepak.slots;
 begin
   set local role authenticated;
-  set local request.jwt.claims = '{"email":"admin@sepak.local","role":"authenticated"}';
+  set local request.jwt.claims = '{"sub":"00000000-0000-4000-8000-0000000000ad","email":"admin@sepak.local","role":"authenticated"}';
   select id into v_session_id from sepak.create_session(
     904, 'Waitlist Invariant Test', '2026-09-16', '20:00:00', 120, 'Padang Presint 8', 27,
     'Merah', 'Putih', 'Kuning');

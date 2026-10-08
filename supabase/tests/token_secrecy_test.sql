@@ -41,7 +41,7 @@ begin
 
   -- An admin has no need for them either.
   set local role authenticated;
-  set local request.jwt.claims = '{"email":"admin@sepak.local","role":"authenticated"}';
+  set local request.jwt.claims = '{"sub":"00000000-0000-4000-8000-0000000000ad","email":"admin@sepak.local","role":"authenticated"}';
   begin
     perform claim_token from sepak.slots where id = v_gk;
     raise exception 'an admin must not read slot tokens either';

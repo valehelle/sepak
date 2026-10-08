@@ -18,7 +18,7 @@ begin
   -- as of migration 0006_admins.sql), so the JWT carries a seeded admin's
   -- email -- auth.jwt() ->> 'email' is what is_admin() actually reads.
   set local role authenticated;
-  set local request.jwt.claims = '{"email":"admin@sepak.local","role":"authenticated"}';
+  set local request.jwt.claims = '{"sub":"00000000-0000-4000-8000-0000000000ad","email":"admin@sepak.local","role":"authenticated"}';
   select id into v_session_id from sepak.create_session(
     1, 'Geng Turun Peluh', '2026-09-16', '20:00:00', 120, 'Padang Presint 8', 27,
     'Merah', 'Putih', 'Kuning');
@@ -223,7 +223,7 @@ begin
   ---------------------------------------------------------------------------
   -- an allowlisted admin CAN write sessions/slots directly, not just via RPC
   ---------------------------------------------------------------------------
-  set local request.jwt.claims = '{"email":"admin@sepak.local","role":"authenticated"}';
+  set local request.jwt.claims = '{"sub":"00000000-0000-4000-8000-0000000000ad","email":"admin@sepak.local","role":"authenticated"}';
 
   insert into sepak.sessions (session_no, title, play_date, start_time, venue)
   values (996, 'Allowlisted', '2026-11-03', '20:00:00', 'Padang Allowlist')
@@ -271,7 +271,7 @@ begin
   ---------------------------------------------------------------------------
   -- a super admin CAN manage the allowlist
   ---------------------------------------------------------------------------
-  set local request.jwt.claims = '{"email":"hazmiirfan92@gmail.com","role":"authenticated"}';
+  set local request.jwt.claims = '{"sub":"00000000-0000-4000-8000-0000000000a1","email":"hazmiirfan92@gmail.com","role":"authenticated"}';
 
   insert into sepak.admins (email, role, added_by)
   values ('temp-admin@example.test', 'admin', 'hazmiirfan92@gmail.com');
@@ -303,13 +303,13 @@ begin
   ---------------------------------------------------------------------------
   reset role;
   set local role authenticated;
-  set local request.jwt.claims = '{"email":"hazmiirfan92@gmail.com","role":"authenticated"}';
+  set local request.jwt.claims = '{"sub":"00000000-0000-4000-8000-0000000000a1","email":"hazmiirfan92@gmail.com","role":"authenticated"}';
 
   insert into sepak.admins (email, role, added_by)
   values ('temp-super@example.test', 'super', 'hazmiirfan92@gmail.com');
 
   -- with two supers, one may remove the other.
-  set local request.jwt.claims = '{"email":"temp-super@example.test","role":"authenticated"}';
+  set local request.jwt.claims = '{"sub":"00000000-0000-4000-8000-0000000000a3","email":"temp-super@example.test","role":"authenticated"}';
   delete from sepak.admins where email = 'hazmiirfan92@gmail.com';
   assert (select count(*) from sepak.admins where email = 'hazmiirfan92@gmail.com') = 0,
     'deleting a super admin should succeed while another super remains';

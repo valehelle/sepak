@@ -16,7 +16,7 @@ declare
   v_ok boolean;
 begin
   set local role authenticated;
-  set local request.jwt.claims = '{"email":"admin@sepak.local","role":"authenticated"}';
+  set local request.jwt.claims = '{"sub":"00000000-0000-4000-8000-0000000000ad","email":"admin@sepak.local","role":"authenticated"}';
   select id into v_session_id from sepak.create_session(
     909, 'Telegram Test', '2026-11-11', '20:30:00', 120, 'Padang Presint 8', 27,
     'Merah', 'Putih', 'Kuning');

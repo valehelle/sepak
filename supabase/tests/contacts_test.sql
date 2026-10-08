@@ -12,7 +12,7 @@ declare
   v_count int;
 begin
   set local role authenticated;
-  set local request.jwt.claims = '{"email":"admin@sepak.local","role":"authenticated"}';
+  set local request.jwt.claims = '{"sub":"00000000-0000-4000-8000-0000000000ad","email":"admin@sepak.local","role":"authenticated"}';
   select id into v_session_id from sepak.create_session(
     902, 'Contacts Test', '2026-09-16', '20:00:00', 120, 'Padang Presint 8', 27,
     'Merah', 'Putih', 'Kuning');
@@ -91,7 +91,7 @@ begin
   exception when insufficient_privilege then null;
   end;
 
-  set local request.jwt.claims = '{"email":"admin@sepak.local","role":"authenticated"}';
+  set local request.jwt.claims = '{"sub":"00000000-0000-4000-8000-0000000000ad","email":"admin@sepak.local","role":"authenticated"}';
   select sepak.contact_phone(v_gk, null) into v_phone;
   assert v_phone = '60123456789', format('admin should read the phone, got %s', v_phone);
   select sepak.contact_phone(v_st, null) into v_phone;
@@ -126,7 +126,7 @@ begin
   perform sepak.claim_slot(v_gk, 'Hazmi', '60123456789', v_token);
   reset role;
   set local role authenticated;
-  set local request.jwt.claims = '{"email":"admin@sepak.local","role":"authenticated"}';
+  set local request.jwt.claims = '{"sub":"00000000-0000-4000-8000-0000000000ad","email":"admin@sepak.local","role":"authenticated"}';
   update sepak.slots set player_name = null, claim_token = null, claimed_at = null where id = v_gk;
   reset role;
   select count(*) into v_count from sepak.contacts where slot_id = v_gk;
@@ -163,7 +163,7 @@ begin
   assert v_count = 1, 'join_waitlist should store the queue contact';
 
   set local role authenticated;
-  set local request.jwt.claims = '{"email":"admin@sepak.local","role":"authenticated"}';
+  set local request.jwt.claims = '{"sub":"00000000-0000-4000-8000-0000000000ad","email":"admin@sepak.local","role":"authenticated"}';
   select sepak.contact_phone(null, v_wait_id) into v_phone;
   assert v_phone = '60198765432', 'admin reads a queue entry phone';
   -- Organiser clears team A GK: auto-fill moves Faiz in, contact follows.
