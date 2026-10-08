@@ -1,4 +1,3 @@
-import { getClaimToken } from '../lib/claimToken'
 import { supabase } from '../lib/supabase'
 
 /** The public half of the VAPID pair. It ships in the bundle on purpose --
@@ -74,7 +73,6 @@ export async function subscribeToPush(): Promise<void> {
     }))
 
   const { error } = await supabase.rpc('save_push_subscription', {
-    p_token: getClaimToken(),
     p_endpoint: subscription.endpoint,
     p_p256dh: bytesToKey(subscription.getKey('p256dh')),
     p_auth: bytesToKey(subscription.getKey('auth')),
@@ -95,9 +93,7 @@ export async function subscribeToPush(): Promise<void> {
  *  database rather than the browser, because the browser's own answer says
  *  nothing about whether we ever managed to store it. */
 export async function hasPushSubscription(): Promise<boolean> {
-  const { data, error } = await supabase.rpc('has_push_subscription', {
-    p_token: getClaimToken(),
-  })
+  const { data, error } = await supabase.rpc('has_push_subscription')
   if (error !== null) return false
   return data === true
 }
@@ -109,7 +105,6 @@ export async function unsubscribeFromPush(): Promise<void> {
   const subscription = await registration?.pushManager.getSubscription()
   if (subscription !== undefined && subscription !== null) {
     await supabase.rpc('delete_push_subscription', {
-      p_token: getClaimToken(),
       p_endpoint: subscription.endpoint,
     })
     await subscription.unsubscribe()

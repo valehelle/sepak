@@ -161,6 +161,9 @@ export const RPC_ERROR_CODES = [
   // RPC is public and a generic fallback would hide a real bug.
   'same_slot',
   'cross_session',
+  // Accounts (0019_accounts.sql).
+  'not_signed_in',
+  'admin_needs_account',
 ] as const
 
 export type RpcErrorCode = (typeof RPC_ERROR_CODES)[number]
@@ -192,6 +195,8 @@ export const RPC_MESSAGES: Record<RpcErrorCode, string> = {
   invalid_paid: 'Status bayaran tak sah.',
   same_slot: 'Anda dah berada di posisi ini.',
   cross_session: 'Posisi itu bukan dalam sesi ini.',
+  not_signed_in: 'Log masuk dulu untuk daftar.',
+  admin_needs_account: 'Orang itu perlu log masuk sekali dulu, kemudian tambah dia.',
 }
 
 export const FALLBACK_ERROR_MESSAGE = 'Ada masalah. Cuba lagi.'

@@ -1,8 +1,10 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useParams } from 'react-router'
 import { AdminContactToggle } from '../components/AdminContact'
 import { Button } from '../components/Button'
+import { AccountSheet } from '../components/AccountSheet'
 import { ClaimSheet } from '../components/ClaimSheet'
+import { LoginSheet } from '../components/LoginSheet'
 import { CopyButton } from '../components/CopyButton'
 import { ListTeam } from '../components/ListTeam'
 import { PitchTeam } from '../components/PitchTeam'
@@ -11,10 +13,12 @@ import { SessionMeta } from '../components/SessionMeta'
 import type { SlotView } from '../components/SlotChip'
 import { useToast } from '../components/Toast'
 import { WaitlistSheet } from '../components/WaitlistSheet'
+import { adoptThisBrowser, getProfile, saveProfile, type Profile } from '../data/account'
 import { useAuthUser } from '../data/auth'
 import { hasPushSubscription } from '../data/push'
 import {
   SlotActionError,
+  adminClaimSlot,
   adminClearSlot,
   claimSlot,
   getSlot,
@@ -53,6 +57,35 @@ type OwnershipChange = readonly [slotId: string, owned: boolean]
 
 /** What an action changes optimistically, and what undoes it if the write
  *  fails. */
+/** What a signed-out tap was trying to do, so it can carry on after
+ *  sign-in -- including after the full-page round trip to Google. */
+const AFTER_LOGIN_KEY = 'sepak.afterLogin'
+type AfterLogin = { sessionId: string; target: string }
+
+function rememberAfterLogin(next: AfterLogin): void {
+  try {
+    sessionStorage.setItem(AFTER_LOGIN_KEY, JSON.stringify(next))
+  } catch {
+    // Without it the player simply taps again after signing in.
+  }
+}
+
+function takeAfterLogin(): AfterLogin | null {
+  try {
+    const raw = sessionStorage.getItem(AFTER_LOGIN_KEY)
+    sessionStorage.removeItem(AFTER_LOGIN_KEY)
+    if (raw === null) return null
+    const parsed: unknown = JSON.parse(raw)
+    if (typeof parsed !== 'object' || parsed === null) return null
+    const r = Object.fromEntries(Object.entries(parsed))
+    const sessionId = r['sessionId']
+    const target = r['target']
+    return typeof sessionId === 'string' && typeof target === 'string' ? { sessionId, target } : null
+  } catch {
+    return null
+  }
+}
+
 type OptimisticChange = {
   slot: Slot | null
   owned: readonly OwnershipChange[]
@@ -77,12 +110,75 @@ export default function SessionPage() {
     removeWaitlistLocal,
     setMyWaitlistEntry,
     refetch,
+    reloadMine,
   } = useSessionRealtime(id)
   const { show } = useToast()
-  const { role } = useAuthUser()
+  const { role, userId, email } = useAuthUser()
   // Being signed in is not enough any more -- a signed-in non-admin must not
   // get the organiser override, only someone with a row in sepak.admins.
   const isAdmin = role !== null
+
+  // Signing in or out changes which slot is "mine". On sign-in, whatever
+  // this browser booked before accounts existed moves onto the account
+  // first (adopt_device), then ownership is asked again.
+  const previousUser = useRef<string | null>(null)
+  useEffect(() => {
+    const previous = previousUser.current
+    previousUser.current = userId
+    if (userId === previous) return
+    if (userId === null) {
+      setProfile(null)
+      reloadMine()
+      return
+    }
+    void adoptThisBrowser().finally(reloadMine)
+    getProfile(userId)
+      .then(setProfile)
+      .catch(() => setProfile(null))
+  }, [userId, reloadMine])
+
+  // Carry on with what a signed-out tap was trying to do.
+  useEffect(() => {
+    if (userId === null || session === null || slots.length === 0) return
+    const pending = takeAfterLogin()
+    if (pending === null || pending.sessionId !== session.id) return
+    if (pending.target === 'waitlist') {
+      setWaitlistOpen(true)
+      return
+    }
+    const slot = slots.find((candidate) => candidate.id === pending.target)
+    if (slot !== undefined && slot.playerName === null) {
+      setSelected({ slot, position: slot.position, mine: false })
+    }
+  }, [userId, session, slots])
+
+  /** Every booking starts here: a signed-out tap on an empty slot or the
+   *  queue asks for sign-in first, and remembers what it was for. */
+  function askToSignIn(target: string) {
+    if (session === null) return
+    rememberAfterLogin({ sessionId: session.id, target })
+    setLoginOpen(true)
+  }
+
+  function selectSlot(view: SlotView) {
+    if (userId === null && (view.slot === null || view.slot.playerName === null)) {
+      if (view.slot !== null) askToSignIn(view.slot.id)
+      return
+    }
+    setSelected(view)
+  }
+
+  /** The profile follows whatever name and number the player last booked
+   *  with, so the next booking is one tap. */
+  function keepProfile(name: string, phone: string) {
+    if (userId === null) return
+    if (profile !== null && profile.name === name && profile.phone === phone) return
+    const next = { name, phone }
+    setProfile(next)
+    void saveProfile(userId, next).catch(() => {
+      // Only a prefill: a failed save costs a little typing next time.
+    })
+  }
 
   const [selected, setSelected] = useState<SlotView | null>(null)
   const [busy, setBusy] = useState(false)
@@ -96,6 +192,11 @@ export default function SessionPage() {
   // pasted there wrong. Null the rest of the time.
   const [change, setChange] = useState<RosterChange | null>(null)
   const [pushOpen, setPushOpen] = useState(false)
+  // Sign-in: asked for on the first booking tap, and what that tap was
+  // trying to do, carried across Google's round trip in sessionStorage.
+  const [loginOpen, setLoginOpen] = useState(false)
+  const [accountOpen, setAccountOpen] = useState(false)
+  const [profile, setProfile] = useState<Profile | null>(null)
   const [pushOn, setPushOn] = useState(true)
 
   useEffect(() => {
@@ -214,7 +315,22 @@ export default function SessionPage() {
         revertSlot: slot,
         revertOwned: [[slot.id, false]],
       },
-      () => rememberPlayer({ name, phone }),
+      () => {
+        rememberPlayer({ name, phone })
+        keepProfile(name, phone)
+      },
+    )
+  }
+
+  /** An admin books someone without an account. Not this device's slot, so
+   *  ownership is untouched. */
+  function onAdminClaim(name: string, phone: string) {
+    const slot = selected?.slot
+    if (slot === undefined || slot === null) return
+    const claimed: Slot = { ...slot, playerName: name, claimedAt: new Date().toISOString() }
+    void run(
+      () => adminClaimSlot(slot.id, name, phone),
+      { slot: claimed, owned: [], revertSlot: slot, revertOwned: [] },
     )
   }
 
@@ -399,6 +515,7 @@ export default function SessionPage() {
     joinWaitlist(session.id, name, phone, positions)
       .then((result) => {
         rememberPlayer({ name, phone })
+        keepProfile(name, phone)
         setWaitlistOpen(false)
         if (result.placed) {
           // Marking ownership here, ahead of the realtime event for the
@@ -463,6 +580,18 @@ export default function SessionPage() {
   return (
     <div className="mx-auto max-w-6xl space-y-4 p-4 pb-24 md:p-8 lg:grid lg:grid-cols-[340px_1fr] lg:items-start lg:gap-8 lg:space-y-0">
       <div className="space-y-4 lg:sticky lg:top-8">
+        <div className="flex justify-end">
+          {userId === null ? (
+            <Button variant="secondary" size="sm" onClick={() => setLoginOpen(true)}>
+              Log masuk
+            </Button>
+          ) : (
+            <Button variant="secondary" size="sm" onClick={() => setAccountOpen(true)}>
+              {profile?.name ?? 'Akaun'}
+            </Button>
+          )}
+        </div>
+
         <SessionMeta session={session} filled={filled} total={slots.length} />
 
         {mySlot !== null ? (
@@ -511,7 +640,11 @@ export default function SessionPage() {
                   )}
                 </>
               ) : (
-                <Button variant="primary" onClick={() => setWaitlistOpen(true)} className="w-full">
+                <Button
+                  variant="primary"
+                  onClick={() => (userId === null ? askToSignIn('waitlist') : setWaitlistOpen(true))}
+                  className="w-full"
+                >
                   Sertai senarai tunggu
                 </Button>
               )}
@@ -566,7 +699,7 @@ export default function SessionPage() {
               mySlotIds={mySlotIds}
               disabled={closed || busy}
               adminOverride={isAdmin}
-              onSelect={setSelected}
+              onSelect={selectSlot}
             />
           ))}
         </div>
@@ -677,6 +810,8 @@ export default function SessionPage() {
         onTogglePaid={onTogglePaid}
         onMove={onMove}
         onAdminClear={() => void onAdminClear()}
+        onAdminClaim={onAdminClaim}
+        profile={profile}
         onNameChange={setPendingName}
       />
 
@@ -702,7 +837,26 @@ export default function SessionPage() {
         busy={busy}
         onClose={() => setWaitlistOpen(false)}
         onJoin={onJoinWaitlist}
+        profile={profile}
       />
+
+      <LoginSheet
+        open={loginOpen}
+        reason="Log masuk untuk ambil slot. Sekali sahaja — lepas ni slot anda ikut akaun, di telefon mana pun."
+        returnTo={`${window.location.origin}${window.location.pathname}`}
+        onClose={() => setLoginOpen(false)}
+      />
+
+      {userId !== null && (
+        <AccountSheet
+          open={accountOpen}
+          userId={userId}
+          email={email}
+          profile={profile}
+          onSaved={setProfile}
+          onClose={() => setAccountOpen(false)}
+        />
+      )}
     </div>
   )
 }

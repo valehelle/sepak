@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import type { Profile } from '../data/account'
 import { formatPhone, normalisePhone } from '../lib/phone'
 import { recallPlayer } from '../lib/playerMemory'
 import { positionLabel } from '../lib/positions'
@@ -19,6 +20,8 @@ type ClaimSheetProps = {
    *  slot in this session. Set only then, and only that changes what an
    *  empty slot offers: moving there instead of claiming it. */
   currentLabel: string | null
+  /** The signed-in account's saved name and number, used to prefill. */
+  profile: Profile | null
   onClose: () => void
   /** `phone` arrives in stored form (60123456789), already validated. */
   onClaim: (name: string, phone: string) => void
@@ -26,6 +29,8 @@ type ClaimSheetProps = {
   onTogglePaid: (paid: boolean) => void
   onMove: () => void
   onAdminClear: () => void
+  /** An admin booking someone who cannot sign in. `phone` in stored form. */
+  onAdminClaim: (name: string, phone: string) => void
   onNameChange: (name: string) => void
 }
 
@@ -36,12 +41,14 @@ export function ClaimSheet({
   duplicateName,
   isAdmin,
   currentLabel,
+  profile,
   onClose,
   onClaim,
   onRelease,
   onTogglePaid,
   onMove,
   onAdminClear,
+  onAdminClaim,
   onNameChange,
 }: ClaimSheetProps) {
   const [name, setName] = useState('')
@@ -50,16 +57,22 @@ export function ClaimSheet({
   // Emptying a slot is one tap away from a mis-tap, and the slot can be gone
   // to someone else a second later, so both destructive buttons arm first.
   const [confirming, setConfirming] = useState<'release' | 'clear' | null>(null)
+  // An admin can book this slot for someone without an account instead of
+  // for themselves. The form is then blank: it is somebody else's name.
+  const [forOther, setForOther] = useState(false)
 
   // Prefill from the device's last booking so a regular only confirms. The
   // recalled name is reported upward too, or the duplicate-name warning
   // would only ever react to typing.
+  // The account's saved profile wins over what this browser remembers: it
+  // follows the player to any phone.
   useEffect(() => {
-    const remembered = recallPlayer()
+    const remembered = profile ?? recallPlayer()
     setName(remembered.name)
     setPhone(remembered.phone === '' ? '' : formatPhone(remembered.phone))
     setProblem(null)
     setConfirming(null)
+    setForOther(false)
     if (remembered.name !== '') onNameChange(remembered.name)
     // onNameChange is a stable setter from the page; view is the real trigger.
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -185,7 +198,7 @@ export function ClaimSheet({
   // An empty slot, opened by a device that already holds one. Claiming is not
   // on the table -- one booking per person per session -- so the only thing
   // to offer is the move, and the form would fail if it were shown.
-  if (currentLabel !== null) {
+  if (currentLabel !== null && !forOther) {
     return (
       <Sheet open title={title} onClose={onClose}>
         <p className="mb-1 font-sans text-[15px] text-white/70">Anda sekarang di</p>
@@ -203,8 +216,25 @@ export function ClaimSheet({
         <Button variant="secondary" disabled={busy} onClick={onClose} className="w-full">
           Batal
         </Button>
+        {isAdmin && (
+          <button
+            type="button"
+            onClick={() => switchToOther()}
+            className="mt-3 w-full font-kit text-[13px] text-white/60 underline decoration-white/20 underline-offset-4"
+          >
+            Daftar untuk orang lain (admin)
+          </button>
+        )}
       </Sheet>
     )
+  }
+
+  function switchToOther() {
+    setForOther(true)
+    setName('')
+    setPhone('')
+    setProblem(null)
+    onNameChange('')
   }
 
   function submit() {
@@ -226,11 +256,18 @@ export function ClaimSheet({
       setProblem('Nombor telefon tak sah. Contoh: 012-345 6789.')
       return
     }
-    onClaim(trimmed, stored)
+    if (forOther) onAdminClaim(trimmed, stored)
+    else onClaim(trimmed, stored)
   }
 
   return (
     <Sheet open title={title} onClose={onClose}>
+      {forOther && (
+        <p className="mb-3 font-sans text-[13px] leading-relaxed text-kuning">
+          Untuk pemain tanpa akaun. Slot ini tak terikat pada sesiapa — hanya admin boleh tanda
+          bayar atau kosongkannya.
+        </p>
+      )}
       <label htmlFor="player-name" className="mb-1 block font-kit text-[13px] text-white/45">Nama</label>
       <input
         id="player-name"
@@ -261,8 +298,17 @@ export function ClaimSheet({
         </p>
       )}
       <Button variant="primary" disabled={busy} onClick={submit} className="w-full">
-        Ambil slot
+        {forOther ? 'Daftar untuk dia' : 'Ambil slot'}
       </Button>
+      {isAdmin && !forOther && (
+        <button
+          type="button"
+          onClick={() => switchToOther()}
+          className="mt-3 w-full font-kit text-[13px] text-white/60 underline decoration-white/20 underline-offset-4"
+        >
+          Daftar untuk orang lain (admin)
+        </button>
+      )}
     </Sheet>
   )
 }

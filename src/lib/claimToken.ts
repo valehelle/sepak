@@ -4,10 +4,12 @@ const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/
 
 let cached: string | null = null
 
-/** The device's identity. Holding this token is what authorises releasing a
- *  slot, which is how a player edits their own booking without an account.
- *  Storage can throw outright in private browsing, so a failure to persist
- *  degrades to a session-lived token rather than breaking the page. */
+/** The key this browser booked with before players signed in. Bookings now
+ *  belong to accounts (0019_accounts.sql); the key's only remaining use is
+ *  adopt_device, which moves whatever this browser booked onto the account
+ *  that signs in here. Storage can throw outright in private browsing, so a
+ *  failure to persist degrades to a session-lived key rather than breaking
+ *  the page. */
 export function getClaimToken(): string {
   if (cached !== null) return cached
 

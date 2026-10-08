@@ -77,9 +77,11 @@ const state = {
   removeWaitlistLocal: vi.fn((id: string) => { state.waitlist = removeWaitlist(state.waitlist, id) }),
   setMyWaitlistEntry: vi.fn((entry: MyWaitlistEntry | null) => { state.myWaitlistEntry = entry }),
   refetch: vi.fn(),
+  reloadMine: vi.fn(),
 }
 
 const claimSlot = vi.fn()
+const adminClaimSlot = vi.fn()
 const releaseSlot = vi.fn()
 const setSlotPaid = vi.fn()
 const adminClearSlot = vi.fn()
@@ -89,12 +91,36 @@ const adminRemoveFromWaitlist = vi.fn()
 const joinWaitlist = vi.fn()
 const leaveWaitlist = vi.fn()
 const writeText = vi.fn()
-const authState = { email: null as string | null, role: null as 'super' | 'admin' | null, loading: false }
+// Signed in as a player by default: that is the state every booking test
+// needs. The signed-out tests below clear userId.
+const PLAYER_ID = '00000000-0000-4000-8000-00000000a001'
+const authState = {
+  userId: PLAYER_ID as string | null,
+  email: null as string | null,
+  role: null as 'super' | 'admin' | null,
+  loading: false,
+}
 
 vi.mock('../data/useSessionRealtime', () => ({ useSessionRealtime: () => state }))
 vi.mock('../data/auth', () => ({ useAuthUser: () => authState }))
+const adoptThisBrowser = vi.fn(() => Promise.resolve(0))
+const getProfile = vi.fn((): Promise<{ name: string; phone: string } | null> => Promise.resolve(null))
+const saveProfile = vi.fn((..._args: unknown[]) => Promise.resolve())
+vi.mock('../data/account', () => ({
+  adoptThisBrowser: () => adoptThisBrowser(),
+  getProfile: () => getProfile(),
+  saveProfile: (...args: unknown[]) => saveProfile(...args),
+  signInWithGoogle: vi.fn(() => Promise.resolve()),
+  signInWithEmail: vi.fn(() => Promise.resolve()),
+  signUpWithEmail: vi.fn(() => Promise.resolve()),
+  sendPasswordReset: vi.fn(() => Promise.resolve()),
+  signOutPlayer: vi.fn(() => Promise.resolve()),
+  isInAppBrowser: () => false,
+  AccountError: class extends Error {},
+}))
 vi.mock('../data/slots', () => ({
   claimSlot: (...args: unknown[]) => claimSlot(...args),
+  adminClaimSlot: (...args: unknown[]) => adminClaimSlot(...args),
   releaseSlot: (...args: unknown[]) => releaseSlot(...args),
   setSlotPaid: (...args: unknown[]) => setSlotPaid(...args),
   adminClearSlot: (id: string) => adminClearSlot(id),
@@ -153,12 +179,16 @@ vi.mock('react-router', async () => {
 const { ToastProvider } = await import('../components/Toast')
 const { default: SessionPage } = await import('./SessionPage')
 
-function view() {
-  return render(
+function page() {
+  return (
     <MemoryRouter>
       <ToastProvider><SessionPage /></ToastProvider>
-    </MemoryRouter>,
+    </MemoryRouter>
   )
+}
+
+function view() {
+  return render(page())
 }
 
 /** Marks a slot as claimed by 'Hazmi' in the fixture list, without mutating
@@ -195,8 +225,13 @@ describe('SessionPage', () => {
     writeText.mockReset()
     getContactPhone.mockReset().mockResolvedValue(null)
     localStorage.clear()
+    authState.userId = PLAYER_ID
     authState.email = null
     authState.role = null
+    adoptThisBrowser.mockClear()
+    getProfile.mockReset().mockResolvedValue(null)
+    saveProfile.mockClear()
+    try { sessionStorage.clear() } catch { /* jsdom always has it */ }
     // `mockReset` would also discard the implementations above, so the
     // mutating behaviour is reinstated fresh each test instead of reset away.
     state.applyLocal = vi.fn((slot: Slot) => { state.slots = replace(state.slots, slot) })
@@ -1034,6 +1069,71 @@ describe('SessionPage', () => {
       const copied = String(writeText.mock.calls[0]?.[0] ?? '')
       expect(copied.startsWith('Sesi 005')).toBe(true)
       expect(copied).not.toContain('Jangan edit')
+    })
+  })
+
+  describe('signing in', () => {
+    it('asks a signed-out player to sign in on an empty slot, and carries on after', async () => {
+      authState.userId = null
+      const { rerender } = view()
+      await userEvent.click(firstOf(screen.getAllByRole('button', { name: /^GK/ })))
+      expect(screen.getByRole('button', { name: 'Log masuk dengan Google' })).toBeTruthy()
+      expect(screen.queryByLabelText('Nama')).toBeNull()
+
+      // Back from Google: the same page, now signed in.
+      authState.userId = PLAYER_ID
+      rerender(page())
+      await waitFor(() => expect(screen.getByRole('button', { name: 'Ambil slot' })).toBeTruthy())
+    })
+
+    it('asks a signed-out player to sign in before joining the queue', async () => {
+      authState.userId = null
+      view()
+      await userEvent.click(screen.getByRole('button', { name: 'Sertai senarai tunggu' }))
+      expect(screen.getByRole('button', { name: 'Log masuk dengan Google' })).toBeTruthy()
+    })
+
+    it('moves this browser\'s old bookings onto the account when it signs in', async () => {
+      view()
+      await waitFor(() => expect(adoptThisBrowser).toHaveBeenCalledTimes(1))
+      await waitFor(() => expect(state.reloadMine).toHaveBeenCalled())
+    })
+
+    it('fills the claim form from the account\'s saved name and number', async () => {
+      getProfile.mockResolvedValue({ name: 'Hazmi', phone: '60123456789' })
+      view()
+      await waitFor(() => expect(screen.getByRole('button', { name: 'Hazmi' })).toBeTruthy())
+      await userEvent.click(firstOf(screen.getAllByRole('button', { name: /^GK/ })))
+      expect(screen.getByLabelText<HTMLInputElement>('Nama').value).toBe('Hazmi')
+      expect(screen.getByLabelText<HTMLInputElement>('Nombor telefon').value).toBe('012-345 6789')
+    })
+
+    it('saves a new name and number to the account after booking', async () => {
+      claimSlot.mockResolvedValue({ ...firstOf(state.slots), playerName: 'Hazmi', claimedAt: 'now' })
+      view()
+      await userEvent.click(firstOf(screen.getAllByRole('button', { name: /^GK/ })))
+      await userEvent.type(screen.getByLabelText('Nama'), 'Hazmi')
+      await userEvent.type(screen.getByLabelText('Nombor telefon'), '012-345 6789')
+      await userEvent.click(screen.getByRole('button', { name: 'Ambil slot' }))
+      await waitFor(() =>
+        expect(saveProfile).toHaveBeenCalledWith(PLAYER_ID, { name: 'Hazmi', phone: '60123456789' }),
+      )
+    })
+
+    it('lets an admin book someone without an account, leaving the slot unowned', async () => {
+      authState.role = 'admin'
+      authState.email = 'admin@example.com'
+      adminClaimSlot.mockResolvedValue({ ...firstOf(state.slots), playerName: 'Pakcik', claimedAt: 'now' })
+      view()
+      await userEvent.click(firstOf(screen.getAllByRole('button', { name: /^GK/ })))
+      await userEvent.click(screen.getByRole('button', { name: 'Daftar untuk orang lain (admin)' }))
+      expect(screen.getByLabelText<HTMLInputElement>('Nama').value).toBe('')
+      await userEvent.type(screen.getByLabelText('Nama'), 'Pakcik')
+      await userEvent.type(screen.getByLabelText('Nombor telefon'), '014-444 4444')
+      await userEvent.click(screen.getByRole('button', { name: 'Daftar untuk dia' }))
+      await waitFor(() => expect(adminClaimSlot).toHaveBeenCalledWith('A-GK', 'Pakcik', '60144444444'))
+      expect(claimSlot).not.toHaveBeenCalled()
+      expect(state.setOwned).not.toHaveBeenCalledWith('A-GK', true)
     })
   })
 })

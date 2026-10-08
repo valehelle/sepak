@@ -116,3 +116,40 @@ export function slotId(ids: Record<string, string | undefined>, team: string, po
   if (id === undefined) throw new Error(`no seeded slot for ${team}:${position}`)
   return id
 }
+
+/** A player signed in to a fresh account of their own, on a client of their
+ *  own -- a separate phone, as far as the database can tell. Since
+ *  0019_accounts.sql every booking belongs to a signed-in account, so this
+ *  is what stands in for the old "device token" in tests.
+ *
+ *  `email_confirm` mirrors production, where confirmation is off and a
+ *  sign-up is signed in at once. */
+export type Player = { client: SupabaseClient<any, 'sepak'>; userId: string; email: string; password: string }
+
+export async function newPlayer(label = 'player'): Promise<Player> {
+  const email = `${label}-${crypto.randomUUID()}@example.test`
+  const password = 'player-test-password'
+  const created = await adminClient().auth.admin.createUser({ email, password, email_confirm: true })
+  if (created.error !== null || created.data.user === null) {
+    throw new Error(`createUser failed: ${created.error?.message ?? 'no user'}`)
+  }
+  const client = anonClient()
+  const signedIn = await client.auth.signInWithPassword({ email, password })
+  if (signedIn.error !== null) throw new Error(`sign-in failed: ${signedIn.error.message}`)
+  return { client, userId: created.data.user.id, email, password }
+}
+
+/** Signs the app's own client (src/lib/supabase.ts) in as this player, for
+ *  tests of the wrapper functions in src/data, which always use it. */
+export async function signInAppClientAs(
+  appClient: SupabaseClient<any, 'sepak'>,
+  player: Player,
+): Promise<void> {
+  const { error } = await appClient.auth.signInWithPassword({ email: player.email, password: player.password })
+  if (error !== null) throw new Error(`app sign-in failed: ${error.message}`)
+}
+
+export async function deletePlayer(player: Player): Promise<void> {
+  await player.client.auth.signOut()
+  await adminClient().auth.admin.deleteUser(player.userId)
+}

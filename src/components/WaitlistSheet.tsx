@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { formatPhone, normalisePhone } from '../lib/phone'
+import type { Profile } from '../data/account'
 import { recallPlayer } from '../lib/playerMemory'
 import { ALL_POSITIONS, ALL_POSITIONS_EXCEPT_GK, POSITIONS, formatPositions, positionLabel, type Position } from '../lib/positions'
 import { Button } from './Button'
@@ -13,9 +14,11 @@ type WaitlistSheetProps = {
   onClose: () => void
   /** `phone` arrives in stored form (60123456789), already validated. */
   onJoin: (name: string, phone: string, positions: Position[]) => void
+  /** The signed-in account's saved name and number, used to prefill. */
+  profile: Profile | null
 }
 
-export function WaitlistSheet({ open, busy, onClose, onJoin }: WaitlistSheetProps) {
+export function WaitlistSheet({ open, busy, onClose, onJoin, profile }: WaitlistSheetProps) {
   const [name, setName] = useState('')
   const [phone, setPhone] = useState('')
   const [selected, setSelected] = useState<Position[]>([])
@@ -23,12 +26,12 @@ export function WaitlistSheet({ open, busy, onClose, onJoin }: WaitlistSheetProp
 
   useEffect(() => {
     if (!open) return
-    const remembered = recallPlayer()
+    const remembered = profile ?? recallPlayer()
     setName(remembered.name)
     setPhone(remembered.phone === '' ? '' : formatPhone(remembered.phone))
     setSelected([])
     setProblem(null)
-  }, [open])
+  }, [open, profile])
 
   if (!open) return null
 

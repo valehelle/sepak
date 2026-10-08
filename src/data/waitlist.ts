@@ -1,4 +1,3 @@
-import { getClaimToken } from '../lib/claimToken'
 import { isPosition, type Position } from '../lib/positions'
 import { supabase } from '../lib/supabase'
 import { FALLBACK_ERROR_MESSAGE, RPC_MESSAGES, rpcErrorCode } from './types'
@@ -128,7 +127,6 @@ export async function joinWaitlist(
     p_name: playerName,
     p_phone: phone,
     p_positions: [...positions],
-    p_token: getClaimToken(),
   })
   if (error !== null) fail(error)
   return parseJoinResult(data)
@@ -137,7 +135,6 @@ export async function joinWaitlist(
 export async function leaveWaitlist(sessionId: string): Promise<void> {
   const { error } = await supabase.rpc('leave_waitlist', {
     p_session_id: sessionId,
-    p_token: getClaimToken(),
   })
   if (error !== null) fail(error)
 }
@@ -147,7 +144,6 @@ export async function leaveWaitlist(sessionId: string): Promise<void> {
 export async function getMyWaitlistEntry(sessionId: string): Promise<MyWaitlistEntry | null> {
   const { data, error } = await supabase.rpc('my_waitlist_entry', {
     p_session_id: sessionId,
-    p_token: getClaimToken(),
   })
   if (error !== null) fail(error)
 

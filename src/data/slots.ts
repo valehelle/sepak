@@ -1,4 +1,3 @@
-import { getClaimToken } from '../lib/claimToken'
 import { supabase } from '../lib/supabase'
 import { SLOT_COLUMNS } from './sessions'
 import { FALLBACK_ERROR_MESSAGE, RPC_MESSAGES, parseSlot, rpcErrorCode, type Slot } from './types'
@@ -22,7 +21,18 @@ export async function claimSlot(slotId: string, playerName: string, phone: strin
     p_slot_id: slotId,
     p_name: playerName,
     p_phone: phone,
-    p_token: getClaimToken(),
+  })
+  if (error !== null) fail(error)
+  return parseSlot(data)
+}
+
+/** An admin books someone who cannot sign in. The slot belongs to no
+ *  account, so only admins can tick or clear it afterwards. */
+export async function adminClaimSlot(slotId: string, playerName: string, phone: string): Promise<Slot> {
+  const { data, error } = await supabase.rpc('admin_claim_slot', {
+    p_slot_id: slotId,
+    p_name: playerName,
+    p_phone: phone,
   })
   if (error !== null) fail(error)
   return parseSlot(data)
@@ -31,7 +41,6 @@ export async function claimSlot(slotId: string, playerName: string, phone: strin
 export async function releaseSlot(slotId: string): Promise<Slot> {
   const { data, error } = await supabase.rpc('release_slot', {
     p_slot_id: slotId,
-    p_token: getClaimToken(),
   })
   if (error !== null) fail(error)
   return parseSlot(data)
@@ -43,7 +52,6 @@ export async function releaseSlot(slotId: string): Promise<Slot> {
 export async function setSlotPaid(slotId: string, paid: boolean): Promise<Slot> {
   const { data, error } = await supabase.rpc('set_slot_paid', {
     p_slot_id: slotId,
-    p_token: getClaimToken(),
     p_paid: paid,
   })
   if (error !== null) fail(error)
@@ -68,7 +76,6 @@ export async function adminClearSlot(slotId: string): Promise<void> {
 export async function getMySlotIds(sessionId: string): Promise<Set<string>> {
   const { data, error } = await supabase.rpc('my_slot_ids', {
     p_session_id: sessionId,
-    p_token: getClaimToken(),
   })
   if (error !== null) fail(error)
 
@@ -92,7 +99,6 @@ export async function moveSlot(fromSlotId: string, toSlotId: string): Promise<Sl
   const { data, error } = await supabase.rpc('move_slot', {
     p_from: fromSlotId,
     p_to: toSlotId,
-    p_token: getClaimToken(),
   })
   if (error !== null) fail(error)
   return parseSlot(data)

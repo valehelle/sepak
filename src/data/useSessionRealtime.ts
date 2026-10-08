@@ -20,6 +20,9 @@ export type SessionRealtimeState = {
   removeWaitlistLocal: (id: string) => void
   setMyWaitlistEntry: (entry: MyWaitlistEntry | null) => void
   refetch: () => void
+  /** Re-asks which slot and queue place belong to the caller, without
+   *  reloading the page -- for the moment someone signs in or out. */
+  reloadMine: () => void
 }
 
 function replace(slots: readonly Slot[], next: Slot): Slot[] {
@@ -73,6 +76,15 @@ export function useSessionRealtime(sessionId: string | undefined): SessionRealti
   const [nonce, setNonce] = useState(0)
 
   const refetch = useCallback(() => setNonce((n) => n + 1), [])
+  const reloadMine = useCallback(() => {
+    if (sessionId === undefined) return
+    getMySlotIds(sessionId)
+      .then(setMySlotIds)
+      .catch(() => setMySlotIds(new Set()))
+    getMyWaitlistEntry(sessionId)
+      .then(setMyWaitlistEntryState)
+      .catch(() => setMyWaitlistEntryState(null))
+  }, [sessionId])
   const applyLocal = useCallback((slot: Slot) => setSlots((current) => replace(current, slot)), [])
   const setOwned = useCallback(
     (slotId: string, owned: boolean) => setMySlotIds((current) => withOwned(current, slotId, owned)),
@@ -242,5 +254,6 @@ export function useSessionRealtime(sessionId: string | undefined): SessionRealti
     removeWaitlistLocal,
     setMyWaitlistEntry,
     refetch,
+    reloadMine,
   }
 }

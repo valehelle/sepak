@@ -28,11 +28,10 @@ function isAdminRole(value: unknown): value is AdminRole {
 }
 
 /** The caller's own row in `admins`, or null if signed out or signed in but
- *  not on the allowlist. Looked up by primary key rather than through
- *  listAdmins() so a plain admin (who can select every row, per the
- *  admins_select policy) never fetches more than their own. */
-async function fetchOwnRole(email: string): Promise<AdminRole | null> {
-  const { data, error } = await supabase.from('admins').select('role').eq('email', email.toLowerCase()).maybeSingle()
+ *  not an admin. Looked up by account, which is what admin rights are bound
+ *  to (0019_accounts.sql) -- not by email, which anyone can register. */
+async function fetchOwnRole(userId: string): Promise<AdminRole | null> {
+  const { data, error } = await supabase.from('admins').select('role').eq('user_id', userId).maybeSingle()
   if (error !== null || data === null) return null
   const role: unknown = Object.fromEntries(Object.entries(data))['role']
   return isAdminRole(role) ? role : null
@@ -44,7 +43,16 @@ async function fetchOwnRole(email: string): Promise<AdminRole | null> {
  *  is null both when signed out and when signed in but not on the
  *  allowlist, and callers that need to tell those two apart also check
  *  `loading`/`email`. */
-export function useAuthUser(): { email: string | null; role: AdminRole | null; loading: boolean } {
+export type AuthUser = {
+  /** The signed-in account, player or admin. Null when signed out. */
+  userId: string | null
+  email: string | null
+  role: AdminRole | null
+  loading: boolean
+}
+
+export function useAuthUser(): AuthUser {
+  const [userId, setUserId] = useState<string | null>(null)
   const [email, setEmail] = useState<string | null>(null)
   const [role, setRole] = useState<AdminRole | null>(null)
   const [loading, setLoading] = useState(true)
@@ -52,25 +60,26 @@ export function useAuthUser(): { email: string | null; role: AdminRole | null; l
   useEffect(() => {
     let cancelled = false
 
-    async function applySession(sessionEmail: string | null) {
+    async function applySession(sessionUserId: string | null, sessionEmail: string | null) {
       if (cancelled) return
+      setUserId(sessionUserId)
       setEmail(sessionEmail)
-      if (sessionEmail === null) {
+      if (sessionUserId === null) {
         setRole(null)
         return
       }
-      const fetchedRole = await fetchOwnRole(sessionEmail)
+      const fetchedRole = await fetchOwnRole(sessionUserId)
       if (!cancelled) setRole(fetchedRole)
     }
 
     supabase.auth.getSession().then(({ data }) => {
-      void applySession(data.session?.user.email ?? null).finally(() => {
+      void applySession(data.session?.user.id ?? null, data.session?.user.email ?? null).finally(() => {
         if (!cancelled) setLoading(false)
       })
     })
 
     const { data: subscription } = supabase.auth.onAuthStateChange((_event, session) => {
-      void applySession(session?.user.email ?? null)
+      void applySession(session?.user.id ?? null, session?.user.email ?? null)
     })
 
     return () => {
@@ -79,5 +88,5 @@ export function useAuthUser(): { email: string | null; role: AdminRole | null; l
     }
   }, [])
 
-  return { email, role, loading }
+  return { userId, email, role, loading }
 }
