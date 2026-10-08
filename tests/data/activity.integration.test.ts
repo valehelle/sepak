@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
-import { ActivityError, listActivity } from '../../src/data/activity'
+import { ActivityError, listSessionActivity } from '../../src/data/activity'
 import { supabase } from '../../src/lib/supabase'
 import { adminClient, anonClient, deleteSession, seedSession, slotId } from '../helpers/localSupabase'
 
@@ -18,7 +18,7 @@ describe('activity against local postgres', () => {
   })
 
   it('is refused for anon, which is what the app runs as by default', async () => {
-    await expect(listActivity()).rejects.toBeInstanceOf(ActivityError)
+    await expect(listSessionActivity('00000000-0000-4000-8000-000000000000')).rejects.toBeInstanceOf(ActivityError)
   })
 
   it('anon cannot read the table directly either', async () => {
@@ -86,7 +86,7 @@ describe('activity as an allowlisted admin', () => {
     expect(signedIn.error).toBeNull()
 
     // The feed spans every session, so this one's lines are picked out.
-    const mine = (await listActivity()).filter((e) => e.sessionId === sessionId)
+    const mine = await listSessionActivity(sessionId)
     expect(mine.map((e) => e.kind)).toEqual(['release', 'paid', 'claim'])
 
     const [release, , claim] = mine
@@ -130,7 +130,7 @@ describe('activity as an allowlisted admin', () => {
       .eq('id', st)
     expect(cleared.error).toBeNull()
 
-    const mine = (await listActivity()).filter((e) => e.sessionId === sessionId)
+    const mine = await listSessionActivity(sessionId)
     expect(mine[0]).toMatchObject({
       kind: 'admin_clear',
       actor: 'admin',

@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Link, useParams } from 'react-router'
+import { ActivityFeed } from '../components/ActivityFeed'
 import { AdminContactToggle } from '../components/AdminContact'
 import { Button } from '../components/Button'
 import { ClaimSheet } from '../components/ClaimSheet'
@@ -705,6 +706,10 @@ export default function SessionPage() {
             </ol>
           </section>
         )}
+
+        {/* Under the queue: what happened in this session, for admins
+            only -- the lines carry phone numbers. */}
+        {isAdmin && <ActivityFeed sessionId={session.id} />}
       </div>
 
       <ClaimSheet

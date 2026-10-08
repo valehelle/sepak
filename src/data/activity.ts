@@ -108,11 +108,11 @@ function parseEvent(row: unknown): ActivityEvent {
   }
 }
 
-/** The organiser's log, newest first. Admin-gated in the database
- *  (sepak.activity_feed raises not_admin), so this is safe to call from a
+/** One session's log, newest first. Admin-gated in the database
+ *  (sepak.session_activity raises not_admin), so this is safe to call from a
  *  page that merely believes it is an admin. */
-export async function listActivity(limit = 100): Promise<ActivityEvent[]> {
-  const { data, error } = await supabase.rpc('activity_feed', { p_limit: limit })
+export async function listSessionActivity(sessionId: string, limit = 200): Promise<ActivityEvent[]> {
+  const { data, error } = await supabase.rpc('session_activity', { p_session_id: sessionId, p_limit: limit })
   if (error !== null) {
     const code = error.message.includes('not_admin') ? 'not_admin' : null
     throw new ActivityError(

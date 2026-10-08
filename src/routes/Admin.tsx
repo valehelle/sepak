@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useState } from 'react'
 import { Link } from 'react-router'
-import { ActivityFeed } from '../components/ActivityFeed'
 import { AdminList } from '../components/AdminList'
 import { Button, buttonClass } from '../components/Button'
 import { inputClass } from '../components/Input'
@@ -370,10 +369,6 @@ export default function Admin() {
           </div>
         )}
       </div>
-
-      {/* Below the sessions: the log is what you read after the fact, not
-          what you come here to do. */}
-      <ActivityFeed />
 
       {formValues !== null && (
         <Sheet

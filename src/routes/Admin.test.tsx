@@ -43,7 +43,7 @@ vi.mock('../data/auth', () => ({
 // ../data/activity -- mocked here so the page's own tests need no
 // credentials. The feed's behaviour is tested in ActivityFeed.test.tsx.
 vi.mock('../data/activity', () => ({
-  listActivity: () => Promise.resolve([]),
+  listSessionActivity: () => Promise.resolve([]),
   ActivityError: class extends Error {
     constructor(message: string, readonly code: string | null) { super(message) }
   },
