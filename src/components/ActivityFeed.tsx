@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from 'react'
 import { ActivityError, listSessionActivity, type ActivityEvent } from '../data/activity'
+import type { Slot } from '../data/types'
 import { formatEventTime } from '../lib/format'
 import { formatPhone, whatsappLink } from '../lib/phone'
 import { positionLabel } from '../lib/positions'
@@ -74,11 +75,49 @@ const TONE: Record<ActivityEvent['kind'], string | undefined> = {
 /** One session's history, shown to admins on that session's page. Per
  *  session rather than one feed for everything: the combined feed mixed
  *  this week's game with last week's. */
-export function ActivityFeed({ sessionId }: { sessionId: string }) {
+type ActivityFeedProps = {
+  sessionId: string
+  /** The session's slots as the page has them, to find each tick's receipt. */
+  slots: readonly Slot[]
+  onViewReceipt: (path: string) => void
+}
+
+/** The receipt behind a "dah bayar" line, if that tick still stands: the
+ *  newest paid line for a slot, while the same player holds it and it is
+ *  still ticked. Older lines -- a tick later taken back, or a previous
+ *  occupant's -- get nothing, rather than someone else's receipt. */
+function receiptFor(
+  event: ActivityEvent,
+  slots: readonly Slot[],
+  newestPaid: ReadonlySet<number>,
+): { path: string | null } | null {
+  if (event.kind !== 'paid' || !newestPaid.has(event.id)) return null
+  const slot = slots.find(
+    (candidate) =>
+      candidate.team === event.team && candidate.position === event.position && candidate.playerName === event.playerName,
+  )
+  if (slot === undefined || !slot.paid) return null
+  return { path: slot.receiptPath }
+}
+
+export function ActivityFeed({ sessionId, slots, onViewReceipt }: ActivityFeedProps) {
   const [feed, setFeed] = useState<Feed>({ state: 'loading' })
   const [tabKey, setTabKey] = useState<TabKey>('all')
   const tab = TABS.find((candidate) => candidate.key === tabKey) ?? TABS[0]
   const shown = feed.state === 'done' ? feed.events.filter((event) => inTab(event, tab)) : []
+  // The feed is newest first, so the first paid line seen per position is
+  // the one that may still have a receipt behind it.
+  const newestPaid = new Set<number>()
+  if (feed.state === 'done') {
+    const seen = new Set<string>()
+    for (const event of feed.events) {
+      if (event.kind !== 'paid') continue
+      const where = `${event.team ?? ''}:${event.position ?? ''}`
+      if (seen.has(where)) continue
+      seen.add(where)
+      newestPaid.add(event.id)
+    }
+  }
 
   const load = useCallback(() => {
     let cancelled = false
@@ -166,6 +205,23 @@ export function ActivityFeed({ sessionId }: { sessionId: string }) {
               <span className={`font-sans text-[14px] ${TONE[event.kind] ?? 'text-white'}`}>
                 {describeActivity(event)}
               </span>
+              {(() => {
+                const receipt = receiptFor(event, slots, newestPaid)
+                if (receipt === null) return null
+                return receipt.path === null ? (
+                  <span className="font-kit text-[12px] text-kuning">tiada resit</span>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (receipt.path !== null) onViewReceipt(receipt.path)
+                    }}
+                    className="font-kit text-[12px] text-turf-lit underline decoration-turf-lit/40 underline-offset-2"
+                  >
+                    🧾 Lihat resit
+                  </button>
+                )
+              })()}
               {event.phone !== null && (
                 <a
                   href={whatsappLink(event.phone)}

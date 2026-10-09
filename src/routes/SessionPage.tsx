@@ -755,7 +755,7 @@ export default function SessionPage() {
 
         {/* Under the queue: what happened in this session, for admins
             only -- the lines carry phone numbers. */}
-        {isAdmin && <ActivityFeed sessionId={session.id} />}
+        {isAdmin && <ActivityFeed sessionId={session.id} slots={slots} onViewReceipt={viewReceipt} />}
       </div>
 
       <ClaimSheet

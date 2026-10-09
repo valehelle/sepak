@@ -2,6 +2,7 @@ import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { ActivityEvent } from '../data/activity'
+import type { Slot } from '../data/types'
 
 // A plain closure rather than vi.fn(), for the same reason as
 // AdminContact.test.tsx: a rejected promise from a vi.fn() inside a React
@@ -84,7 +85,7 @@ describe('ActivityFeed', () => {
         event({ id: 2, kind: 'paid' }),
         event({ id: 1, kind: 'claim' }),
       ])
-    render(<ActivityFeed sessionId="session-1" />)
+    render(<ActivityFeed sessionId="session-1" slots={[]} onViewReceipt={() => {}} />)
 
     await waitFor(() => expect(screen.getByText('Hazmi tanda dah bayar')).toBeTruthy())
     expect(screen.getByText('Hazmi ambil A ST')).toBeTruthy()
@@ -102,7 +103,7 @@ describe('ActivityFeed', () => {
         event({ id: 2, kind: 'release', playerName: 'Amir' }),
         event({ id: 1, kind: 'claim', playerName: 'Amir' }),
       ])
-    render(<ActivityFeed sessionId="session-1" />)
+    render(<ActivityFeed sessionId="session-1" slots={[]} onViewReceipt={() => {}} />)
 
     await waitFor(() => expect(screen.getAllByRole('listitem')).toHaveLength(2))
     const lines = screen.getAllByRole('listitem').map((li) => li.textContent ?? '')
@@ -111,14 +112,14 @@ describe('ActivityFeed', () => {
   })
 
   it('says what will appear here when there is nothing yet', async () => {
-    render(<ActivityFeed sessionId="session-1" />)
+    render(<ActivityFeed sessionId="session-1" slots={[]} onViewReceipt={() => {}} />)
     await waitFor(() => expect(screen.getByText(/Belum ada apa-apa/)).toBeTruthy())
     expect(screen.queryByRole('listitem')).toBeNull()
   })
 
   it('omits the number when a line has none', async () => {
     impl = () => Promise.resolve([event({ phone: null })])
-    render(<ActivityFeed sessionId="session-1" />)
+    render(<ActivityFeed sessionId="session-1" slots={[]} onViewReceipt={() => {}} />)
     await waitFor(() => expect(screen.getByText('Hazmi ambil A ST')).toBeTruthy())
     expect(screen.queryByRole('link')).toBeNull()
   })
@@ -126,12 +127,12 @@ describe('ActivityFeed', () => {
   it('shows the reason when the feed is refused', async () => {
     const { ActivityError } = await import('../data/activity')
     impl = () => Promise.reject(new ActivityError('Hanya admin boleh lihat aktiviti.', 'not_admin'))
-    render(<ActivityFeed sessionId="session-1" />)
+    render(<ActivityFeed sessionId="session-1" slots={[]} onViewReceipt={() => {}} />)
     await waitFor(() => expect(screen.getByText('Hanya admin boleh lihat aktiviti.')).toBeTruthy())
   })
 
   it('refetches on demand', async () => {
-    render(<ActivityFeed sessionId="session-1" />)
+    render(<ActivityFeed sessionId="session-1" slots={[]} onViewReceipt={() => {}} />)
     await waitFor(() => expect(loads).toBe(1))
     await userEvent.click(screen.getByRole('button', { name: 'Muat semula' }))
     await waitFor(() => expect(loads).toBe(2))
@@ -146,7 +147,7 @@ describe('ActivityFeed', () => {
         event({ id: 2, kind: 'unpaid', playerName: 'Dina' }),
         event({ id: 1, kind: 'admin_clear', playerName: 'Ejen' }),
       ])
-    render(<ActivityFeed sessionId="session-1" />)
+    render(<ActivityFeed sessionId="session-1" slots={[]} onViewReceipt={() => {}} />)
 
     await waitFor(() => expect(screen.getByRole('tab', { name: 'Semua (5)' })).toBeTruthy())
     expect(screen.getByRole('tab', { name: 'Bayar (2)' })).toBeTruthy()
@@ -167,8 +168,60 @@ describe('ActivityFeed', () => {
 
   it('says so when a tab has nothing in it', async () => {
     impl = () => Promise.resolve([event({ id: 1, kind: 'claim' })])
-    render(<ActivityFeed sessionId="session-1" />)
+    render(<ActivityFeed sessionId="session-1" slots={[]} onViewReceipt={() => {}} />)
     await userEvent.click(await screen.findByRole('tab', { name: 'Bayar (0)' }))
     expect(screen.getByText('Tiada aktiviti jenis ini lagi.')).toBeTruthy()
+  })
+
+  describe('receipts on paid lines', () => {
+    const slot = (overrides: Partial<Slot> = {}): Slot => ({
+      id: 'A-ST',
+      sessionId: 'session-1',
+      team: 'A',
+      position: 'ST',
+      playerName: 'Hazmi',
+      claimedAt: EVENING,
+      paid: true,
+      receiptPath: 'session-1/A-ST/r.jpg',
+      ...overrides,
+    })
+
+    it('opens the receipt behind the tick that still stands', async () => {
+      impl = () => Promise.resolve([
+        event({ id: 3, kind: 'paid' }),
+        event({ id: 2, kind: 'unpaid' }),
+        event({ id: 1, kind: 'paid' }),
+      ])
+      const onViewReceipt = vi.fn()
+      render(<ActivityFeed sessionId="session-1" slots={[slot()]} onViewReceipt={onViewReceipt} />)
+
+      await waitFor(() => expect(screen.getAllByText('Hazmi tanda dah bayar')).toHaveLength(2))
+      // Only the newest tick: the earlier one was taken back.
+      const links = screen.getAllByRole('button', { name: '🧾 Lihat resit' })
+      expect(links).toHaveLength(1)
+      await userEvent.click(links[0] ?? document.body)
+      expect(onViewReceipt).toHaveBeenCalledWith('session-1/A-ST/r.jpg')
+    })
+
+    it('says so when the tick came without a receipt', async () => {
+      impl = () => Promise.resolve([event({ id: 1, kind: 'paid' })])
+      render(<ActivityFeed sessionId="session-1" slots={[slot({ receiptPath: null })]} onViewReceipt={() => {}} />)
+      await waitFor(() => expect(screen.getByText('tiada resit')).toBeTruthy())
+    })
+
+    it('shows nothing once the slot is someone else\'s or unticked', async () => {
+      impl = () => Promise.resolve([event({ id: 1, kind: 'paid' })])
+      const { unmount } = render(
+        <ActivityFeed sessionId="session-1" slots={[slot({ playerName: 'Amir' })]} onViewReceipt={() => {}} />,
+      )
+      await waitFor(() => expect(screen.getByText('Hazmi tanda dah bayar')).toBeTruthy())
+      expect(screen.queryByRole('button', { name: '🧾 Lihat resit' })).toBeNull()
+      expect(screen.queryByText('tiada resit')).toBeNull()
+      unmount()
+
+      render(<ActivityFeed sessionId="session-1" slots={[slot({ paid: false, receiptPath: null })]} onViewReceipt={() => {}} />)
+      await waitFor(() => expect(screen.getByText('Hazmi tanda dah bayar')).toBeTruthy())
+      expect(screen.queryByText('tiada resit')).toBeNull()
+    })
   })
 })
