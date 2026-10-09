@@ -1,9 +1,25 @@
 import { useCallback, useEffect, useState } from 'react'
-import { ActivityError, listActivity, type ActivityEvent } from '../data/activity'
+import { ActivityError, listSessionActivity, type ActivityEvent } from '../data/activity'
 import { formatEventTime } from '../lib/format'
 import { formatPhone, whatsappLink } from '../lib/phone'
 import { positionLabel } from '../lib/positions'
 import { Button } from './Button'
+
+/** The feed's tabs. Bayar comes first after Semua: chasing payment is what
+ *  the organiser opens this for most. A move is logged as a release and a
+ *  claim (0015_move_slot.sql), so it shows under Keluar and Tukar both. */
+const TABS = [
+  { key: 'all', label: 'Semua', kinds: null },
+  { key: 'paid', label: 'Bayar', kinds: ['paid', 'unpaid'] },
+  { key: 'out', label: 'Keluar', kinds: ['release', 'admin_clear'] },
+  { key: 'change', label: 'Tukar', kinds: ['claim', 'autofill', 'waitlist_join', 'waitlist_leave'] },
+] as const satisfies readonly { key: string; label: string; kinds: readonly ActivityEvent['kind'][] | null }[]
+
+type TabKey = (typeof TABS)[number]['key']
+
+function inTab(event: ActivityEvent, tab: (typeof TABS)[number]): boolean {
+  return tab.kinds === null || tab.kinds.some((kind) => kind === event.kind)
+}
 
 type Feed =
   | { state: 'loading' }
@@ -55,13 +71,19 @@ const TONE: Record<ActivityEvent['kind'], string | undefined> = {
   waitlist_leave: undefined,
 }
 
-export function ActivityFeed() {
+/** One session's history, shown to admins on that session's page. Per
+ *  session rather than one feed for everything: the combined feed mixed
+ *  this week's game with last week's. */
+export function ActivityFeed({ sessionId }: { sessionId: string }) {
   const [feed, setFeed] = useState<Feed>({ state: 'loading' })
+  const [tabKey, setTabKey] = useState<TabKey>('all')
+  const tab = TABS.find((candidate) => candidate.key === tabKey) ?? TABS[0]
+  const shown = feed.state === 'done' ? feed.events.filter((event) => inTab(event, tab)) : []
 
   const load = useCallback(() => {
     let cancelled = false
     setFeed({ state: 'loading' })
-    listActivity()
+    listSessionActivity(sessionId)
       .then((events) => {
         if (!cancelled) setFeed({ state: 'done', events })
       })
@@ -75,7 +97,7 @@ export function ActivityFeed() {
     return () => {
       cancelled = true
     }
-  }, [])
+  }, [sessionId])
 
   useEffect(() => load(), [load])
 
@@ -94,6 +116,30 @@ export function ActivityFeed() {
         </Button>
       </div>
 
+      {feed.state === 'done' && feed.events.length > 0 && (
+        <div role="tablist" aria-label="Jenis aktiviti" className="mb-3 flex gap-1.5 overflow-x-auto">
+          {TABS.map((candidate) => {
+            const count = feed.events.filter((event) => inTab(event, candidate)).length
+            const active = candidate.key === tabKey
+            return (
+              <button
+                key={candidate.key}
+                type="button"
+                role="tab"
+                aria-selected={active}
+                onClick={() => setTabKey(candidate.key)}
+                className={[
+                  'shrink-0 rounded-full px-3 py-1 font-kit text-[13px] font-semibold transition',
+                  active ? 'bg-turf-lit text-white' : 'bg-white/5 text-white/60',
+                ].join(' ')}
+              >
+                {`${candidate.label} (${count})`}
+              </button>
+            )
+          })}
+        </div>
+      )}
+
       {feed.state === 'loading' && <p className="font-sans text-[13px] text-white/45">Memuatkan…</p>}
 
       {feed.state === 'failed' && (
@@ -106,15 +152,16 @@ export function ActivityFeed() {
         </p>
       )}
 
-      {feed.state === 'done' && feed.events.length > 0 && (
+      {feed.state === 'done' && feed.events.length > 0 && shown.length === 0 && (
+        <p className="font-sans text-[13px] text-white/45">Tiada aktiviti jenis ini lagi.</p>
+      )}
+
+      {shown.length > 0 && (
         <ol className="space-y-2">
-          {feed.events.map((event) => (
+          {shown.map((event) => (
             <li key={event.id} className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
               <span className="font-kit text-[12px] tabular-nums text-white/45">
                 {formatEventTime(event.createdAt)}
-              </span>
-              <span className="font-kit text-[12px] text-white/45">
-                {`Sesi ${String(event.sessionNo).padStart(3, '0')}`}
               </span>
               <span className={`font-sans text-[14px] ${TONE[event.kind] ?? 'text-white'}`}>
                 {describeActivity(event)}

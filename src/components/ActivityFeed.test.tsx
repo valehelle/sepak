@@ -12,7 +12,7 @@ let impl: () => Promise<ActivityEvent[]> = () => Promise.resolve([])
 // client, which throws at import time without credentials, so this factory
 // replaces the module outright rather than spreading importActual over it.
 vi.mock('../data/activity', () => ({
-  listActivity: () => {
+  listSessionActivity: () => {
     loads += 1
     return impl()
   },
@@ -78,18 +78,19 @@ describe('ActivityFeed', () => {
     impl = () => Promise.resolve([])
   })
 
-  it('renders each line with its time, session and number', async () => {
+  it('renders each line with its time and number', async () => {
     impl = () =>
       Promise.resolve([
         event({ id: 2, kind: 'paid' }),
         event({ id: 1, kind: 'claim' }),
       ])
-    render(<ActivityFeed />)
+    render(<ActivityFeed sessionId="session-1" />)
 
     await waitFor(() => expect(screen.getByText('Hazmi tanda dah bayar')).toBeTruthy())
     expect(screen.getByText('Hazmi ambil A ST')).toBeTruthy()
     expect(screen.getAllByText('17 Sep, 8:14 PM')).toHaveLength(2)
-    expect(screen.getAllByText('Sesi 006')).toHaveLength(2)
+    // Every line is this session's, so the session number is not repeated.
+    expect(screen.queryByText('Sesi 006')).toBeNull()
 
     const link = screen.getAllByRole('link', { name: '012-345 6789' })[0]
     expect(link?.getAttribute('href')).toBe('https://wa.me/60123456789')
@@ -101,7 +102,7 @@ describe('ActivityFeed', () => {
         event({ id: 2, kind: 'release', playerName: 'Amir' }),
         event({ id: 1, kind: 'claim', playerName: 'Amir' }),
       ])
-    render(<ActivityFeed />)
+    render(<ActivityFeed sessionId="session-1" />)
 
     await waitFor(() => expect(screen.getAllByRole('listitem')).toHaveLength(2))
     const lines = screen.getAllByRole('listitem').map((li) => li.textContent ?? '')
@@ -110,14 +111,14 @@ describe('ActivityFeed', () => {
   })
 
   it('says what will appear here when there is nothing yet', async () => {
-    render(<ActivityFeed />)
+    render(<ActivityFeed sessionId="session-1" />)
     await waitFor(() => expect(screen.getByText(/Belum ada apa-apa/)).toBeTruthy())
     expect(screen.queryByRole('listitem')).toBeNull()
   })
 
   it('omits the number when a line has none', async () => {
     impl = () => Promise.resolve([event({ phone: null })])
-    render(<ActivityFeed />)
+    render(<ActivityFeed sessionId="session-1" />)
     await waitFor(() => expect(screen.getByText('Hazmi ambil A ST')).toBeTruthy())
     expect(screen.queryByRole('link')).toBeNull()
   })
@@ -125,14 +126,49 @@ describe('ActivityFeed', () => {
   it('shows the reason when the feed is refused', async () => {
     const { ActivityError } = await import('../data/activity')
     impl = () => Promise.reject(new ActivityError('Hanya admin boleh lihat aktiviti.', 'not_admin'))
-    render(<ActivityFeed />)
+    render(<ActivityFeed sessionId="session-1" />)
     await waitFor(() => expect(screen.getByText('Hanya admin boleh lihat aktiviti.')).toBeTruthy())
   })
 
   it('refetches on demand', async () => {
-    render(<ActivityFeed />)
+    render(<ActivityFeed sessionId="session-1" />)
     await waitFor(() => expect(loads).toBe(1))
     await userEvent.click(screen.getByRole('button', { name: 'Muat semula' }))
     await waitFor(() => expect(loads).toBe(2))
+  })
+
+  it('splits the feed into tabs, with counts, and filters by them', async () => {
+    impl = () =>
+      Promise.resolve([
+        event({ id: 5, kind: 'paid', playerName: 'Amir' }),
+        event({ id: 4, kind: 'release', playerName: 'Bella' }),
+        event({ id: 3, kind: 'claim', playerName: 'Chong' }),
+        event({ id: 2, kind: 'unpaid', playerName: 'Dina' }),
+        event({ id: 1, kind: 'admin_clear', playerName: 'Ejen' }),
+      ])
+    render(<ActivityFeed sessionId="session-1" />)
+
+    await waitFor(() => expect(screen.getByRole('tab', { name: 'Semua (5)' })).toBeTruthy())
+    expect(screen.getByRole('tab', { name: 'Bayar (2)' })).toBeTruthy()
+    expect(screen.getByRole('tab', { name: 'Keluar (2)' })).toBeTruthy()
+    expect(screen.getByRole('tab', { name: 'Tukar (1)' })).toBeTruthy()
+
+    await userEvent.click(screen.getByRole('tab', { name: 'Bayar (2)' }))
+    expect(screen.getByText('Amir tanda dah bayar')).toBeTruthy()
+    expect(screen.getByText('Dina buang tanda bayar')).toBeTruthy()
+    expect(screen.queryByText(/Bella/)).toBeNull()
+    expect(screen.queryByText(/Chong/)).toBeNull()
+
+    await userEvent.click(screen.getByRole('tab', { name: 'Keluar (2)' }))
+    expect(screen.getByText(/Bella lepaskan/)).toBeTruthy()
+    expect(screen.getByText(/Admin kosongkan .*\(Ejen\)/)).toBeTruthy()
+    expect(screen.queryByText(/Amir/)).toBeNull()
+  })
+
+  it('says so when a tab has nothing in it', async () => {
+    impl = () => Promise.resolve([event({ id: 1, kind: 'claim' })])
+    render(<ActivityFeed sessionId="session-1" />)
+    await userEvent.click(await screen.findByRole('tab', { name: 'Bayar (0)' }))
+    expect(screen.getByText('Tiada aktiviti jenis ini lagi.')).toBeTruthy()
   })
 })
