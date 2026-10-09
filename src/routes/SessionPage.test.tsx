@@ -94,6 +94,15 @@ const authState = { email: null as string | null, role: null as 'super' | 'admin
 
 vi.mock('../data/useSessionRealtime', () => ({ useSessionRealtime: () => state }))
 vi.mock('../data/auth', () => ({ useAuthUser: () => authState }))
+// The admin activity section imports the supabase client through
+// ../data/activity, which throws without credentials -- and CI runs the unit
+// suite without any. The feed's own behaviour is in ActivityFeed.test.tsx.
+vi.mock('../data/activity', () => ({
+  listSessionActivity: () => Promise.resolve([]),
+  ActivityError: class extends Error {
+    constructor(message: string, readonly code: string | null) { super(message) }
+  },
+}))
 const sendReceipt = vi.fn()
 const receiptLink = vi.fn((..._args: unknown[]) => Promise.resolve('https://storage.test/signed'))
 vi.mock('../data/receipts', () => ({
