@@ -436,3 +436,8 @@ enabled = true
 # declarative_schema_path = "./database"
 # JSON string passed through to pg-delta SQL formatting.
 # format_options = "{\"keywordCase\":\"upper\",\"indent\":2,\"maxWidth\":80,\"commaStyle\":\"trailing\"}"
+
+# The site calls this with the publishable key, which is not a JWT; the
+# browser's claim token is what authorises it (supabase/functions/receipt).
+[functions.receipt]
+verify_jwt = false

@@ -8,11 +8,13 @@ import { CopyButton } from '../components/CopyButton'
 import { ListTeam } from '../components/ListTeam'
 import { PitchTeam } from '../components/PitchTeam'
 import { NotifySheet } from '../components/NotifySheet'
+import { PaySheet } from '../components/PaySheet'
 import { SessionMeta } from '../components/SessionMeta'
 import type { SlotView } from '../components/SlotChip'
 import { useToast } from '../components/Toast'
 import { WaitlistSheet } from '../components/WaitlistSheet'
 import { useAuthUser } from '../data/auth'
+import { receiptLink, removeReceipt } from '../data/receipts'
 import { hasPushSubscription } from '../data/push'
 import {
   SlotActionError,
@@ -104,6 +106,8 @@ export default function SessionPage() {
   // pasted there wrong. Null the rest of the time.
   const [change, setChange] = useState<RosterChange | null>(null)
   const [pushOpen, setPushOpen] = useState(false)
+  // The slot whose payment is being ticked, receipt first (PaySheet).
+  const [payFor, setPayFor] = useState<Slot | null>(null)
   const [pushOn, setPushOn] = useState(true)
 
   useEffect(() => {
@@ -294,7 +298,49 @@ export default function SessionPage() {
   function onTogglePaid(paid: boolean) {
     const slot = selected?.slot
     if (slot === undefined || slot === null) return
+    // A player ticking their own goes through the receipt sheet; an admin
+    // correcting somebody else's ticks straight away, without one.
+    if (paid && selected?.mine === true) {
+      setSelected(null)
+      setPayFor(slot)
+      return
+    }
+    untickOrTick(slot, paid)
+  }
+
+  /** An admin unticking also lets go of the receipt file; storage only lets
+   *  admins remove one. A player's untick leaves the file for the session's
+   *  delete to collect, and the slot forgets it either way. */
+  function untickOrTick(slot: Slot, paid: boolean) {
+    if (!paid && isAdmin && slot.receiptPath !== null) void removeReceipt(slot.receiptPath)
     markPaid(slot, paid)
+  }
+
+  function onPaidWithReceipt(next: Slot) {
+    setPayFor(null)
+    applyLocal(next)
+    const name = next.playerName
+    if (name === null || session === null) return
+    setChange({
+      kind: 'paid',
+      at: { team: next.team, teamName: session.teamNames[next.team], position: next.position },
+      playerName: name,
+    })
+  }
+
+  /** Opened before the link is fetched: a window opened after an await is
+   *  what phone browsers block as a pop-up. */
+  function viewReceipt(path: string) {
+    const opened = window.open('', '_blank')
+    receiptLink(path)
+      .then((url) => {
+        if (opened !== null) opened.location.href = url
+        else window.location.href = url
+      })
+      .catch(() => {
+        opened?.close()
+        show('Resit tak dapat dibuka.', 'error')
+      })
   }
 
   /** The tick, from the slot's sheet or from the button in "Slot anda".
@@ -512,7 +558,7 @@ export default function SessionPage() {
                   <button
                     type="button"
                     disabled={busy || closed}
-                    onClick={() => markPaid(mySlot, false)}
+                    onClick={() => untickOrTick(mySlot, false)}
                     className="font-kit text-[13px] text-white/50 underline decoration-white/20 underline-offset-4"
                   >
                     Batal
@@ -522,7 +568,7 @@ export default function SessionPage() {
                 <Button
                   variant="primary"
                   disabled={busy || closed}
-                  onClick={() => markPaid(mySlot, true)}
+                  onClick={() => setPayFor(mySlot)}
                   className="mt-1 w-full"
                 >
                   💵 Tandakan dah bayar
@@ -733,6 +779,7 @@ export default function SessionPage() {
         onTogglePaid={onTogglePaid}
         onMove={onMove}
         onAdminClear={() => void onAdminClear()}
+        onViewReceipt={viewReceipt}
         onNameChange={setPendingName}
       />
 
@@ -751,6 +798,17 @@ export default function SessionPage() {
         open={pushOpen}
         onClose={() => setPushOpen(false)}
         onSubscribed={() => setPushOn(true)}
+      />
+
+      <PaySheet
+        slot={payFor}
+        onClose={() => setPayFor(null)}
+        onPaidWithReceipt={onPaidWithReceipt}
+        onPaidWithoutReceipt={() => {
+          const slot = payFor
+          setPayFor(null)
+          if (slot !== null) markPaid(slot, true)
+        }}
       />
 
       <WaitlistSheet
