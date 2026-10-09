@@ -281,21 +281,28 @@ describe('buildWhatsAppMessage', () => {
       expect(message.endsWith('Senarai penuh & daftar 👉 https://valehelle.github.io/sepak/s/abc')).toBe(true)
     })
 
-    it('names the open positions when only a few are left', () => {
+    it('lists the open slots under each team that has room', () => {
       const message = buildSummaryMessage(input())
       // The fixture leaves A-GK and C-GK empty.
-      expect(message).toContain('📋 31/33 penuh · 2 kosong: GK ×2')
+      expect(message).toContain('📋 31/33 penuh\n🟢 Slot kosong:\nTeam Merah — GK\nTeam Kuning — GK\n')
+      expect(message).not.toContain('Team Putih —')
     })
 
-    it('just counts them when there is plenty of room', () => {
-      const empty = slots().map((slot) => ({ ...slot, playerName: null }))
-      const message = buildSummaryMessage(input({ slots: empty }))
-      expect(message).toContain('📋 0/33 penuh · 33 kosong')
-      expect(message).not.toContain('kosong:')
+    it('counts repeated positions, and says so when a whole team is empty', () => {
+      const someOpen = slots().map((slot) =>
+        slot.team === 'B' || (slot.team === 'A' && (slot.position === 'CB1' || slot.position === 'CB2'))
+          ? { ...slot, playerName: null }
+          : slot,
+      )
+      const message = buildSummaryMessage(input({ slots: someOpen }))
+      expect(message).toContain('Team Merah — GK, CB ×2\n')
+      expect(message).toContain('Team Putih — semua kosong\n')
     })
 
-    it('says full when it is full', () => {
-      expect(buildSummaryMessage(input({ slots: full() }))).toContain('📋 33/33 penuh\n')
+    it('says full when it is full, with no slot list', () => {
+      const message = buildSummaryMessage(input({ slots: full() }))
+      expect(message).toContain('📋 33/33 penuh\n')
+      expect(message).not.toContain('Slot kosong')
     })
 
     it('counts who has paid, and says how to tick', () => {

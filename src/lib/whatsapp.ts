@@ -146,12 +146,8 @@ function topBlock(input: WhatsAppInput): string {
   return [NO_EDIT_WARNING, ...change].join('\n')
 }
 
-/** Beyond this many open slots the breakdown is a wall of "×3", and the
- *  useful fact is simply that there is plenty of room. */
-const OPEN_LISTED_UP_TO = 6
-
-/** "GK, CB ×2, ST": the open positions, in pitch order, by the label people
- *  use. Which team each is on is the page's job. */
+/** "GK, CB ×2, ST": one team's open positions, in pitch order, by the label
+ *  people use. */
 function openPositions(slots: readonly WhatsAppSlot[]): string {
   const counts = new Map<string, number>()
   for (const position of POSITIONS) {
@@ -161,6 +157,19 @@ function openPositions(slots: readonly WhatsAppSlot[]): string {
     counts.set(label, (counts.get(label) ?? 0) + open)
   }
   return [...counts].map(([label, count]) => (count === 1 ? label : `${label} ×${count}`)).join(', ')
+}
+
+/** One line per team that still has room, so people can see where they
+ *  would play: "Team Merah A — GK, CB". A team with nobody in it yet says
+ *  so in two words rather than eleven. */
+function openSlotLines(input: WhatsAppInput): string[] {
+  return TEAM_KEYS.flatMap((team) => {
+    const slots = input.slots.filter((slot) => slot.team === team)
+    const open = slots.filter((slot) => !slot.playerName?.trim())
+    if (open.length === 0) return []
+    const label = teamLabel(input.teamNames[team])
+    return [open.length === slots.length ? `${label} — semua kosong` : `${label} — ${openPositions(open)}`]
+  })
 }
 
 /** What the group gets: the state of the session, not the list. A pasted
@@ -175,11 +184,8 @@ export function buildSummaryMessage(input: WhatsAppInput): string {
   const queued = input.waitlist?.length ?? 0
 
   const status = [
-    open === 0
-      ? `📋 ${filled}/${total} penuh`
-      : open <= OPEN_LISTED_UP_TO
-        ? `📋 ${filled}/${total} penuh · ${open} kosong: ${openPositions(input.slots)}`
-        : `📋 ${filled}/${total} penuh · ${open} kosong`,
+    `📋 ${filled}/${total} penuh`,
+    ...(open === 0 ? [] : ['🟢 Slot kosong:', ...openSlotLines(input)]),
     ...(fee !== null && filled > 0
       ? [`💵 ${paid}/${filled} dah bayar — dah transfer? Buka link, tekan "Tandakan dah bayar"`]
       : []),
