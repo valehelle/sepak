@@ -1,4 +1,5 @@
 import { supabase } from '../lib/supabase'
+import { removeSessionReceipts } from './receipts'
 import { parseSession, parseSlot, type Session, type SessionStatus, type SessionWithSlots } from './types'
 
 export type NewSessionInput = {
@@ -24,7 +25,7 @@ export type SessionPatch = Partial<Omit<NewSessionInput, 'sessionNo'>> & { sessi
  *  `slots` — here and in tests — must name columns explicitly rather than
  *  use `select('*')`, which 401s for anon. Reads of `sessions` may keep
  *  `select('*')`: anon has table-wide select there. */
-export const SLOT_COLUMNS = 'id, session_id, team, position, player_name, claimed_at, paid'
+export const SLOT_COLUMNS = 'id, session_id, team, position, player_name, claimed_at, paid, receipt_path'
 
 function boom(what: string, message: string): never {
   throw new Error(`${what}: ${message}`)
@@ -127,7 +128,10 @@ export async function setSessionStatus(id: string, status: SessionStatus): Promi
   return parseSession(data)
 }
 
+/** Takes the session's receipts with it: they are files in storage, which a
+ *  row delete cannot reach. Admin-only, like the delete itself. */
 export async function deleteSession(id: string): Promise<void> {
+  await removeSessionReceipts(id)
   const { error } = await supabase.from('sessions').delete().eq('id', id)
   if (error !== null) boom('deleteSession', error.message)
 }

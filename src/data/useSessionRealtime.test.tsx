@@ -27,6 +27,7 @@ const GK: Slot = {
   playerName: null,
   claimedAt: null,
   paid: false,
+  receiptPath: null,
 }
 
 const getSessionWithSlots = vi.fn()

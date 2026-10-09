@@ -33,6 +33,9 @@ export type Slot = {
   /** Player-declared: the fee reached the organiser. Bookkeeping only —
    *  nothing in the app is gated on it (0011_paid.sql). */
   paid: boolean
+  /** Where the payment receipt is, in the private receipts bucket, or null
+   *  if the tick came without one (0021_receipts.sql). */
+  receiptPath: string | null
 }
 
 export type SessionWithSlots = { session: Session; slots: Slot[] }
@@ -131,6 +134,7 @@ export function parseSlot(row: unknown): Slot {
     playerName: nullableStr(r, 'player_name'),
     claimedAt: nullableStr(r, 'claimed_at'),
     paid: bool(r, 'paid'),
+    receiptPath: nullableStr(r, 'receipt_path'),
   }
 }
 
@@ -164,6 +168,8 @@ export const RPC_ERROR_CODES = [
   // Accounts (0019_accounts.sql).
   'not_signed_in',
   'admin_needs_account',
+  // Receipts (0021_receipts.sql).
+  'invalid_receipt',
 ] as const
 
 export type RpcErrorCode = (typeof RPC_ERROR_CODES)[number]
@@ -197,6 +203,7 @@ export const RPC_MESSAGES: Record<RpcErrorCode, string> = {
   cross_session: 'Posisi itu bukan dalam sesi ini.',
   not_signed_in: 'Log masuk dulu untuk daftar.',
   admin_needs_account: 'Orang itu perlu log masuk sekali dulu, kemudian tambah dia.',
+  invalid_receipt: 'Resit tak dapat disimpan. Cuba muat naik semula.',
 }
 
 export const FALLBACK_ERROR_MESSAGE = 'Ada masalah. Cuba lagi.'

@@ -42,14 +42,18 @@ test('a player ticks their own slot as paid, and the tick shows on the pitch', a
   await page.getByRole('button', { name: 'Ambil slot' }).click()
   await expect(page.getByRole('button', { name: '💵 Tandakan dah bayar' })).toBeVisible()
 
+  // Ticking your own goes through the receipt sheet; the receipt is optional.
   await page.getByRole('button', { name: /GK.*Hazmi/ }).click()
   await page.getByRole('button', { name: 'Dah bayar', exact: true }).click()
+  await page.getByRole('button', { name: 'Tandakan tanpa resit' }).click()
+  await page.getByRole('button', { name: 'Tutup' }).click()
 
   // The badge is on the chip, so the accessible name is what proves it.
   await expect(page.getByRole('button', { name: /GK.*Hazmi.*dah bayar/ })).toBeVisible()
+  await page.getByRole('button', { name: /GK.*Hazmi/ }).click()
   await expect(page.getByRole('button', { name: 'Dah bayar', exact: true })).toHaveAttribute('aria-pressed', 'true')
 
-  // Untickable, and the summary panel follows.
+  // Untickable from the same sheet, and the summary panel follows.
   await page.getByRole('button', { name: 'Dah bayar', exact: true }).click()
   await expect(page.getByRole('button', { name: 'Dah bayar', exact: true })).toHaveAttribute('aria-pressed', 'false')
   await page.keyboard.press('Escape')
@@ -64,6 +68,7 @@ test('a player ticks paid from the button at the top of the page', async ({ page
   await page.getByRole('button', { name: 'Ambil slot' }).click()
 
   await page.getByRole('button', { name: '💵 Tandakan dah bayar' }).click()
+  await page.getByRole('button', { name: 'Tandakan tanpa resit' }).click()
   await expect(page.getByText('✓ Dah bayar')).toBeVisible()
   await expect(page.getByRole('button', { name: /GK.*Hazmi.*dah bayar/ })).toBeVisible()
   // The group is offered the updated summary straight away.
@@ -156,10 +161,8 @@ test('a player switches position, keeping the paid tick', async ({ page }) => {
   await page.getByRole('button', { name: 'Ambil slot' }).click()
   await expect(page.getByText(/Slot anda: Team Merah — GK/)).toBeVisible()
 
-  await page.getByRole('button', { name: /GK.*Hazmi/ }).click()
-  await page.getByRole('button', { name: 'Dah bayar', exact: true }).click()
-  await page.keyboard.press('Escape')
-  // Closing the claim sheet surfaces the queued group prompt for that tick.
+  await page.getByRole('button', { name: '💵 Tandakan dah bayar' }).click()
+  await page.getByRole('button', { name: 'Tandakan tanpa resit' }).click()
   await page.getByRole('button', { name: 'Tutup' }).click()
 
   // An empty slot is the picker: the page says so rather than locking it.
@@ -201,24 +204,21 @@ test('releasing offers the group message, with the freed position named', async 
   await expect(page.getByText('Senarai dah berubah')).not.toBeVisible()
 })
 
-test('the paid tick can still be undone before the group prompt appears', async ({ page }) => {
+test('a player takes a tick back from the top of the page', async ({ page }) => {
   await openSignedIn(page, sessionId)
   await page.getByRole('button', { name: /^GK/ }).first().click()
   await page.getByLabel('Nama').fill('Hazmi')
   await page.getByLabel('Nombor telefon').fill('012-345 6789')
   await page.getByRole('button', { name: 'Ambil slot' }).click()
 
-  await page.getByRole('button', { name: /GK.*Hazmi/ }).click()
-  await page.getByRole('button', { name: 'Dah bayar', exact: true }).click()
-  await expect(page.getByRole('button', { name: 'Dah bayar', exact: true })).toHaveAttribute('aria-pressed', 'true')
-  // The prompt must not cover the toggle that undoes a mis-tap.
-  await expect(page.getByText('Senarai dah berubah')).not.toBeVisible()
+  await page.getByRole('button', { name: '💵 Tandakan dah bayar' }).click()
+  await page.getByRole('button', { name: 'Tandakan tanpa resit' }).click()
+  await page.getByRole('button', { name: 'Tutup' }).click()
+  await expect(page.getByText('✓ Dah bayar')).toBeVisible()
 
-  await page.getByRole('button', { name: 'Dah bayar', exact: true }).click()
-  await expect(page.getByRole('button', { name: 'Dah bayar', exact: true })).toHaveAttribute('aria-pressed', 'false')
-  await page.getByTestId('sheet-backdrop').click()
-
-  // Ticked then un-ticked is a no-op, so the group is told nothing at all.
+  await page.getByRole('button', { name: 'Batal' }).click()
+  await expect(page.getByRole('button', { name: '💵 Tandakan dah bayar' })).toBeVisible()
+  // Taking a tick back is nobody else's business: no prompt for the group.
   await expect(page.getByText('Senarai dah berubah')).not.toBeVisible()
 })
 
@@ -248,4 +248,26 @@ test('a signed-out tap asks for sign-in, then carries on to the booking', async 
   await expect(page.getByRole('button', { name: 'Baru' })).toBeVisible()
 
   if (created.data.user !== null) await admin().auth.admin.deleteUser(created.data.user.id)
+})
+
+test('a player ticks paid with a receipt', async ({ page }) => {
+  await openSignedIn(page, sessionId)
+  await page.getByRole('button', { name: /^GK/ }).first().click()
+  await page.getByLabel('Nama').fill('Hazmi')
+  await page.getByLabel('Nombor telefon').fill('012-345 6789')
+  await page.getByRole('button', { name: 'Ambil slot' }).click()
+
+  await page.getByRole('button', { name: '💵 Tandakan dah bayar' }).click()
+  // A real, decodable image, so the shrink-before-upload path runs for real.
+  const png = Buffer.from(
+    'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==',
+    'base64',
+  )
+  await page.getByLabel('Pilih gambar resit').setInputFiles({ name: 'resit.png', mimeType: 'image/png', buffer: png })
+  await expect(page.getByAltText('Resit yang dipilih')).toBeVisible()
+  await page.getByRole('button', { name: 'Hantar' }).click()
+
+  await expect(page.getByText('✓ Dah bayar')).toBeVisible()
+  const stored = await admin().from('slots').select('receipt_path').eq('session_id', sessionId).not('receipt_path', 'is', null)
+  expect(stored.data ?? []).toHaveLength(1)
 })

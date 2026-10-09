@@ -29,6 +29,8 @@ type ClaimSheetProps = {
   onTogglePaid: (paid: boolean) => void
   onMove: () => void
   onAdminClear: () => void
+  /** Opens a payment receipt. */
+  onViewReceipt: (path: string) => void
   /** An admin booking someone who cannot sign in. `phone` in stored form. */
   onAdminClaim: (name: string, phone: string) => void
   onNameChange: (name: string) => void
@@ -49,6 +51,7 @@ export function ClaimSheet({
   onMove,
   onAdminClear,
   onAdminClaim,
+  onViewReceipt,
   onNameChange,
 }: ClaimSheetProps) {
   const [name, setName] = useState('')
@@ -115,9 +118,23 @@ export function ClaimSheet({
               </span>
               <span className="font-kit text-[15px] text-white">Dah bayar</span>
             </button>
-            <p className="mt-1 font-sans text-xs text-white/45">
-              Tekan selepas bayar pada admin. Untuk rekod admin je.
-            </p>
+            {paid && view.slot.receiptPath !== null ? (
+              <button
+                type="button"
+                onClick={() => {
+                  if (view.slot?.receiptPath != null) onViewReceipt(view.slot.receiptPath)
+                }}
+                className="mt-2 font-kit text-[14px] text-turf-lit underline decoration-turf-lit/40 underline-offset-4"
+              >
+                🧾 Lihat resit
+              </button>
+            ) : paid && isAdmin ? (
+              <p className="mt-1 font-sans text-xs text-kuning">Tiada resit — semak dalam akaun bank.</p>
+            ) : (
+              <p className="mt-1 font-sans text-xs text-white/45">
+                Tekan selepas bayar. Anda boleh muat naik resit.
+              </p>
+            )}
           </div>
         )}
 

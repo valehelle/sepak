@@ -33,6 +33,7 @@ function emptySlots(teams: readonly TeamKey[] = ['A', 'B', 'C']): Slot[] {
       playerName: null,
       claimedAt: null,
       paid: false,
+      receiptPath: null,
     })),
   )
 }
@@ -103,6 +104,15 @@ const authState = {
 
 vi.mock('../data/useSessionRealtime', () => ({ useSessionRealtime: () => state }))
 vi.mock('../data/auth', () => ({ useAuthUser: () => authState }))
+const uploadReceipt = vi.fn((..._args: unknown[]) => Promise.resolve('session-1/A-ST/r.jpg'))
+const attachReceipt = vi.fn()
+const receiptLink = vi.fn((..._args: unknown[]) => Promise.resolve('https://storage.test/signed'))
+vi.mock('../data/receipts', () => ({
+  uploadReceipt: (...args: unknown[]) => uploadReceipt(...args),
+  attachReceipt: (...args: unknown[]) => attachReceipt(...args),
+  receiptLink: (...args: unknown[]) => receiptLink(...args),
+  removeReceipt: vi.fn(() => Promise.resolve()),
+}))
 const adoptThisBrowser = vi.fn(() => Promise.resolve(0))
 const getProfile = vi.fn((): Promise<{ name: string; phone: string } | null> => Promise.resolve(null))
 const saveProfile = vi.fn((..._args: unknown[]) => Promise.resolve())
@@ -797,14 +807,58 @@ describe('SessionPage', () => {
     expect(unpaid).not.toContain('Hazmi')
   })
 
-  it('ticks paid from the button at the top, without opening the slot', async () => {
+  it('ticks paid from the button at the top, receipt first, receipt optional', async () => {
     state.slots = withClaim(state.slots, 'A-ST')
     state.mySlotIds = new Set(['A-ST'])
     setSlotPaid.mockResolvedValue({ ...findSlot(state.slots, 'A-ST'), paid: true })
     view()
     await userEvent.click(screen.getByRole('button', { name: '💵 Tandakan dah bayar' }))
+    expect(screen.getByRole('button', { name: '📷 Muat naik resit' })).toBeTruthy()
+    expect(setSlotPaid).not.toHaveBeenCalled()
+
+    await userEvent.click(screen.getByRole('button', { name: 'Tandakan tanpa resit' }))
     await waitFor(() => expect(setSlotPaid).toHaveBeenCalledWith('A-ST', true))
-    expect(screen.queryByRole('dialog', { name: /Team Merah/ })).toBeNull()
+  })
+
+  it('uploads a receipt and ticks paid with it', async () => {
+    setSlotPaid.mockClear()
+    Object.defineProperty(URL, 'createObjectURL', { value: () => 'blob:preview', configurable: true })
+    Object.defineProperty(URL, 'revokeObjectURL', { value: () => undefined, configurable: true })
+    state.slots = withClaim(state.slots, 'A-ST')
+    state.mySlotIds = new Set(['A-ST'])
+    attachReceipt.mockResolvedValue({ ...findSlot(state.slots, 'A-ST'), paid: true, receiptPath: 'session-1/A-ST/r.jpg' })
+    view()
+    await userEvent.click(screen.getByRole('button', { name: '💵 Tandakan dah bayar' }))
+    const image = new File(['png'], 'resit.png', { type: 'image/png' })
+    await userEvent.upload(screen.getByLabelText('Pilih gambar resit'), image)
+    expect(screen.getByAltText('Resit yang dipilih')).toBeTruthy()
+
+    await userEvent.click(screen.getByRole('button', { name: 'Hantar' }))
+    await waitFor(() => expect(attachReceipt).toHaveBeenCalledWith('A-ST', 'session-1/A-ST/r.jpg'))
+    expect(setSlotPaid).not.toHaveBeenCalled()
+    await waitFor(() => expect(screen.getByText('Senarai dah berubah')).toBeTruthy())
+  })
+
+  it('lets an admin open a player\'s receipt, and says when there is none', async () => {
+    authState.role = 'admin'
+    authState.email = 'admin@example.com'
+    state.slots = state.slots.map((slot) =>
+      slot.id === 'A-ST'
+        ? { ...slot, playerName: 'Amir', claimedAt: 'now', paid: true, receiptPath: 'session-1/A-ST/r.jpg' }
+        : slot.id === 'A-GK'
+          ? { ...slot, playerName: 'Bella', claimedAt: 'now', paid: true, receiptPath: null }
+          : slot,
+    )
+    const opened = { location: { href: '' }, close: vi.fn() }
+    vi.spyOn(window, 'open').mockReturnValue(opened as unknown as Window)
+    view()
+    await userEvent.click(screen.getByRole('button', { name: /^ST.*Amir/ }))
+    await userEvent.click(screen.getByRole('button', { name: '🧾 Lihat resit' }))
+    await waitFor(() => expect(opened.location.href).toBe('https://storage.test/signed'))
+    await userEvent.click(screen.getByTestId('sheet-backdrop'))
+
+    await userEvent.click(screen.getByRole('button', { name: /^GK.*Bella/ }))
+    expect(screen.getByText('Tiada resit — semak dalam akaun bank.')).toBeTruthy()
   })
 
   it('counts the queue in the WhatsApp text, without names', async () => {
@@ -817,9 +871,23 @@ describe('SessionPage', () => {
     expect(copied).toContain('⏳ Senarai tunggu: 1 orang')
     expect(copied).not.toContain('Faiz')
   })
-  it('marks your own slot paid and keeps the sheet open, so a mis-tap can be undone', async () => {
+  it('sends a player ticking their own slot to the receipt sheet', async () => {
     state.slots = withClaim(state.slots, 'A-ST')
     state.mySlotIds = new Set(['A-ST'])
+    setSlotPaid.mockResolvedValue({ ...findSlot(state.slots, 'A-ST'), paid: true })
+    view()
+
+    await userEvent.click(firstOf(screen.getAllByRole('button', { name: /^ST/ })))
+    await userEvent.click(screen.getByRole('button', { name: 'Dah bayar' }))
+    expect(screen.getByRole('button', { name: '📷 Muat naik resit' })).toBeTruthy()
+    await userEvent.click(screen.getByRole('button', { name: 'Tandakan tanpa resit' }))
+    await waitFor(() => expect(setSlotPaid).toHaveBeenCalledWith('A-ST', true))
+  })
+
+  it('lets an admin tick someone else\'s slot and keeps the sheet open, so a mis-tap can be undone', async () => {
+    authState.role = 'admin'
+    authState.email = 'admin@example.com'
+    state.slots = withClaim(state.slots, 'A-ST')
     setSlotPaid.mockResolvedValue({ ...findSlot(state.slots, 'A-ST'), paid: true })
     view()
 
@@ -835,7 +903,7 @@ describe('SessionPage', () => {
     await waitFor(() =>
       expect(screen.getByRole('button', { name: 'Dah bayar' }).getAttribute('aria-pressed')).toBe('true'),
     )
-    expect(screen.getByRole('button', { name: 'Lepaskan slot' })).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Kosongkan slot (admin)' })).toBeTruthy()
   })
 
   it('puts the tick back and reports the reason when the write fails', async () => {
@@ -845,11 +913,11 @@ describe('SessionPage', () => {
     setSlotPaid.mockRejectedValue(new SlotActionError('Slot ini bukan milik anda.', 'wrong_token'))
     view()
 
-    await userEvent.click(firstOf(screen.getAllByRole('button', { name: /^ST/ })))
-    await userEvent.click(screen.getByRole('button', { name: 'Dah bayar' }))
+    await userEvent.click(screen.getByRole('button', { name: '💵 Tandakan dah bayar' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Tandakan tanpa resit' }))
 
     await waitFor(() => expect(screen.getByRole('status').textContent).toContain('Slot ini bukan milik anda.'))
-    expect(screen.getByRole('button', { name: 'Dah bayar' }).getAttribute('aria-pressed')).toBe('false')
+    expect(screen.getByRole('button', { name: '💵 Tandakan dah bayar' })).toBeTruthy()
   })
 
   it('never releases on the first tap, and Batal disarms it', async () => {
@@ -1044,8 +1112,10 @@ describe('SessionPage', () => {
       )
     })
 
-    it('waits for the claim sheet to close before offering it after a tick', async () => {
-      claimed('A-GK')
+    it('waits for the claim sheet to close before offering it after an admin tick', async () => {
+      authState.role = 'admin'
+      authState.email = 'admin@example.com'
+      state.slots = withClaim(state.slots, 'A-GK')
       setSlotPaid.mockResolvedValue({ ...findSlot(state.slots, 'A-GK'), playerName: 'Hazmi', paid: true })
       view()
 

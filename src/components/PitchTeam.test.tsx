@@ -14,6 +14,7 @@ function slot(position: Slot['position'], playerName: string | null): Slot {
     playerName,
     claimedAt: playerName === null ? null : '2026-09-10T06:00:00Z',
     paid: false,
+    receiptPath: null,
   }
 }
 
