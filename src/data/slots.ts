@@ -114,3 +114,16 @@ export async function getSlot(slotId: string): Promise<Slot | null> {
   if (error !== null) fail(error)
   return data === null ? null : parseSlot(data)
 }
+
+/** An admin swaps the player in a slot for anyone in the queue. The player
+ *  swapped out goes to the front of the queue for that position; the one
+ *  swapped in is told, as with an automatic promotion
+ *  (0022_admin_replace_with_waitlist.sql). Returns the slot as it now is. */
+export async function adminReplaceWithWaitlist(slotId: string, waitlistId: string): Promise<Slot> {
+  const { data, error } = await supabase.rpc('admin_replace_with_waitlist', {
+    p_slot_id: slotId,
+    p_waitlist_id: waitlistId,
+  })
+  if (error !== null) fail(error)
+  return parseSlot(data)
+}

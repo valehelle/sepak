@@ -19,6 +19,7 @@ import { hasPushSubscription } from '../data/push'
 import {
   SlotActionError,
   adminClearSlot,
+  adminReplaceWithWaitlist,
   claimSlot,
   getSlot,
   moveSlot,
@@ -374,6 +375,37 @@ export default function SessionPage() {
         show(cause instanceof SlotActionError ? cause.message : 'Gagal menanda bayaran.', 'error')
       })
       .finally(() => setBusy(false))
+  }
+
+  /** An admin swaps the selected slot's player for a queued one. The queue
+   *  changes on the server -- the newcomer leaves it, the replaced player
+   *  goes to its front -- and arrives here over realtime; the slot itself is
+   *  applied straight away, and the group is offered the new message. */
+  async function onAdminReplace(waitlistId: string) {
+    const slot = selected?.slot
+    if (slot === undefined || slot === null || session === null) return
+    const outgoing = slot.playerName
+    setBusy(true)
+    try {
+      const next = await adminReplaceWithWaitlist(slot.id, waitlistId)
+      applyLocal(next)
+      removeWaitlistLocal(waitlistId)
+      setSelected(null)
+      if (outgoing !== null && next.playerName !== null) {
+        setChange({
+          kind: 'release',
+          at: { team: slot.team, teamName: session.teamNames[slot.team], position: slot.position },
+          playerName: outgoing,
+          takenBy: next.playerName,
+        })
+      }
+      show(`${next.playerName ?? 'Pemain'} masuk. ${outgoing ?? 'Pemain lama'} di depan senarai tunggu.`)
+    } catch (cause: unknown) {
+      show(cause instanceof SlotActionError ? cause.message : 'Gagal mengganti pemain.', 'error')
+      refetch()
+    } finally {
+      setBusy(false)
+    }
   }
 
   async function onAdminClear() {
@@ -780,6 +812,8 @@ export default function SessionPage() {
         onMove={onMove}
         onAdminClear={() => void onAdminClear()}
         onViewReceipt={viewReceipt}
+        waitlist={waitlist}
+        onReplace={(waitlistId) => void onAdminReplace(waitlistId)}
         onNameChange={setPendingName}
       />
 

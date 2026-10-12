@@ -85,6 +85,7 @@ const releaseSlot = vi.fn()
 const setSlotPaid = vi.fn()
 const adminClearSlot = vi.fn()
 const moveSlot = vi.fn()
+const adminReplaceWithWaitlist = vi.fn()
 const getSlot = vi.fn()
 const adminRemoveFromWaitlist = vi.fn()
 const joinWaitlist = vi.fn()
@@ -116,6 +117,7 @@ vi.mock('../data/slots', () => ({
   setSlotPaid: (...args: unknown[]) => setSlotPaid(...args),
   adminClearSlot: (id: string) => adminClearSlot(id),
   moveSlot: (...args: unknown[]) => moveSlot(...args),
+  adminReplaceWithWaitlist: (...args: unknown[]) => adminReplaceWithWaitlist(...args),
   getSlot: (id: string) => getSlot(id),
   SlotActionError: class extends Error {
     constructor(message: string, readonly code: string | null) { super(message) }
@@ -1167,6 +1169,76 @@ describe('SessionPage', () => {
       // The warning, then straight into the session: no change line.
       expect(copied).toMatch(/^⚠️ Jangan copy[^\n]*\n\nSesi 005/)
       expect(copied).not.toContain('→ kosong')
+    })
+  })
+
+  describe('an admin swapping a player for the queue', () => {
+    const queued: WaitlistEntry[] = [
+      { id: 'wait-1', sessionId: 'session-1', playerName: 'Faiz', positions: ['GK'], createdAt: 't1' },
+      { id: 'wait-2', sessionId: 'session-1', playerName: 'Isaac', positions: ['ST'], createdAt: 't2' },
+    ]
+
+    beforeEach(() => {
+      adminReplaceWithWaitlist.mockReset()
+    })
+
+    function asAdmin() {
+      authState.role = 'admin'
+      authState.email = 'admin@example.com'
+    }
+
+    it('swaps in anyone from the queue, after a confirmation that says what happens', async () => {
+      asAdmin()
+      state.slots = withClaim(state.slots, 'A-GK')
+      state.waitlist = queued
+      adminReplaceWithWaitlist.mockResolvedValue({ ...findSlot(state.slots, 'A-GK'), playerName: 'Isaac', paid: false })
+      view()
+
+      await userEvent.click(screen.getByRole('button', { name: /^GK.*Hazmi/ }))
+      await userEvent.click(screen.getByRole('button', { name: 'Ganti dengan senarai tunggu (admin)' }))
+      // Isaac only asked for ST, and is still offered for GK.
+      await userEvent.click(screen.getByRole('button', { name: /2\. Isaac/ }))
+      expect(screen.getByText(/Hazmi akan masuk paling depan senarai tunggu untuk GK/)).toBeTruthy()
+      expect(adminReplaceWithWaitlist).not.toHaveBeenCalled()
+
+      await userEvent.click(screen.getByRole('button', { name: 'Ya, ganti' }))
+      await waitFor(() => expect(adminReplaceWithWaitlist).toHaveBeenCalledWith('A-GK', 'wait-2'))
+      await waitFor(() =>
+        expect(screen.getByText('🔄 Team Merah — GK: Hazmi → Isaac (naik dari senarai tunggu)')).toBeTruthy(),
+      )
+    })
+
+    it('can be backed out of at either step', async () => {
+      asAdmin()
+      state.slots = withClaim(state.slots, 'A-GK')
+      state.waitlist = queued
+      view()
+      await userEvent.click(screen.getByRole('button', { name: /^GK.*Hazmi/ }))
+      await userEvent.click(screen.getByRole('button', { name: 'Ganti dengan senarai tunggu (admin)' }))
+      await userEvent.click(screen.getByRole('button', { name: /1\. Faiz/ }))
+      await userEvent.click(screen.getByRole('button', { name: 'Batal' }))
+      expect(screen.getByRole('button', { name: /2\. Isaac/ })).toBeTruthy()
+      await userEvent.click(screen.getByRole('button', { name: 'Batal' }))
+      expect(screen.getByRole('button', { name: 'Ganti dengan senarai tunggu (admin)' })).toBeTruthy()
+      expect(adminReplaceWithWaitlist).not.toHaveBeenCalled()
+    })
+
+    it('is not offered when the queue is empty, or to a player', async () => {
+      asAdmin()
+      state.slots = withClaim(state.slots, 'A-GK')
+      state.waitlist = []
+      const { unmount } = view()
+      await userEvent.click(screen.getByRole('button', { name: /^GK.*Hazmi/ }))
+      expect(screen.queryByRole('button', { name: 'Ganti dengan senarai tunggu (admin)' })).toBeNull()
+      unmount()
+
+      authState.role = null
+      authState.email = null
+      state.waitlist = queued
+      state.mySlotIds = new Set(['A-GK'])
+      view()
+      await userEvent.click(screen.getByRole('button', { name: /^GK.*Hazmi/ }))
+      expect(screen.queryByRole('button', { name: 'Ganti dengan senarai tunggu (admin)' })).toBeNull()
     })
   })
 })

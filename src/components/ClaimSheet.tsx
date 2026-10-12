@@ -2,6 +2,8 @@ import { useEffect, useState } from 'react'
 import { formatPhone, normalisePhone } from '../lib/phone'
 import { recallPlayer } from '../lib/playerMemory'
 import { positionLabel } from '../lib/positions'
+import type { WaitlistEntry } from '../data/waitlist'
+import { formatPositions } from '../lib/positions'
 import type { SlotView } from './SlotChip'
 import { AdminContact } from './AdminContact'
 import { Button } from './Button'
@@ -26,6 +28,10 @@ type ClaimSheetProps = {
   onTogglePaid: (paid: boolean) => void
   onMove: () => void
   onAdminClear: () => void
+  /** The queue, for an admin swapping a player out. */
+  waitlist: readonly WaitlistEntry[]
+  /** An admin swaps this slot's player for a queued one. */
+  onReplace: (waitlistId: string) => void
   /** Opens a payment receipt. Admins only. */
   onViewReceipt: (path: string) => void
   onNameChange: (name: string) => void
@@ -44,6 +50,8 @@ export function ClaimSheet({
   onTogglePaid,
   onMove,
   onAdminClear,
+  waitlist,
+  onReplace,
   onViewReceipt,
   onNameChange,
 }: ClaimSheetProps) {
@@ -52,7 +60,9 @@ export function ClaimSheet({
   const [problem, setProblem] = useState<string | null>(null)
   // Emptying a slot is one tap away from a mis-tap, and the slot can be gone
   // to someone else a second later, so both destructive buttons arm first.
-  const [confirming, setConfirming] = useState<'release' | 'clear' | null>(null)
+  const [confirming, setConfirming] = useState<'release' | 'clear' | 'replace' | null>(null)
+  // The queued player an admin has picked to swap in, awaiting confirmation.
+  const [replaceWith, setReplaceWith] = useState<WaitlistEntry | null>(null)
 
   // Prefill from the device's last booking so a regular only confirms. The
   // recalled name is reported upward too, or the duplicate-name warning
@@ -63,6 +73,7 @@ export function ClaimSheet({
     setPhone(remembered.phone === '' ? '' : formatPhone(remembered.phone))
     setProblem(null)
     setConfirming(null)
+    setReplaceWith(null)
     if (remembered.name !== '') onNameChange(remembered.name)
     // onNameChange is a stable setter from the page; view is the real trigger.
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -198,6 +209,60 @@ export function ClaimSheet({
                 Kosongkan slot (admin)
               </Button>
             ))}
+
+          {/* Swapping a player for someone queued: anyone in the queue,
+              whatever positions they chose -- the organiser knows who will
+              play where. The player swapped out goes to the front. */}
+          {isAdmin && occupiedByOther && waitlist.length > 0 && confirming !== 'clear' && (
+            confirming === 'replace' ? (
+              replaceWith === null ? (
+                <div className="space-y-2 rounded-lg border border-white/15 bg-white/5 p-3">
+                  <p className="font-sans text-[13px] text-white/80">
+                    {`Ganti ${view.slot?.playerName ?? 'pemain ini'} dengan:`}
+                  </p>
+                  <ol className="space-y-1">
+                    {waitlist.map((entry, index) => (
+                      <li key={entry.id}>
+                        <button
+                          type="button"
+                          disabled={busy}
+                          onClick={() => setReplaceWith(entry)}
+                          className="w-full rounded-md bg-white/5 px-3 py-2 text-left font-sans text-[14px] text-white active:bg-white/10"
+                        >
+                          {`${index + 1}. ${entry.playerName}`}
+                          <span className="ml-2 text-white/45">{`(${formatPositions(entry.positions)})`}</span>
+                        </button>
+                      </li>
+                    ))}
+                  </ol>
+                  <Button variant="secondary" size="sm" disabled={busy} onClick={() => setConfirming(null)} className="w-full">
+                    Batal
+                  </Button>
+                </div>
+              ) : (
+                <div className="space-y-2 rounded-lg border border-kuning/40 bg-kuning/10 p-3">
+                  <p className="font-sans text-[13px] leading-relaxed text-white/80">
+                    {`Ganti ${view.slot?.playerName ?? 'pemain ini'} dengan ${replaceWith.playerName}? ${view.slot?.playerName ?? 'Pemain ini'} akan masuk paling depan senarai tunggu untuk ${label}.`}
+                  </p>
+                  <Button variant="primary" disabled={busy} onClick={() => onReplace(replaceWith.id)} className="w-full">
+                    Ya, ganti
+                  </Button>
+                  <Button variant="secondary" disabled={busy} onClick={() => setReplaceWith(null)} className="w-full">
+                    Batal
+                  </Button>
+                </div>
+              )
+            ) : (
+              <Button
+                variant="secondary"
+                disabled={busy}
+                onClick={() => setConfirming('replace')}
+                className="w-full"
+              >
+                Ganti dengan senarai tunggu (admin)
+              </Button>
+            )
+          )}
         </div>
       </Sheet>
     )
