@@ -794,6 +794,25 @@ describe('SessionPage', () => {
     await waitFor(() => expect(setSlotPaid).toHaveBeenCalledWith('A-ST', true))
   })
 
+  it('shows the QR to pay with on the page, for everyone', () => {
+    state.session = { ...SESSION, feeMyr: 26, feeGkMyr: 15 }
+    view()
+    expect(screen.getByAltText('QR DuitNow untuk bayaran')).toBeTruthy()
+    // Once in the session details, once beside the QR.
+    expect(screen.getAllByText('RM 26/pax (GK RM 15)')).toHaveLength(2)
+    expect(screen.getByRole('link', { name: 'Simpan gambar QR' }).getAttribute('download')).toBe('duitnow-qr.jpg')
+  })
+
+  it('leaves the QR off a free session and a closed one', () => {
+    state.session = { ...SESSION, feeMyr: null }
+    const { unmount } = view()
+    expect(screen.queryByAltText('QR DuitNow untuk bayaran')).toBeNull()
+    unmount()
+    state.session = { ...SESSION, status: 'closed' }
+    view()
+    expect(screen.queryByAltText('QR DuitNow untuk bayaran')).toBeNull()
+  })
+
   it('sends a receipt and ticks paid with it', async () => {
     Object.defineProperty(URL, 'createObjectURL', { value: () => 'blob:preview', configurable: true })
     Object.defineProperty(URL, 'revokeObjectURL', { value: () => undefined, configurable: true })

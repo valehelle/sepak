@@ -9,6 +9,7 @@ import { ListTeam } from '../components/ListTeam'
 import { PitchTeam } from '../components/PitchTeam'
 import { NotifySheet } from '../components/NotifySheet'
 import { PaySheet } from '../components/PaySheet'
+import { PaymentQr } from '../components/PaymentQr'
 import { SessionMeta } from '../components/SessionMeta'
 import type { SlotView } from '../components/SlotChip'
 import { useToast } from '../components/Toast'
@@ -37,6 +38,7 @@ import {
 } from '../data/waitlist'
 import { teamLabel } from '../lib/bibs'
 import { TEAM_KEYS, formatPositions, positionLabel, type Position, type TeamKey } from '../lib/positions'
+import { formatFees } from '../lib/format'
 import { rememberSession } from '../lib/lastSession'
 import { rememberPlayer } from '../lib/playerMemory'
 import { ShareChangeSheet } from '../components/ShareChangeSheet'
@@ -641,6 +643,12 @@ export default function SessionPage() {
               )}
             </div>
           )
+        )}
+
+        {/* Under the booking panel, for everyone: where to transfer is the
+            next thing people look for. */}
+        {!closed && formatFees(session.feeMyr, session.feeGkMyr) !== null && (
+          <PaymentQr fee={formatFees(session.feeMyr, session.feeGkMyr) ?? ''} />
         )}
 
         {/* Its own row rather than living inside the queue panel: an iPhone
