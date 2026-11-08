@@ -19,37 +19,47 @@ vi.mock('../data/move', () => ({
   moveAvailable: () => Promise.resolve(available),
   requestMove: () => request(),
   moveStatus: () => status(),
+  moveLink: (id: string) => `https://t.me/bot?start=move_${id}`,
 }))
 vi.mock('../data/slots', () => ({ SlotActionError: FakeSlotActionError }))
 
 const { TakeBackBooking } = await import('./TakeBackBooking')
+
+let opened: string[] = []
 
 describe('TakeBackBooking', () => {
   beforeEach(() => {
     available = true
     request = () => Promise.resolve('request-1')
     status = () => Promise.resolve('pending')
+    opened = []
+    vi.spyOn(window, 'open').mockImplementation((url) => {
+      opened.push(String(url))
+      return null
+    })
   })
 
   afterEach(() => {
     vi.useRealTimers()
+    vi.restoreAllMocks()
   })
 
-  it('offers nothing when the booking has no Telegram', async () => {
+  it('offers nothing when the booking has no number to check', async () => {
     available = false
     const { container } = render(<TakeBackBooking slotId="slot-1" onMoved={() => {}} />)
     await act(async () => {})
     expect(container.textContent).toBe('')
   })
 
-  it('asks, waits, and hands over once Telegram approves', async () => {
+  it('opens the bot on the request and hands over once the number matches', async () => {
     let moved = 0
     render(<TakeBackBooking slotId="slot-1" onMoved={() => (moved += 1)} />)
     const button = await screen.findByRole('button', { name: 'Ambil balik melalui Telegram' })
 
     vi.useFakeTimers({ shouldAdvanceTime: true })
     await userEvent.setup({ advanceTimers: vi.advanceTimersByTime }).click(button)
-    expect(await screen.findByText(/Mesej dihantar ke Telegram/)).toBeTruthy()
+    expect(await screen.findByText(/Kongsi nombor telefon/)).toBeTruthy()
+    expect(opened).toEqual(['https://t.me/bot?start=move_request-1'])
 
     status = () => Promise.resolve('approved')
     await act(async () => {
@@ -58,7 +68,7 @@ describe('TakeBackBooking', () => {
     await waitFor(() => expect(moved).toBe(1))
   })
 
-  it('says so when the player answers no in Telegram', async () => {
+  it('says so when the Telegram number is not the booking\'s', async () => {
     render(<TakeBackBooking slotId="slot-1" onMoved={() => {}} />)
     const button = await screen.findByRole('button', { name: 'Ambil balik melalui Telegram' })
 
@@ -68,7 +78,7 @@ describe('TakeBackBooking', () => {
     await act(async () => {
       await vi.advanceTimersByTimeAsync(3000)
     })
-    expect(await screen.findByText(/ditolak di Telegram/)).toBeTruthy()
+    expect(await screen.findByText(/Nombor Telegram tak sama/)).toBeTruthy()
   })
 
   it('shows why a request was refused', async () => {

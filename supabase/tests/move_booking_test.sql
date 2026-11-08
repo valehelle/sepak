@@ -11,8 +11,8 @@ declare
   v_chat bigint := 900001;
   v_req uuid; v_req2 uuid;
   v_text text;
-  v_ok boolean;
   v_row record;
+  i int;
 begin
   insert into sepak.sessions (session_no, title, play_date, start_time, venue)
   values (983, 'Move', '2026-12-22', '21:00', 'Padang') returning id into v_session;
@@ -24,22 +24,10 @@ begin
   perform sepak.claim_slot(v_gk, 'Amir', '60123456789', v_owner);
   perform sepak.set_slot_paid(v_gk, v_owner, true);
   perform sepak.claim_slot(v_lb, 'Bella', '60122222222', v_lb_owner);
-  reset role;
 
-  -- Amir's booking browser connected Telegram; Bella's did not.
-  insert into sepak.telegram_chats (chat_id, claim_token) values (v_chat, v_owner);
-
-  set local role anon;
-  assert sepak.move_available(v_gk), 'a booking with Telegram offers the move';
-  assert not sepak.move_available(v_lb), 'a booking without Telegram does not';
+  -- Every booking has a number, with or without Telegram.
+  assert sepak.move_available(v_gk), 'a booking offers the move';
   assert not sepak.move_available(v_cb), 'an empty slot does not';
-
-  begin
-    perform sepak.request_move(v_lb, v_new);
-    raise exception 'expected no_telegram';
-  exception when others then
-    assert sqlerrm = 'no_telegram', format('expected no_telegram, got %s', sqlerrm);
-  end;
 
   begin
     perform sepak.request_move(v_gk, v_owner);
@@ -57,15 +45,10 @@ begin
   end;
 
   v_req := sepak.request_move(v_gk, v_new);
-  -- Asking again from the same browser returns the open request.
   assert sepak.request_move(v_gk, v_new) = v_req, 'a repeat ask reuses the open request';
-  -- Another browser cannot open a second one meanwhile.
-  begin
-    perform sepak.request_move(v_gk, v_stranger);
-    raise exception 'expected move_pending';
-  exception when others then
-    assert sqlerrm = 'move_pending', format('expected move_pending, got %s', sqlerrm);
-  end;
+  -- Another browser gets its own request; only the number decides.
+  v_req2 := sepak.request_move(v_gk, v_stranger);
+  assert v_req2 <> v_req, 'another browser gets its own request';
 
   assert sepak.move_request_status(v_req, v_new) = 'pending', 'the asker sees pending';
   begin
@@ -75,15 +58,15 @@ begin
     assert sqlerrm = 'not_found', format('another browser must not read the request, got %s', sqlerrm);
   end;
 
-  -- anon cannot answer for Telegram, read the message, or see the table.
+  -- anon cannot act for the bot or see the table.
   begin
-    perform sepak.decide_move(v_req, v_chat, true);
-    raise exception 'anon must not call decide_move';
+    perform sepak.start_move(v_req, v_chat);
+    raise exception 'anon must not call start_move';
   exception when insufficient_privilege then null;
   end;
   begin
-    perform * from sepak.move_request_message(v_req);
-    raise exception 'anon must not call move_request_message';
+    perform sepak.finish_move(v_chat, '60123456789');
+    raise exception 'anon must not call finish_move';
   exception when insufficient_privilege then null;
   end;
   begin
@@ -94,21 +77,22 @@ begin
   reset role;
 
   set local role service_role;
-  select body into v_text from sepak.move_request_message(v_req);
-  assert v_text like '%Amir — Team%Sesi 983%', format('message: got %s', v_text);
+  -- A number shared before opening any request's link decides nothing.
+  assert sepak.finish_move(v_chat, '60123456789') = 'not_found', 'no started request, nothing to decide';
 
-  -- Only the chat the request went to can answer.
-  assert sepak.decide_move(v_req, 999999, true) = 'not_found', 'another chat cannot approve';
+  v_text := sepak.start_move(v_req, v_chat);
+  assert v_text like 'Amir — Team%Sesi 983%', format('booking line: got %s', v_text);
 
-  assert sepak.decide_move(v_req, v_chat, true) = 'approved', 'the booking''s chat approves';
-  assert sepak.decide_move(v_req, v_chat, true) = 'approved', 'a second press reports the same outcome';
+  -- Telegram sends numbers with or without the plus.
+  assert sepak.finish_move(v_chat, '+60123456789') = 'approved', 'the booking''s number moves it';
+  assert sepak.finish_move(v_chat, '+60123456789') = 'not_found', 'a decided request is not decided again';
   reset role;
 
   select claim_token, paid into v_row from sepak.slots where id = v_gk;
   assert v_row.claim_token = v_new, 'the slot now belongs to the asking browser';
   assert v_row.paid, 'moving keeps the paid tick';
   assert (select claim_token from sepak.telegram_chats where chat_id = v_chat) = v_new,
-    'the Telegram link follows the booking';
+    'the chat now gets alerts for the new browser';
 
   set local role anon;
   assert sepak.move_request_status(v_req, v_new) = 'approved', 'the asker sees approved';
@@ -122,51 +106,31 @@ begin
   assert v_row.actor = 'player' and v_row.phone = '60123456789', 'the move line names the player';
   assert v_row.device = sepak.device_code(v_new), 'the move line carries the new device';
 
-  -- Rejecting leaves the booking where it is.
+  -- The other browser's request is now stale: the booking changed hands.
+  set local role service_role;
+  perform sepak.start_move(v_req2, 900002);
+  assert sepak.finish_move(900002, '60123456789') = 'stale', 'a changed booking is stale';
+  reset role;
   set local role anon;
-  v_req2 := sepak.request_move(v_gk, v_owner);
+  assert sepak.move_request_status(v_req2, v_stranger) = 'failed', 'the asker sees failed';
+  reset role;
+  assert (select claim_token from sepak.slots where id = v_gk) = v_new, 'a stale request moves nothing';
+
+  -- A different number leaves the booking where it is.
+  set local role anon;
+  v_req := sepak.request_move(v_gk, v_owner);
   reset role;
   set local role service_role;
-  assert sepak.decide_move(v_req2, v_chat, false) = 'rejected', 'the booking''s chat rejects';
+  perform sepak.start_move(v_req, 900003);
+  assert sepak.finish_move(900003, '60199999999') = 'rejected', 'another number is rejected';
+  reset role;
+  set local role anon;
+  assert sepak.move_request_status(v_req, v_owner) = 'rejected', 'the asker sees rejected';
   reset role;
   assert (select claim_token from sepak.slots where id = v_gk) = v_new, 'a rejection moves nothing';
+  assert not exists (select 1 from sepak.telegram_chats where chat_id = 900003), 'a rejected chat is not linked';
 
-  -- A request outlived by a change of hands does nothing.
-  set local role anon;
-  v_req := sepak.request_move(v_gk, v_owner);
-  perform sepak.release_slot(v_gk, v_new);
-  perform sepak.claim_slot(v_gk, 'Chong', '60133333333', v_stranger);
-  reset role;
-  set local role service_role;
-  assert sepak.decide_move(v_req, v_chat, true) = 'stale', 'a changed booking is stale';
-  reset role;
-  assert (select claim_token from sepak.slots where id = v_gk) = v_stranger, 'a stale approval moves nothing';
-
-  -- Three messages an hour per booking, however many browsers ask.
-  delete from sepak.move_requests;
-  insert into sepak.telegram_chats (chat_id, claim_token) values (900002, v_stranger);
-  set local role anon;
-  v_req := sepak.request_move(v_gk, v_owner);
-  reset role;
-  update sepak.move_requests set status = 'rejected';
-  set local role anon;
-  v_req := sepak.request_move(v_gk, v_owner);
-  reset role;
-  update sepak.move_requests set status = 'rejected';
-  set local role anon;
-  v_req := sepak.request_move(v_gk, v_owner);
-  reset role;
-  update sepak.move_requests set status = 'rejected';
-  set local role anon;
-  begin
-    perform sepak.request_move(v_gk, v_owner);
-    raise exception 'expected too_many_requests';
-  exception when others then
-    assert sqlerrm = 'too_many_requests', format('expected too_many_requests, got %s', sqlerrm);
-  end;
-  reset role;
-
-  -- After ten minutes an open request counts as expired and cannot be approved.
+  -- After ten minutes a request reads expired and cannot be started.
   delete from sepak.move_requests;
   set local role anon;
   v_req := sepak.request_move(v_gk, v_owner);
@@ -176,8 +140,25 @@ begin
   assert sepak.move_request_status(v_req, v_owner) = 'expired', 'an old request reads expired';
   reset role;
   set local role service_role;
-  assert sepak.decide_move(v_req, 900002, true) = 'expired', 'an expired request cannot be approved';
-  assert not exists (select 1 from sepak.move_request_message(v_req)), 'an expired request sends nothing';
+  assert sepak.start_move(v_req, 900004) is null, 'an expired request cannot be started';
+  assert sepak.finish_move(900004, '60123456789') = 'not_found', 'nor finished';
+  reset role;
+
+  -- Ten requests an hour per booking.
+  delete from sepak.move_requests;
+  for i in 1..10 loop
+    set local role anon;
+    perform sepak.request_move(v_gk, v_owner);
+    reset role;
+    update sepak.move_requests set status = 'rejected';
+  end loop;
+  set local role anon;
+  begin
+    perform sepak.request_move(v_gk, v_owner);
+    raise exception 'expected too_many_requests';
+  exception when others then
+    assert sqlerrm = 'too_many_requests', format('expected too_many_requests, got %s', sqlerrm);
+  end;
   reset role;
 
   raise notice 'move_booking_test: ok';

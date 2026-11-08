@@ -149,6 +149,7 @@ vi.mock('../data/move', () => ({
   moveAvailable: () => Promise.resolve(moveAvailable),
   requestMove: () => Promise.resolve('request-1'),
   moveStatus: () => Promise.resolve(moveStatus),
+  moveLink: () => 'https://t.me/bot?start=move_request-1',
 }))
 vi.mock('../lib/pushCapability', () => ({
   pushCapability: () => 'ready',
@@ -411,12 +412,15 @@ describe('SessionPage', () => {
     state.slots = withClaim(state.slots, 'B-MC')
     moveAvailable = true
     moveStatus = 'approved'
+    const open = vi.spyOn(window, 'open').mockReturnValue(null)
     view()
 
     await userEvent.click(screen.getByRole('button', { name: /^MC — Hazmi/ }))
     await userEvent.click(await screen.findByRole('button', { name: 'Ambil balik melalui Telegram' }))
     await waitFor(() => expect(state.setOwned).toHaveBeenCalledWith('B-MC', true), { timeout: 5000 })
     expect(await screen.findByText('Slot dah dipindahkan ke browser ini.')).toBeTruthy()
+    expect(open).toHaveBeenCalledWith('https://t.me/bot?start=move_request-1', '_blank', 'noopener,noreferrer')
+    open.mockRestore()
   })
 
   it('leaves empty slots tappable when this device holds none', () => {

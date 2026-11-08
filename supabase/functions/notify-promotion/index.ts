@@ -1,5 +1,5 @@
-// Sends the "you are off the waitlist" push, and the Telegram message asking
-// a player to approve moving their booking to another browser.
+// Sends the "you are off the waitlist" push and Telegram message, and runs
+// the Telegram bot.
 //
 // This exists because Web Push needs an ECDSA signature over a JWT and an
 // AES-GCM encrypted payload, and Postgres can do neither. It is deliberately
@@ -122,89 +122,66 @@ function isTarget(value: unknown): value is Target {
   )
 }
 
-/** Moving a booking to another browser (0024_move_booking.sql): the message
- *  to the Telegram account linked to the booking, with the two buttons. The
- *  callback data carries only the request id; decide_move checks the answer
- *  came from the chat the request was sent to. */
-const MOVE_PREFIX = 'move:'
+/** Moving a booking to another browser (0025_move_by_phone.sql). The page
+ *  opens t.me/<bot>?start=move_<request id>; the bot asks the player to
+ *  share their number with Telegram's own button, and the database moves the
+ *  booking when that number is the booking's. */
+const MOVE_START = 'move_'
 
-async function sendMoveRequest(requestId: string, token: string): Promise<Response> {
-  const rows = await rpc('move_request_message', { p_id: requestId })
-  const row = Array.isArray(rows) ? rows[0] : null
-  if (typeof row !== 'object' || row === null) return Response.json({ move_request_id: requestId, sent: false })
-  const { chat_id: chatId, body } = row as Record<string, unknown>
-  if (typeof chatId !== 'number' || typeof body !== 'string') {
-    return Response.json({ move_request_id: requestId, sent: false })
-  }
-
-  const status = await telegram(token, 'sendMessage', {
-    chat_id: chatId,
-    text: body,
-    reply_markup: {
-      inline_keyboard: [[
-        { text: 'Ya, pindahkan', callback_data: `${MOVE_PREFIX}yes:${requestId}` },
-        { text: 'Bukan saya', callback_data: `${MOVE_PREFIX}no:${requestId}` },
-      ]],
-    },
-  })
-  if (status === 403) await rpc('drop_telegram_chat', { p_chat_id: chatId })
-  return Response.json({ move_request_id: requestId, sent: status === 200 })
-}
+const SHARE_NUMBER = 'Kongsi nombor telefon'
 
 const MOVE_OUTCOMES: Record<string, string> = {
-  approved: 'Siap. Slot anda dah dipindahkan ke browser tu. Buka halaman sesi di situ untuk ubah atau tanda bayar.',
-  rejected: 'Baik. Slot kekal di browser asal.',
-  expired: 'Permintaan ni dah tamat tempoh. Tekan "Ambil balik" di halaman sesi sekali lagi kalau perlu.',
-  stale: 'Slot ni dah bertukar sejak permintaan dibuat, jadi tiada apa dipindahkan.',
-  already_in_slot: 'Browser tu dah ada tempat lain dalam sesi ni, jadi slot tak boleh dipindahkan ke situ.',
-  not_found: 'Permintaan ni tak sah lagi.',
+  approved: 'Siap. Slot dah dipindahkan ke browser anda. Kembali ke halaman sesi untuk ubah atau tanda bayar.',
+  rejected: 'Nombor Telegram ni tak sama dengan nombor yang digunakan masa tempah, jadi slot tak dipindahkan.',
+  stale: 'Slot ni dah bertukar sejak anda tekan butang, jadi tiada apa dipindahkan.',
+  already_in_slot: 'Browser anda dah ada tempat lain dalam sesi ni, jadi slot tak boleh dipindahkan ke situ.',
+  not_found: 'Permintaan ni dah tamat tempoh. Tekan "Ambil balik melalui Telegram" di halaman sesi sekali lagi.',
 }
 
-async function handleMoveAnswer(callback: Record<string, unknown>, token: string): Promise<Response> {
-  const callbackId = callback.id
-  const data = typeof callback.data === 'string' ? callback.data : ''
-  const message = typeof callback.message === 'object' && callback.message !== null
-    ? (callback.message as Record<string, unknown>)
+async function startMove(requestId: string, chatId: number, token: string): Promise<Response> {
+  const line = /^[0-9a-f-]{36}$/.test(requestId)
+    ? await rpc('start_move', { p_id: requestId, p_chat_id: chatId })
     : null
-  const chat = message !== null && typeof message.chat === 'object' && message.chat !== null
-    ? (message.chat as Record<string, unknown>)
-    : null
-  const chatId = chat?.id
-  const messageId = message?.message_id
-
-  const match = /^move:(yes|no):([0-9a-f-]{36})$/.exec(data)
-  if (match === null || typeof chatId !== 'number') {
-    if (typeof callbackId === 'string') await telegram(token, 'answerCallbackQuery', { callback_query_id: callbackId })
+  if (typeof line !== 'string') {
+    await telegram(token, 'sendMessage', { chat_id: chatId, text: MOVE_OUTCOMES.not_found })
     return Response.json({ ok: true })
   }
-
-  const outcome = await rpc('decide_move', { p_id: match[2], p_chat_id: chatId, p_approve: match[1] === 'yes' })
-  const text = MOVE_OUTCOMES[typeof outcome === 'string' ? outcome : 'not_found'] ?? MOVE_OUTCOMES.not_found
-
-  if (typeof callbackId === 'string') await telegram(token, 'answerCallbackQuery', { callback_query_id: callbackId })
-  // Replacing the message removes the buttons, so it cannot be answered twice.
-  if (typeof messageId === 'number') {
-    await telegram(token, 'editMessageText', { chat_id: chatId, message_id: messageId, text })
-  } else {
-    await telegram(token, 'sendMessage', { chat_id: chatId, text })
-  }
+  await telegram(token, 'sendMessage', {
+    chat_id: chatId,
+    text: `Pindahkan slot ini ke browser anda:\n${line}\n\n` +
+      `Tekan "${SHARE_NUMBER}" di bawah. Kalau nombor Telegram anda sama dengan nombor masa tempah, slot dipindahkan.`,
+    reply_markup: {
+      keyboard: [[{ text: SHARE_NUMBER, request_contact: true }]],
+      one_time_keyboard: true,
+      resize_keyboard: true,
+    },
+  })
   return Response.json({ ok: true })
 }
 
-/** Telegram's side of the opt-in: somebody pressed Start on the bot, having
- *  arrived through a t.me link carrying a one-time code. Telegram calls this
- *  with the secret token it was given at registration, which is what makes
- *  the endpoint safe to leave open. */
+/** A shared contact counts only when it is the sender's own: a forwarded
+ *  contact card carries somebody else's user id, or none. */
+async function finishMove(fields: Record<string, unknown>, chatId: number, token: string): Promise<Response> {
+  const contact = fields.contact as Record<string, unknown>
+  const from = typeof fields.from === 'object' && fields.from !== null
+    ? (fields.from as Record<string, unknown>)
+    : null
+  const own = from !== null && typeof contact.user_id === 'number' && contact.user_id === from.id
+  const phone = typeof contact.phone_number === 'string' ? contact.phone_number : ''
+
+  const outcome = own ? await rpc('finish_move', { p_chat_id: chatId, p_phone: phone }) : 'rejected'
+  const text = MOVE_OUTCOMES[typeof outcome === 'string' ? outcome : 'not_found'] ?? MOVE_OUTCOMES.not_found
+  await telegram(token, 'sendMessage', { chat_id: chatId, text, reply_markup: { remove_keyboard: true } })
+  return Response.json({ ok: true })
+}
+
+/** Everything Telegram sends the bot: Start through a t.me link (a one-time
+ *  code linking alerts, or a move request), a shared number for a move, and
+ *  /stop. Telegram calls this with the secret token it was given at
+ *  registration, which is what makes the endpoint safe to leave open. */
 async function handleTelegramUpdate(update: unknown, settings: Config): Promise<Response> {
   const token = settings.telegram_token
   if (token === null) return new Response('telegram not configured', { status: 500 })
-
-  const callback = typeof update === 'object' && update !== null
-    ? (update as Record<string, unknown>).callback_query
-    : null
-  if (typeof callback === 'object' && callback !== null) {
-    return handleMoveAnswer(callback as Record<string, unknown>, token)
-  }
 
   const message = typeof update === 'object' && update !== null
     ? (update as Record<string, unknown>).message
@@ -228,7 +205,14 @@ async function handleTelegramUpdate(update: unknown, settings: Config): Promise<
     return Response.json({ ok: true })
   }
 
+  if (typeof fields.contact === 'object' && fields.contact !== null) {
+    return finishMove(fields, chatId, token)
+  }
+
   const code = text.startsWith('/start') ? text.slice('/start'.length).trim() : ''
+  if (code.startsWith(MOVE_START)) {
+    return startMove(code.slice(MOVE_START.length), chatId, token)
+  }
   if (code === '') {
     await telegram(token, 'sendMessage', {
       chat_id: chatId,
@@ -279,19 +263,13 @@ Deno.serve(async (request) => {
   }
 
   let activityId: unknown = null
-  let moveRequestId: unknown = null
   try {
     const payload: unknown = await request.json()
     if (typeof payload === 'object' && payload !== null) {
       activityId = (payload as Record<string, unknown>).activity_id
-      moveRequestId = (payload as Record<string, unknown>).move_request_id
     }
   } catch {
     return new Response('bad json', { status: 400 })
-  }
-  if (typeof moveRequestId === 'string') {
-    if (settings.telegram_token === null) return new Response('telegram not configured', { status: 500 })
-    return sendMoveRequest(moveRequestId, settings.telegram_token)
   }
   if (typeof activityId !== 'number') {
     return new Response('activity_id required', { status: 400 })
