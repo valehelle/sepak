@@ -142,6 +142,12 @@ vi.mock('../data/telegram', () => ({
     constructor(message: string, readonly code: string | null) { super(message) }
   },
 }))
+// The take-back offer is tested in src/components/TakeBackBooking.test.tsx.
+vi.mock('../data/move', () => ({
+  moveAvailable: () => Promise.resolve(false),
+  requestMove: () => Promise.resolve('request-1'),
+  moveStatus: () => Promise.resolve('pending'),
+}))
 vi.mock('../lib/pushCapability', () => ({
   pushCapability: () => 'ready',
   isIosNonSafari: () => false,
