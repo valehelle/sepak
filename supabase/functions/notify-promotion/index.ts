@@ -1,4 +1,5 @@
-// Sends the "you are off the waitlist" push.
+// Sends the "you are off the waitlist" push, and the Telegram message asking
+// a player to approve moving their booking to another browser.
 //
 // This exists because Web Push needs an ECDSA signature over a JWT and an
 // AES-GCM encrypted payload, and Postgres can do neither. It is deliberately
@@ -121,6 +122,75 @@ function isTarget(value: unknown): value is Target {
   )
 }
 
+/** Moving a booking to another browser (0024_move_booking.sql): the message
+ *  to the Telegram account linked to the booking, with the two buttons. The
+ *  callback data carries only the request id; decide_move checks the answer
+ *  came from the chat the request was sent to. */
+const MOVE_PREFIX = 'move:'
+
+async function sendMoveRequest(requestId: string, token: string): Promise<Response> {
+  const rows = await rpc('move_request_message', { p_id: requestId })
+  const row = Array.isArray(rows) ? rows[0] : null
+  if (typeof row !== 'object' || row === null) return Response.json({ move_request_id: requestId, sent: false })
+  const { chat_id: chatId, body } = row as Record<string, unknown>
+  if (typeof chatId !== 'number' || typeof body !== 'string') {
+    return Response.json({ move_request_id: requestId, sent: false })
+  }
+
+  const status = await telegram(token, 'sendMessage', {
+    chat_id: chatId,
+    text: body,
+    reply_markup: {
+      inline_keyboard: [[
+        { text: 'Ya, pindahkan', callback_data: `${MOVE_PREFIX}yes:${requestId}` },
+        { text: 'Bukan saya', callback_data: `${MOVE_PREFIX}no:${requestId}` },
+      ]],
+    },
+  })
+  if (status === 403) await rpc('drop_telegram_chat', { p_chat_id: chatId })
+  return Response.json({ move_request_id: requestId, sent: status === 200 })
+}
+
+const MOVE_OUTCOMES: Record<string, string> = {
+  approved: 'Siap. Slot anda dah dipindahkan ke browser tu. Buka halaman sesi di situ untuk ubah atau tanda bayar.',
+  rejected: 'Baik. Slot kekal di browser asal.',
+  expired: 'Permintaan ni dah tamat tempoh. Tekan "Ambil balik" di halaman sesi sekali lagi kalau perlu.',
+  stale: 'Slot ni dah bertukar sejak permintaan dibuat, jadi tiada apa dipindahkan.',
+  already_in_slot: 'Browser tu dah ada tempat lain dalam sesi ni, jadi slot tak boleh dipindahkan ke situ.',
+  not_found: 'Permintaan ni tak sah lagi.',
+}
+
+async function handleMoveAnswer(callback: Record<string, unknown>, token: string): Promise<Response> {
+  const callbackId = callback.id
+  const data = typeof callback.data === 'string' ? callback.data : ''
+  const message = typeof callback.message === 'object' && callback.message !== null
+    ? (callback.message as Record<string, unknown>)
+    : null
+  const chat = message !== null && typeof message.chat === 'object' && message.chat !== null
+    ? (message.chat as Record<string, unknown>)
+    : null
+  const chatId = chat?.id
+  const messageId = message?.message_id
+
+  const match = /^move:(yes|no):([0-9a-f-]{36})$/.exec(data)
+  if (match === null || typeof chatId !== 'number') {
+    if (typeof callbackId === 'string') await telegram(token, 'answerCallbackQuery', { callback_query_id: callbackId })
+    return Response.json({ ok: true })
+  }
+
+  const outcome = await rpc('decide_move', { p_id: match[2], p_chat_id: chatId, p_approve: match[1] === 'yes' })
+  const text = MOVE_OUTCOMES[typeof outcome === 'string' ? outcome : 'not_found'] ?? MOVE_OUTCOMES.not_found
+
+  if (typeof callbackId === 'string') await telegram(token, 'answerCallbackQuery', { callback_query_id: callbackId })
+  // Replacing the message removes the buttons, so it cannot be answered twice.
+  if (typeof messageId === 'number') {
+    await telegram(token, 'editMessageText', { chat_id: chatId, message_id: messageId, text })
+  } else {
+    await telegram(token, 'sendMessage', { chat_id: chatId, text })
+  }
+  return Response.json({ ok: true })
+}
+
 /** Telegram's side of the opt-in: somebody pressed Start on the bot, having
  *  arrived through a t.me link carrying a one-time code. Telegram calls this
  *  with the secret token it was given at registration, which is what makes
@@ -128,6 +198,13 @@ function isTarget(value: unknown): value is Target {
 async function handleTelegramUpdate(update: unknown, settings: Config): Promise<Response> {
   const token = settings.telegram_token
   if (token === null) return new Response('telegram not configured', { status: 500 })
+
+  const callback = typeof update === 'object' && update !== null
+    ? (update as Record<string, unknown>).callback_query
+    : null
+  if (typeof callback === 'object' && callback !== null) {
+    return handleMoveAnswer(callback as Record<string, unknown>, token)
+  }
 
   const message = typeof update === 'object' && update !== null
     ? (update as Record<string, unknown>).message
@@ -202,13 +279,19 @@ Deno.serve(async (request) => {
   }
 
   let activityId: unknown = null
+  let moveRequestId: unknown = null
   try {
     const payload: unknown = await request.json()
     if (typeof payload === 'object' && payload !== null) {
       activityId = (payload as Record<string, unknown>).activity_id
+      moveRequestId = (payload as Record<string, unknown>).move_request_id
     }
   } catch {
     return new Response('bad json', { status: 400 })
+  }
+  if (typeof moveRequestId === 'string') {
+    if (settings.telegram_token === null) return new Response('telegram not configured', { status: 500 })
+    return sendMoveRequest(moveRequestId, settings.telegram_token)
   }
   if (typeof activityId !== 'number') {
     return new Response('activity_id required', { status: 400 })
