@@ -75,13 +75,6 @@ describe('PitchTeam', () => {
     expect(onSelect).toHaveBeenCalledWith(expect.objectContaining({ mine: true, slot: mine }))
   })
 
-  it("ignores taps on another player's slot", async () => {
-    const onSelect = vi.fn()
-    render(<PitchTeam {...base} onSelect={onSelect} slots={[slot('ST', 'Amir')]} />)
-    await userEvent.click(screen.getByRole('button', { name: /ST/ }))
-    expect(onSelect).not.toHaveBeenCalled()
-  })
-
   it('disables everything when the session is closed', async () => {
     const onSelect = vi.fn()
     render(<PitchTeam {...base} disabled onSelect={onSelect} slots={[]} />)
@@ -90,9 +83,9 @@ describe('PitchTeam', () => {
     expect(onSelect).not.toHaveBeenCalled()
   })
 
-  it('lets an admin tap an occupied slot owned by someone else', async () => {
+  it("opens another player's slot", async () => {
     const onSelect = vi.fn()
-    render(<PitchTeam {...base} adminOverride onSelect={onSelect} slots={[slot('ST', 'Amir')]} />)
+    render(<PitchTeam {...base} onSelect={onSelect} slots={[slot('ST', 'Amir')]} />)
     await userEvent.click(screen.getByRole('button', { name: /ST/ }))
     expect(onSelect).toHaveBeenCalled()
   })

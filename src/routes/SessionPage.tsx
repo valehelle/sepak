@@ -715,7 +715,6 @@ export default function SessionPage() {
               slots={slots.filter((slot) => slot.team === team)}
               mySlotIds={mySlotIds}
               disabled={closed || busy}
-              adminOverride={isAdmin}
               onSelect={setSelected}
             />
           ))}

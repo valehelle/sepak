@@ -143,10 +143,12 @@ vi.mock('../data/telegram', () => ({
   },
 }))
 // The take-back offer is tested in src/components/TakeBackBooking.test.tsx.
+let moveAvailable = false
+let moveStatus = 'pending'
 vi.mock('../data/move', () => ({
-  moveAvailable: () => Promise.resolve(false),
+  moveAvailable: () => Promise.resolve(moveAvailable),
   requestMove: () => Promise.resolve('request-1'),
-  moveStatus: () => Promise.resolve('pending'),
+  moveStatus: () => Promise.resolve(moveStatus),
 }))
 vi.mock('../lib/pushCapability', () => ({
   pushCapability: () => 'ready',
@@ -201,6 +203,8 @@ function findSlot(slots: readonly Slot[], slotId: string): Slot {
 describe('SessionPage', () => {
   beforeEach(() => {
     pushOn = false
+    moveAvailable = false
+    moveStatus = 'pending'
     state.session = SESSION
     state.slots = emptySlots()
     state.mySlotIds = new Set<string>()
@@ -401,6 +405,18 @@ describe('SessionPage', () => {
     expect(emptyGk.hasAttribute('disabled')).toBe(false)
     // The device's own slot stays tappable, so it can still be released.
     expect(screen.getByRole('button', { name: /^MC.*slot anda/i }).hasAttribute('disabled')).toBe(false)
+  })
+
+  it("opens another player's slot and offers to take it back", async () => {
+    state.slots = withClaim(state.slots, 'B-MC')
+    moveAvailable = true
+    moveStatus = 'approved'
+    view()
+
+    await userEvent.click(screen.getByRole('button', { name: /^MC — Hazmi/ }))
+    await userEvent.click(await screen.findByRole('button', { name: 'Ambil balik melalui Telegram' }))
+    await waitFor(() => expect(state.setOwned).toHaveBeenCalledWith('B-MC', true), { timeout: 5000 })
+    expect(await screen.findByText('Slot dah dipindahkan ke browser ini.')).toBeTruthy()
   })
 
   it('leaves empty slots tappable when this device holds none', () => {

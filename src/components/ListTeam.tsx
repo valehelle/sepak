@@ -9,7 +9,6 @@ export function ListTeam({
   slots,
   mySlotIds,
   disabled,
-  adminOverride = false,
   onSelect,
 }: TeamViewProps) {
   const views = toViews(slots, mySlotIds)
@@ -30,7 +29,6 @@ export function ListTeam({
               label={positionLabel(position)}
               bib={bib}
               disabled={disabled}
-              adminOverride={adminOverride}
               onSelect={onSelect}
               view={views.get(position) ?? { slot: null, position, mine: false }}
             />

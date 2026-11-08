@@ -18,7 +18,6 @@ type SlotChipProps = {
   label: string
   bib: Bib
   disabled: boolean
-  adminOverride?: boolean
   onSelect: (view: SlotView) => void
 }
 
@@ -27,16 +26,15 @@ export function SlotChip({
   label,
   bib,
   disabled,
-  adminOverride = false,
   onSelect,
 }: SlotChipProps) {
   const name = view.slot?.playerName ?? null
   const taken = name !== null
-  // Someone else's slot is inert for players; the organiser can still open it
-  // to clear an orphaned or joke entry. An empty slot is always live: a device
-  // that already holds one opens it to move there (see move_slot), which is
-  // why there is no longer a lock for that case.
-  const inert = disabled || (taken && !view.mine && !adminOverride)
+  // Every slot opens while the session is open. An empty one is where a
+  // booking starts or moves to (see move_slot). Someone else's opens to show
+  // who holds it: the organiser clears or swaps from there, and a player who
+  // booked it in another browser takes it back from there (TakeBackBooking).
+  const inert = disabled
 
   const paid = view.slot?.paid === true
 
