@@ -14,7 +14,7 @@ const TABS = [
   { key: 'all', label: 'Semua', kinds: null },
   { key: 'paid', label: 'Bayar', kinds: ['paid', 'unpaid'] },
   { key: 'out', label: 'Keluar', kinds: ['release', 'admin_clear'] },
-  { key: 'change', label: 'Tukar', kinds: ['claim', 'autofill', 'waitlist_join', 'waitlist_leave'] },
+  { key: 'change', label: 'Tukar', kinds: ['claim', 'autofill', 'waitlist_join', 'waitlist_leave', 'moved'] },
 ] as const satisfies readonly { key: string; label: string; kinds: readonly ActivityEvent['kind'][] | null }[]
 
 type TabKey = (typeof TABS)[number]['key']
@@ -57,6 +57,8 @@ export function describeActivity(event: ActivityEvent): string {
       return `${name} masuk senarai tunggu`
     case 'waitlist_leave':
       return `${name} keluar senarai tunggu`
+    case 'moved':
+      return `${name} pindahkan ${spot} ke browser lain`
   }
 }
 
@@ -87,6 +89,7 @@ const TONE: Record<ActivityEvent['kind'], string | undefined> = {
   unpaid: 'text-kuning',
   waitlist_join: undefined,
   waitlist_leave: undefined,
+  moved: undefined,
 }
 
 /** One session's history, shown to admins on that session's page. Per

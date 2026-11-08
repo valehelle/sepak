@@ -10,6 +10,7 @@ import { Button } from './Button'
 import { inputClass } from './Input'
 import { PhoneField } from './PhoneField'
 import { Sheet } from './Sheet'
+import { TakeBackBooking } from './TakeBackBooking'
 
 type ClaimSheetProps = {
   view: SlotView | null
@@ -27,6 +28,8 @@ type ClaimSheetProps = {
   onRelease: () => void
   onTogglePaid: (paid: boolean) => void
   onMove: () => void
+  /** The player moved this booking to this browser through Telegram. */
+  onTakenBack: () => void
   onAdminClear: () => void
   /** The queue, for an admin swapping a player out. */
   waitlist: readonly WaitlistEntry[]
@@ -49,6 +52,7 @@ export function ClaimSheet({
   onRelease,
   onTogglePaid,
   onMove,
+  onTakenBack,
   onAdminClear,
   waitlist,
   onReplace,
@@ -92,6 +96,11 @@ export function ClaimSheet({
         <p className="mb-4 font-sans text-[15px] text-white/70">
           {view.mine ? `Slot anda: ${view.slot?.playerName ?? ''}` : view.slot?.playerName ?? ''}
         </p>
+
+        {/* Not for admins: they can already act on every slot. */}
+        {occupiedByOther && !isAdmin && view.slot !== null && (
+          <TakeBackBooking slotId={view.slot.id} onMoved={onTakenBack} />
+        )}
 
         {/* The tick is a self-declaration -- the player ticks it after
             handing over the fee. Admin may tick or untick anyone's, to fix

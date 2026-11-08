@@ -71,6 +71,10 @@ describe('describeActivity', () => {
     expect(describeActivity({ ...queued, kind: 'waitlist_leave' })).toBe('Hazmi keluar senarai tunggu')
   })
 
+  it('names a booking moved to another browser', () => {
+    expect(describeActivity(event({ kind: 'moved' }))).toBe('Hazmi pindahkan A ST ke browser lain')
+  })
+
   it('renders CB1 and CB2 as the CB people say', () => {
     expect(describeActivity(event({ position: 'CB2' }))).toBe('Hazmi ambil A CB')
   })

@@ -10,6 +10,7 @@ export const ACTIVITY_KINDS = [
   'unpaid',
   'waitlist_join',
   'waitlist_leave',
+  'moved',
 ] as const
 
 export type ActivityKind = (typeof ACTIVITY_KINDS)[number]

@@ -231,6 +231,17 @@ export default function SessionPage() {
     }
   }
 
+  /** The player approved moving their booking to this browser in Telegram.
+   *  The sheet stays open and turns into their own slot's, with the paid
+   *  tick they came here for. */
+  function onTakenBack() {
+    const slot = selected?.slot
+    if (slot === undefined || slot === null) return
+    setOwned(slot.id, true)
+    setSelected({ slot, position: slot.position, mine: true })
+    show('Slot dah dipindahkan ke browser ini.')
+  }
+
   function onClaim(name: string, phone: string) {
     const slot = selected?.slot
     if (slot === undefined || slot === null) return
@@ -821,6 +832,7 @@ export default function SessionPage() {
         onRelease={onRelease}
         onTogglePaid={onTogglePaid}
         onMove={onMove}
+        onTakenBack={onTakenBack}
         onAdminClear={() => void onAdminClear()}
         onViewReceipt={viewReceipt}
         waitlist={waitlist}

@@ -167,6 +167,11 @@ export const RPC_ERROR_CODES = [
   'cross_session',
   // Receipts (0021_receipts.sql, via the receipt Edge Function).
   'invalid_receipt',
+  // Moving a booking to another browser (0024_move_booking.sql).
+  'already_yours',
+  'no_telegram',
+  'move_pending',
+  'too_many_requests',
 ] as const
 
 export type RpcErrorCode = (typeof RPC_ERROR_CODES)[number]
@@ -199,6 +204,10 @@ export const RPC_MESSAGES: Record<RpcErrorCode, string> = {
   same_slot: 'Anda dah berada di posisi ini.',
   cross_session: 'Posisi itu bukan dalam sesi ini.',
   invalid_receipt: 'Resit tak dapat disimpan. Cuba gambar lain.',
+  already_yours: 'Slot ini memang dah di browser ini.',
+  no_telegram: 'Slot ini tak bersambung dengan Telegram, jadi tak boleh dipindahkan.',
+  move_pending: 'Ada permintaan lain untuk slot ini sedang menunggu. Cuba lagi dalam 10 minit.',
+  too_many_requests: 'Terlalu banyak permintaan untuk slot ini. Cuba lagi dalam sejam.',
 }
 
 export const FALLBACK_ERROR_MESSAGE = 'Ada masalah. Cuba lagi.'
