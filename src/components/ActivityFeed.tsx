@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import { ActivityError, listSessionActivity, type ActivityEvent } from '../data/activity'
 import type { Slot } from '../data/types'
+import { describeBrowser } from '../lib/browser'
 import { formatEventTime } from '../lib/format'
 import { formatPhone, whatsappLink } from '../lib/phone'
 import { positionLabel } from '../lib/positions'
@@ -57,6 +58,22 @@ export function describeActivity(event: ActivityEvent): string {
     case 'waitlist_leave':
       return `${name} keluar senarai tunggu`
   }
+}
+
+/** Which device holds the booking, and for a player's own line the browser
+ *  and address they acted from: "peranti a9703d · iPhone · Safari ·
+ *  203.0.113.7". A player who cannot edit their booking reads out the code
+ *  at the foot of their page; a different code means a different browser.
+ *  The browser is left off other lines: an admin's carries the admin's own
+ *  browser, and an auto-fill whoever's release set it off. */
+function whereFrom(event: ActivityEvent): string | null {
+  const parts: string[] = []
+  if (event.device !== null) parts.push(`peranti ${event.device}`)
+  if (event.actor === 'player') {
+    if (event.userAgent !== null) parts.push(describeBrowser(event.userAgent))
+    if (event.ip !== null) parts.push(event.ip)
+  }
+  return parts.length === 0 ? null : parts.join(' · ')
 }
 
 /** The money lines are the ones the organiser is scanning for, so they are
@@ -232,6 +249,17 @@ export function ActivityFeed({ sessionId, slots, onViewReceipt }: ActivityFeedPr
                   {formatPhone(event.phone)}
                 </a>
               )}
+              {(() => {
+                const where = whereFrom(event)
+                return where === null ? null : (
+                  <span
+                    title={event.actor === 'player' ? (event.userAgent ?? undefined) : undefined}
+                    className="w-full font-kit text-[11px] text-white/40"
+                  >
+                    {where}
+                  </span>
+                )
+              })()}
             </li>
           ))}
         </ol>

@@ -39,6 +39,9 @@ function event(overrides: Partial<ActivityEvent> = {}): ActivityEvent {
     phone: '60123456789',
     team: 'A',
     position: 'ST',
+    device: null,
+    userAgent: null,
+    ip: null,
     createdAt: EVENING,
     ...overrides,
   }
@@ -122,6 +125,30 @@ describe('ActivityFeed', () => {
     render(<ActivityFeed sessionId="session-1" slots={[]} onViewReceipt={() => {}} />)
     await waitFor(() => expect(screen.getByText('Hazmi ambil A ST')).toBeTruthy())
     expect(screen.queryByRole('link')).toBeNull()
+  })
+
+  it('shows the browser and address a player acted from', async () => {
+    const ua =
+      'Mozilla/5.0 (Linux; Android 14; SM-S918B; wv) AppleWebKit/537.36 (KHTML, like Gecko) Version/4.0 Chrome/130.0.0.0 Mobile Safari/537.36'
+    impl = () => Promise.resolve([event({ device: 'a9703d', userAgent: ua, ip: '203.0.113.7' })])
+    render(<ActivityFeed sessionId="session-1" slots={[]} onViewReceipt={() => {}} />)
+
+    const line = await screen.findByText('peranti a9703d · Android · browser dalam app · 203.0.113.7')
+    expect(line.getAttribute('title')).toBe(ua)
+  })
+
+  it('keeps the booking\'s device but leaves the browser off lines a player did not act on', async () => {
+    const ua = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36'
+    impl = () =>
+      Promise.resolve([
+        event({ id: 2, kind: 'admin_clear', actor: 'admin', device: 'a9703d', userAgent: ua, ip: '198.51.100.1' }),
+        event({ id: 1, kind: 'autofill', actor: 'system', device: null, userAgent: ua, ip: '198.51.100.1' }),
+      ])
+    render(<ActivityFeed sessionId="session-1" slots={[]} onViewReceipt={() => {}} />)
+
+    await waitFor(() => expect(screen.getAllByRole('listitem')).toHaveLength(2))
+    expect(screen.getByText('peranti a9703d')).toBeTruthy()
+    expect(screen.queryByText(/Windows · Chrome/)).toBeNull()
   })
 
   it('shows the reason when the feed is refused', async () => {

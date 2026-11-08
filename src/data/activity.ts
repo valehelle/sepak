@@ -32,6 +32,13 @@ export type ActivityEvent = {
   /** Null for queue lines, which belong to no position yet. */
   team: TeamKey | null
   position: Position | null
+  /** The device code (src/lib/deviceCode.ts) of the browser holding the
+   *  booking the line is about. */
+  device: string | null
+  /** The browser and address of the request that wrote the line. Null for
+   *  lines written before these were recorded. */
+  userAgent: string | null
+  ip: string | null
   createdAt: string
 }
 
@@ -81,6 +88,19 @@ function parseEvent(row: unknown): ActivityEvent {
     throw new Error('phone: expected a string or null')
   }
 
+  const device = r.device
+  if (device !== null && device !== undefined && typeof device !== 'string') {
+    throw new Error('device: expected a string or null')
+  }
+  const userAgent = r.user_agent
+  if (userAgent !== null && userAgent !== undefined && typeof userAgent !== 'string') {
+    throw new Error('user_agent: expected a string or null')
+  }
+  const ip = r.ip
+  if (ip !== null && ip !== undefined && typeof ip !== 'string') {
+    throw new Error('ip: expected a string or null')
+  }
+
   const team = r.team
   if (team !== null && team !== undefined && (typeof team !== 'string' || !isTeamKey(team))) {
     throw new Error(`team: unknown value ${String(team)}`)
@@ -104,6 +124,9 @@ function parseEvent(row: unknown): ActivityEvent {
     phone: phone ?? null,
     team: team ?? null,
     position: position ?? null,
+    device: device ?? null,
+    userAgent: userAgent ?? null,
+    ip: ip ?? null,
     createdAt,
   }
 }
