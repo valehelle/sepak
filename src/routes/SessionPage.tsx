@@ -42,6 +42,8 @@ import { TEAM_KEYS, formatPositions, positionLabel, type Position, type TeamKey 
 import { formatFees } from '../lib/format'
 import { rememberSession } from '../lib/lastSession'
 import { rememberPlayer } from '../lib/playerMemory'
+import { isSusPhone } from '../lib/susDog'
+import { SusDogModal } from '../components/SusDogModal'
 import { ShareChangeSheet } from '../components/ShareChangeSheet'
 import {
   buildSummaryMessage,
@@ -99,6 +101,7 @@ export default function SessionPage() {
   const isAdmin = role !== null
 
   const [selected, setSelected] = useState<SlotView | null>(null)
+  const [susDog, setSusDog] = useState(false)
   const [busy, setBusy] = useState(false)
   const [viewMode, setViewMode] = useState<'pitch' | 'list'>(readViewMode)
   const [pendingName, setPendingName] = useState('')
@@ -254,7 +257,12 @@ export default function SessionPage() {
         revertSlot: slot,
         revertOwned: [[slot.id, false]],
       },
-      () => rememberPlayer({ name, phone }),
+      () => {
+        rememberPlayer({ name, phone })
+        void isSusPhone(phone).then((sus) => {
+          if (sus) setSusDog(true)
+        })
+      },
     )
   }
 
@@ -810,6 +818,8 @@ export default function SessionPage() {
 
         <DeviceCode />
       </div>
+
+      <SusDogModal open={susDog} onClose={() => setSusDog(false)} />
 
       <ClaimSheet
         view={selected}

@@ -273,6 +273,33 @@ describe('SessionPage', () => {
     await waitFor(() => expect(state.setOwned).toHaveBeenCalledWith('A-GK', true))
   })
 
+  it('shows the dog to the one player who said he would skip next week', async () => {
+    claimSlot.mockResolvedValue({ ...firstOf(state.slots), playerName: 'Ali', claimedAt: 'now' })
+    view()
+
+    await userEvent.click(firstOf(screen.getAllByRole('button', { name: /^GK/ })))
+    await userEvent.type(screen.getByLabelText('Nama'), 'Ali')
+    await userEvent.type(screen.getByLabelText('Nombor telefon'), '+60 17-256 2694')
+    await userEvent.click(screen.getByRole('button', { name: 'Ambil slot' }))
+
+    expect(await screen.findByText('kata xnak join minggu depan')).toBeTruthy()
+    await userEvent.click(screen.getByRole('button', { name: 'Hehe' }))
+    expect(screen.queryByText('kata xnak join minggu depan')).toBeNull()
+  })
+
+  it('does not show the dog to anyone else', async () => {
+    claimSlot.mockResolvedValue({ ...firstOf(state.slots), playerName: 'Hazmi', claimedAt: 'now' })
+    view()
+
+    await userEvent.click(firstOf(screen.getAllByRole('button', { name: /^GK/ })))
+    await userEvent.type(screen.getByLabelText('Nama'), 'Hazmi')
+    await userEvent.type(screen.getByLabelText('Nombor telefon'), '012-345 6789')
+    await userEvent.click(screen.getByRole('button', { name: 'Ambil slot' }))
+
+    await waitFor(() => expect(state.setOwned).toHaveBeenCalledWith('A-GK', true))
+    expect(screen.queryByText('kata xnak join minggu depan')).toBeNull()
+  })
+
   it('refuses a phone that is not a Malaysian mobile', async () => {
     view()
     await userEvent.click(firstOf(screen.getAllByRole('button', { name: /^GK/ })))
