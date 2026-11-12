@@ -86,6 +86,7 @@ const setSlotPaid = vi.fn()
 const adminClearSlot = vi.fn()
 const moveSlot = vi.fn()
 const adminReplaceWithWaitlist = vi.fn()
+const adminShuffleTeams = vi.fn()
 const getSlot = vi.fn()
 const adminRemoveFromWaitlist = vi.fn()
 const joinWaitlist = vi.fn()
@@ -118,6 +119,7 @@ vi.mock('../data/slots', () => ({
   adminClearSlot: (id: string) => adminClearSlot(id),
   moveSlot: (...args: unknown[]) => moveSlot(...args),
   adminReplaceWithWaitlist: (...args: unknown[]) => adminReplaceWithWaitlist(...args),
+  adminShuffleTeams: (id: string) => adminShuffleTeams(id),
   getSlot: (id: string) => getSlot(id),
   SlotActionError: class extends Error {
     constructor(message: string, readonly code: string | null) { super(message) }
@@ -218,6 +220,7 @@ describe('SessionPage', () => {
     releaseSlot.mockReset()
     adminClearSlot.mockReset().mockResolvedValue(undefined)
     moveSlot.mockReset()
+    adminShuffleTeams.mockReset().mockResolvedValue(undefined)
     getSlot.mockReset().mockResolvedValue(null)
     adminRemoveFromWaitlist.mockReset().mockResolvedValue(undefined)
     joinWaitlist.mockReset()
@@ -498,6 +501,30 @@ describe('SessionPage', () => {
     await userEvent.click(firstOf(screen.getAllByRole('button', { name: /^GK/ })))
     await userEvent.type(screen.getByLabelText('Nama'), 'Zulazhar')
     expect(screen.queryByText(/Nama ini dah ada/)).toBeNull()
+  })
+
+  it('lets the organiser shuffle the teams, after confirming', async () => {
+    authState.email = 'hazmi@example.com'
+    authState.role = 'admin'
+    view()
+
+    await userEvent.click(screen.getByRole('button', { name: '🔀 Rombak team' }))
+    expect(adminShuffleTeams).not.toHaveBeenCalled()
+    await userEvent.click(screen.getByRole('button', { name: 'Ya, rombak' }))
+    await waitFor(() => expect(adminShuffleTeams).toHaveBeenCalledWith('session-1'))
+    expect(await screen.findByText('Team dah dirombak.')).toBeTruthy()
+    expect(state.refetch).toHaveBeenCalled()
+  })
+
+  it('does not offer players or a closed session a shuffle', () => {
+    view()
+    expect(screen.queryByRole('button', { name: '🔀 Rombak team' })).toBeNull()
+
+    authState.email = 'hazmi@example.com'
+    authState.role = 'admin'
+    state.session = { ...SESSION, status: 'closed' }
+    view()
+    expect(screen.queryByRole('button', { name: '🔀 Rombak team' })).toBeNull()
   })
 
   it('offers the organiser an override on any occupied slot', async () => {

@@ -127,3 +127,10 @@ export async function adminReplaceWithWaitlist(slotId: string, waitlistId: strin
   if (error !== null) fail(error)
   return parseSlot(data)
 }
+
+/** Moves every team's players, together, to another team at random
+ *  (0026_shuffle_teams.sql). Admin only. */
+export async function adminShuffleTeams(sessionId: string): Promise<void> {
+  const { error } = await supabase.rpc('admin_shuffle_teams', { p_session_id: sessionId })
+  if (error !== null) fail(error)
+}

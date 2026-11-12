@@ -153,7 +153,7 @@ export const RPC_ERROR_CODES = [
   'already_waitlisted',
   'not_waitlisted',
   // Contacts (0009_contacts.sql): invalid_phone is shared by claim_slot and
-  // join_waitlist; not_admin comes from contact_phone.
+  // join_waitlist; not_admin comes from contact_phone and the admin RPCs.
   'invalid_phone',
   'not_admin',
   // One booking per person (0010_one_booking_per_person.sql).
@@ -196,7 +196,7 @@ export const RPC_MESSAGES: Record<RpcErrorCode, string> = {
   already_waitlisted: 'Anda dah dalam senarai tunggu.',
   not_waitlisted: 'Anda tak dalam senarai tunggu.',
   invalid_phone: 'Nombor telefon tak sah. Guna nombor mobile Malaysia, cth. 012-345 6789.',
-  not_admin: 'Hanya admin boleh lihat nombor telefon.',
+  not_admin: 'Hanya admin boleh buat ini.',
   phone_in_use: 'Nombor ini dah daftar untuk sesi ini. Satu tempat untuk satu orang.',
   invalid_paid: 'Status bayaran tak sah.',
   same_slot: 'Anda dah berada di posisi ini.',

@@ -22,6 +22,7 @@ import {
   SlotActionError,
   adminClearSlot,
   adminReplaceWithWaitlist,
+  adminShuffleTeams,
   claimSlot,
   getSlot,
   moveSlot,
@@ -42,6 +43,7 @@ import { TEAM_KEYS, formatPositions, positionLabel, type Position, type TeamKey 
 import { formatFees } from '../lib/format'
 import { rememberSession } from '../lib/lastSession'
 import { rememberPlayer } from '../lib/playerMemory'
+import { ShuffleTeams } from '../components/ShuffleTeams'
 import { ShareChangeSheet } from '../components/ShareChangeSheet'
 import {
   buildSummaryMessage,
@@ -256,6 +258,22 @@ export default function SessionPage() {
       },
       () => rememberPlayer({ name, phone }),
     )
+  }
+
+  async function onShuffleTeams() {
+    if (session === null) return
+    setBusy(true)
+    try {
+      await adminShuffleTeams(session.id)
+      show('Team dah dirombak.')
+    } catch (cause: unknown) {
+      show(cause instanceof SlotActionError ? cause.message : 'Ada masalah. Cuba lagi.', 'error')
+    } finally {
+      // The moves also arrive over Realtime; this makes the admin's own page
+      // whole at once rather than slot by slot.
+      refetch()
+      setBusy(false)
+    }
   }
 
   function onRelease() {
@@ -701,6 +719,7 @@ export default function SessionPage() {
           <>
             <CopyButton text={fullListText} label="Salin senarai penuh" />
             <CopyButton text={unpaidText} label="Salin senarai belum bayar" />
+            {!closed && <ShuffleTeams busy={busy} onShuffle={() => void onShuffleTeams()} />}
           </>
         )}
       </div>
